@@ -1,5 +1,3 @@
-import type { RequestInit } from "node-fetch";
-
 export type GitHubConfig = { repository: string; token?: string; apiBaseUrl?: string };
 export type GitHubFile = { path: string; sha: string; content: string };
 
