@@ -35,5 +35,5 @@ With both keys configured, the AI Commander can generate and gate a change set. 
 
 - `main` is protected by application policy.
 - Proposed files are scanned for common secret patterns before writes.
-- Changes are created on a dedicated branch and submitted as Draft PR.
+- Changes are created on a dedicated branch and submitted as Draft PR. Failed CI can trigger a bounded repair loop (maximum 3 attempts), with review and security gates before each repair.
 - The Coder returns complete file contents for changed files rather than opaque patches.
