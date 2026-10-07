@@ -1,6 +1,15 @@
 export type GitHubConfig = { repository: string; token?: string; apiBaseUrl?: string };
 export type GitHubFile = { path: string; sha: string; content: string };
 
+export type WorkflowRun = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string;
+  head_sha?: string;
+};
+
 export class GitHubClient {
   private readonly token: string;
   private readonly apiBaseUrl: string;
@@ -32,23 +41,28 @@ export class GitHubClient {
     await this.request(`/repos/${this.repository}/git/refs`, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${name}`, sha: ref.object.sha }) });
   }
 
-  async upsertFile(path: string, content: string, message: string, branch: string): Promise<void> {
+  async upsertFile(path: string, content: string, message: string, branch: string): Promise<string> {
     let sha: string | undefined;
     try { sha = (await this.getFile(path, branch)).sha; } catch (error) {
       if (!(error instanceof Error) || !error.message.startsWith("GitHub API 404")) throw error;
     }
     const encoded = path.split("/").map(encodeURIComponent).join("/");
-    await this.request(`/repos/${this.repository}/contents/${encoded}`, { method: "PUT", body: JSON.stringify({ message, content: Buffer.from(content, "utf8").toString("base64"), branch, ...(sha ? { sha } : {}) }) });
+    const result = await this.request<{ commit: { sha: string } }>(`/repos/${this.repository}/contents/${encoded}`, { method: "PUT", body: JSON.stringify({ message, content: Buffer.from(content, "utf8").toString("base64"), branch, ...(sha ? { sha } : {}) }) });
+    return result.commit.sha;
   }
 
   async createPullRequest(head: string, title: string, body = "", base = "main") {
-    return this.request<{ html_url: string; number: number }>(`/repos/${this.repository}/pulls`, { method: "POST", body: JSON.stringify({ head, base, title, body, draft: true }) });
+    return this.request<{ html_url: string; number: number; head: { sha: string } }>(`/repos/${this.repository}/pulls`, { method: "POST", body: JSON.stringify({ head, base, title, body, draft: true }) });
   }
 
-  async getWorkflowRuns(branch = "main") {
-    return this.request<{ workflow_runs: Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }> }>(
-      `/repos/${this.repository}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=10`,
+  async getWorkflowRuns(branch = "main", headSha?: string): Promise<WorkflowRun[]> {
+    const query = headSha
+      ? `&head_sha=${encodeURIComponent(headSha)}`
+      : "";
+    const result = await this.request<{ workflow_runs: WorkflowRun[] }>(
+      `/repos/${this.repository}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=20${query}`,
     );
+    return result.workflow_runs;
   }
 
   async getWorkflowJobs(runId: number) {
@@ -58,8 +72,6 @@ export class GitHubClient {
   }
 
   async getWorkflowRun(runId: number) {
-    return this.request<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }>(
-      `/repos/${this.repository}/actions/runs/${runId}`,
-    );
+    return this.request<WorkflowRun>(`/repos/${this.repository}/actions/runs/${runId}`);
   }
 }
