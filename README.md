@@ -1,20 +1,39 @@
 # TezJet Agent Factory
 
-A modular multi-agent development system for TezJet.
+AI-assisted engineering factory for the TezJet project.
 
-## Core agents
-- Commander — plans and orchestrates work
-- Explorer — understands the codebase
-- Backend / Frontend / Database — implementation specialists
-- Tester — validates changes
-- Security — checks security risks
-- Reviewer — reviews implementation
-- GitHub — repository automation
+## Flow
 
-## Core flow
+Commander → Explorer → Coder → Tester → Security → Reviewer → Draft PR
 
-Task → Commander → Explorer → Specialist → Tester → Security → Reviewer → GitHub
+The factory reads TezJet from GitHub, asks the AI Coder for an explicit change set, gates it with review/security checks, writes only to a feature branch, and opens a Draft PR against `main`.
 
-## Development
+## Configuration
 
-The initial architecture lives on `dev/agent-factory-core`. Secrets belong in environment variables or the deployment platform, never in Git.
+Copy `.env.example` to your runtime environment and provide:
+
+- `OPENAI_API_KEY` — enables AI orchestration and Coder.
+- `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
+- `TEZJET_REPOSITORY=erman-ksv/TezJet`
+- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet`
+
+Never commit tokens or secrets.
+
+## Run
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm dev -- "Add automatic FIFO fallback when the first TezJet driver rejects or times out"
+```
+
+Without `OPENAI_API_KEY`, the CLI only prints a deterministic plan and does not modify GitHub.
+
+With both keys configured, the AI Commander can generate and gate a change set. Actual test execution should happen in a trusted CI/runner before merge; the factory must not claim tests ran unless a runner reports them.
+
+## Safety
+
+- `main` is protected by application policy.
+- Proposed files are scanned for common secret patterns before writes.
+- Changes are created on a dedicated branch and submitted as Draft PR.
+- The Coder returns complete file contents for changed files rather than opaque patches.
