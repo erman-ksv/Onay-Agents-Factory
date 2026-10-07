@@ -1,5 +1,5 @@
 import { TezJetRepositoryAdapter } from "../../github/tezjetRepository.js";
-import { scanSecrets } from "../../github/secretScanner.js";
+import { scanForSecrets } from "../../github/secretScanner.js";
 
 export async function inspectSecurity(paths: string[] = ["package.json", "server.js", ".env.example"], repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet", ref = "main") {
   const adapter = new TezJetRepositoryAdapter(repository);
@@ -7,7 +7,7 @@ export async function inspectSecurity(paths: string[] = ["package.json", "server
   for (const path of paths) {
     try {
       const file = await adapter.read(path, ref);
-      const matches = scanSecrets(file.content);
+      const matches = scanForSecrets(file.content);
       if (matches.length) findings.push({ path, findings: matches });
     } catch (error) {
       findings.push({ path, findings: ["Could not inspect file: " + String(error)] });
