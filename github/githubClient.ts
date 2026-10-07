@@ -44,4 +44,16 @@ export class GitHubClient {
   async createPullRequest(head: string, title: string, body = "", base = "main") {
     return this.request<{ html_url: string; number: number }>(`/repos/${this.repository}/pulls`, { method: "POST", body: JSON.stringify({ head, base, title, body, draft: true }) });
   }
+
+  async getWorkflowRuns(branch = "main") {
+    return this.request<Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }>>(
+      `/repos/${this.repository}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=10`,
+    );
+  }
+
+  async getWorkflowRun(runId: number) {
+    return this.request<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }>(
+      `/repos/${this.repository}/actions/runs/${runId}`,
+    );
+  }
 }
