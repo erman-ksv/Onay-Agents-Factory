@@ -1,5 +1,3 @@
-import type { TaskPlan } from "./planner.js";
-
-export function routeTask(plan: TaskPlan): string[] {
-  return plan.steps.map((step) => step === "implement" ? "backend" : step);
-}
+import type { AgentName } from "./taskTypes.js";
+export type Route={agent:AgentName;objective:string};
+export function routeTask(routes:Route[]){return routes.map((route,index)=>({...route,order:index+1}));}
