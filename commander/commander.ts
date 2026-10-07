@@ -1,6 +1,6 @@
 import { planTask } from "./planner.js";
 import { routeTask } from "./router.js";
-
-const task = process.argv.slice(2).join(" ") || "Initialize TezJet Agent Factory";
-const plan = planTask(task);
-console.log(JSON.stringify({ task, plan, route: routeTask(plan) }, null, 2));
+const goal=process.argv.slice(2).join(" ").trim();
+if(!goal){console.error("Usage: pnpm dev -- <describe the task>");process.exit(1);}
+const plan=planTask(goal);
+console.log(JSON.stringify({commander:"TezJet Commander",task:plan,execution:routeTask(plan.steps)},null,2));
