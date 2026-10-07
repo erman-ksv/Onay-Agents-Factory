@@ -4,7 +4,8 @@ import { inspectSecurity } from "../agents/security/agent.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { generateChanges } from "../agents/backend/coder.js";
 import { prepareTezJetChange } from "../github/changeWorkflow.js";
-import { checkCiGate } from "../github/ciGate.js";
+import { waitForCiGate } from "../github/ciGate.js";
+import { retryFailedCi } from "./retryLoop.js";
 
 type ChangeFile = { path: string; content: string; message: string };
 
@@ -21,10 +22,18 @@ export async function runChangePipeline(input: { goal: string; branch: string; t
   if (security.status !== "clean") return { status: "blocked" as const, review, security };
 
   const pullRequest = await prepareTezJetChange({ ...input, body: input.body });
-  const ci = await checkCiGate(input.branch, ["test", "check", "lint", "type"]);
-  if (ci.status !== "passed") {
-    return { status: "ci-blocked" as const, review, security, pullRequest, ci };
+  const headSha = pullRequest.head_sha;
+  const ci = await waitForCiGate({ branch: input.branch, headSha, requiredNames: ["test", "check", "lint", "type"] });
+  if (ci.status === "failed") {
+    const repair = await retryFailedCi({
+      goal: input.goal,
+      branch: input.branch,
+      repositoryContext: input.files.map(file => `FILE: ${file.path}\n${file.content}`).join("\n\n"),
+      headSha,
+    });
+    return { status: repair.status === "passed" ? "ci-passed" as const : "ci-repair" as const, review, security, pullRequest, ci, repair };
   }
+  if (ci.status !== "passed") return { status: "ci-blocked" as const, review, security, pullRequest, ci };
   return { status: "ci-passed" as const, review, security, pullRequest, ci };
 }
 
