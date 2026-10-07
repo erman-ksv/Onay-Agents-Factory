@@ -46,8 +46,14 @@ export class GitHubClient {
   }
 
   async getWorkflowRuns(branch = "main") {
-    return this.request<Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }>>(
+    return this.request<{ workflow_runs: Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }> }>(
       `/repos/${this.repository}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=10`,
+    );
+  }
+
+  async getWorkflowJobs(runId: number) {
+    return this.request<{ jobs: Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }> }>(
+      `/repos/${this.repository}/actions/runs/${runId}/jobs?per_page=100`,
     );
   }
 
