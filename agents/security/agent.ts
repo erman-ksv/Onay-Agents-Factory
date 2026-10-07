@@ -8,7 +8,7 @@ export async function inspectSecurity(paths: string[] = ["package.json", "server
     try {
       const file = await adapter.read(path, ref);
       const matches = scanForSecrets(file.content);
-      if (matches.length) findings.push({ path, findings: matches });
+      if (matches.length) findings.push({ path, findings: matches.map((match) => `${match.pattern} at line ${match.line}`) });
     } catch (error) {
       findings.push({ path, findings: ["Could not inspect file: " + String(error)] });
     }
