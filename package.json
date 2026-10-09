@@ -1,1 +1,20 @@
-{"name":"tezjet-agent-factory","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"tsx commander/commander.ts","typecheck":"tsc --noEmit"},"dependencies":{"@openai/agents":"latest","zod":"latest"},"devDependencies":{"@types/node":"latest","tsx":"latest","typescript":"latest"}}
+{
+  "name": "tezjet-agent-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx commander/commander.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openai/agents": "latest",
+    "openai": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
