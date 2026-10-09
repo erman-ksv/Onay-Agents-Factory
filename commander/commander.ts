@@ -8,7 +8,7 @@ if (!goal) {
   process.exit(1);
 }
 
-if (process.env.OPENAI_API_KEY) {
+if (process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) {
   const { runAiCommander } = await import("./aiCommander.js");
   console.log(await runAiCommander(goal));
 } else {
@@ -18,6 +18,6 @@ if (process.env.OPENAI_API_KEY) {
     mode: "deterministic",
     task: plan,
     execution: routeTask(plan.steps),
-    note: "Set OPENAI_API_KEY to enable AI orchestration."
+    note: "Set GEMINI_API_KEY or OPENAI_API_KEY to enable AI orchestration."
   }, null, 2));
 }
