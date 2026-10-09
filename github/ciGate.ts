@@ -7,16 +7,44 @@ export type CiGateResult =
 export async function checkCiGate(branch: string, requiredNames: string[] = [], headSha?: string): Promise<CiGateResult> {
   const repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet";
   const github = new GitHubClient({ repository });
-  const runs = await github.getWorkflowRuns(branch, headSha);
+  const fetchedRuns = await github.getWorkflowRuns(branch, headSha);
+  // Keep the SHA check locally too: never let a run for a different commit satisfy this gate.
+  const runs = headSha
+    ? fetchedRuns.filter(run => run.head_sha?.toLowerCase() === headSha.toLowerCase())
+    : fetchedRuns;
 
-  const relevant = requiredNames.length
-    ? runs.filter(run => requiredNames.some(name => run.name.toLowerCase().includes(name.toLowerCase())))
-    : runs;
+  if (!runs.length) return { status: "no-runs", runs: [] };
 
-  if (!relevant.length) return { status: "no-runs", runs };
-  if (relevant.some(run => run.status !== "completed")) return { status: "pending", runs: relevant };
-  if (relevant.some(run => run.conclusion !== "success")) return { status: "failed", runs: relevant };
-  return { status: "passed", runs: relevant };
+  if (!requiredNames.length) {
+    if (runs.some(run => run.status !== "completed")) return { status: "pending", runs };
+    if (runs.some(run => run.conclusion !== "success")) return { status: "failed", runs };
+    return { status: "passed", runs };
+  }
+
+  // GitHub Actions run.name is the workflow name (for example, "Agent Factory CI"),
+  // while checks such as "typecheck" are job names. Match the required names against jobs.
+  const matchingRuns: WorkflowRun[] = [];
+  const matchingJobs: Array<{ status: string; conclusion: string | null }> = [];
+
+  for (const run of runs) {
+    const { jobs } = await github.getWorkflowJobs(run.id);
+    const selectedJobs = jobs.filter(job =>
+      requiredNames.some(name => job.name.toLowerCase().includes(name.toLowerCase())),
+    );
+    if (selectedJobs.length) {
+      matchingRuns.push(run);
+      matchingJobs.push(...selectedJobs);
+    }
+  }
+
+  if (!matchingRuns.length) return { status: "no-runs", runs };
+  if (matchingRuns.some(run => run.status !== "completed") || matchingJobs.some(job => job.status !== "completed")) {
+    return { status: "pending", runs: matchingRuns };
+  }
+  if (matchingRuns.some(run => run.conclusion !== "success") || matchingJobs.some(job => job.conclusion !== "success")) {
+    return { status: "failed", runs: matchingRuns };
+  }
+  return { status: "passed", runs: matchingRuns };
 }
 
 export async function waitForCiGate(input: {
