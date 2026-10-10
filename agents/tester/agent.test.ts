@@ -47,7 +47,10 @@ const run = (headSha: string, status = "completed", conclusion: string | null = 
   head_sha: headSha,
   html_url: "https://example.test/actions/runs/42",
 });
-const jobs: CiJob[] = [{ name: "Typecheck and API tests", status: "completed", conclusion: "success" }];
+const jobs: CiJob[] = [{ name: "typecheck", status: "completed", conclusion: "success", steps: [
+  { name: "Typecheck", status: "completed", conclusion: "success" },
+  { name: "Test", status: "completed", conclusion: "success" },
+] }];
 
 test("accepts successful required CI evidence only for the exact expected SHA", () => {
   const result = evaluateTestExecutionEvidence([run(expectedSha)], jobs, expectedSha);
@@ -81,6 +84,36 @@ test("does not accept a failed required test job", () => {
     [{ name: "Typecheck and API tests", status: "completed", conclusion: "failure" }],
     expectedSha,
   );
+  assert.equal(result.testsExecuted, false);
+  assert.equal(result.status, "failed");
+});
+
+test("reports individual CI step evidence for typecheck and test", () => {
+  const result = evaluateTestExecutionEvidence([run(expectedSha)], jobs, expectedSha, ["typecheck"], ["Typecheck", "Test"]);
+  assert.equal(result.testsExecuted, true);
+  assert.deepEqual(result.checks.map(check => [check.name, check.conclusion]), [
+    ["Typecheck", "success"],
+    ["Test", "success"],
+  ]);
+});
+
+test("does not pass when a required CI step is missing", () => {
+  const result = evaluateTestExecutionEvidence([run(expectedSha)], [
+    { name: "typecheck", status: "completed", conclusion: "success", steps: [
+      { name: "Typecheck", status: "completed", conclusion: "success" },
+    ] },
+  ], expectedSha, ["typecheck"], ["Typecheck", "Test"]);
+  assert.equal(result.testsExecuted, false);
+  assert.equal(result.status, "pending");
+});
+
+test("does not pass when the Test step failed even if job evidence is inconsistent", () => {
+  const result = evaluateTestExecutionEvidence([run(expectedSha)], [
+    { name: "typecheck", status: "completed", conclusion: "success", steps: [
+      { name: "Typecheck", status: "completed", conclusion: "success" },
+      { name: "Test", status: "completed", conclusion: "failure" },
+    ] },
+  ], expectedSha, ["typecheck"], ["Typecheck", "Test"]);
   assert.equal(result.testsExecuted, false);
   assert.equal(result.status, "failed");
 });

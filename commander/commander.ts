@@ -63,13 +63,14 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
     } : {}),
     tester: async () => {
       const result = await inspectTests(targetRepository, targetRef);
-      const requiredJobs = isAgentFactoryTarget(goal)
-        ? ["typecheck"]
-        : ["Typecheck and API tests"];
+      const isFactory = isAgentFactoryTarget(goal);
+      const requiredJobs = isFactory ? ["typecheck"] : ["Typecheck and API tests"];
+      const requiredSteps = isFactory ? ["Typecheck", "Test"] : [];
       const executionEvidence = await inspectRefTestExecution(
         targetRepository,
         targetRef,
         requiredJobs,
+        requiredSteps,
       );
       return {
         repository: result.repository,

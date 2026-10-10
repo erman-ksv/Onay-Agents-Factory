@@ -14,6 +14,7 @@ export type TestExecutionEvidence = {
   expectedSha: string;
   status: CiGateResult["status"] | "sha-mismatch" | "no-runs";
   evidence: Array<{ runId: number; name: string; headSha: string; conclusion: string | null; url: string }>;
+  checks: Array<{ jobName: string; name: string; status: string; conclusion: string | null }>;
   notes: string[];
 };
 
@@ -38,6 +39,7 @@ export function evaluateTestExecutionEvidence(
   jobs: CiJob[],
   expectedSha: string,
   requiredNames: string[] = ["Typecheck and API tests"],
+  requiredStepNames: string[] = [],
 ) : TestExecutionEvidence {
   const exactRuns = runs.filter((run) => run.head_sha === expectedSha);
   const evidence = exactRuns.map((run) => ({
@@ -47,6 +49,12 @@ export function evaluateTestExecutionEvidence(
     conclusion: run.conclusion,
     url: run.html_url,
   }));
+  const checks = jobs.flatMap((job) => (job.steps ?? []).map((step) => ({
+    jobName: job.name,
+    name: step.name,
+    status: step.status,
+    conclusion: step.conclusion,
+  })));
 
   if (!expectedSha.trim() || exactRuns.length === 0) {
     return {
@@ -56,11 +64,12 @@ export function evaluateTestExecutionEvidence(
       expectedSha,
       status: "sha-mismatch",
       evidence,
+      checks,
       notes: ["No workflow run was found for the exact expected commit SHA; test execution is unverified."],
     };
   }
 
-  const gate = evaluateCiJobs(exactRuns, jobs, requiredNames);
+  const gate = evaluateCiJobs(exactRuns, jobs, requiredNames, requiredStepNames);
   return {
     testsExecuted: gate.status === "passed",
     repository: process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
@@ -68,9 +77,10 @@ export function evaluateTestExecutionEvidence(
     expectedSha,
     status: gate.status,
     evidence,
+    checks,
     notes: gate.status === "passed"
-      ? ["Required CI checks succeeded for the exact commit SHA."]
-      : ["Required CI checks have not all succeeded for the exact commit SHA."],
+      ? ["Required CI jobs and steps succeeded for the exact commit SHA."]
+      : ["Required CI jobs or steps have not all succeeded for the exact commit SHA."],
   };
 }
 
@@ -79,11 +89,12 @@ export async function inspectTestExecution(
   repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
   ref = "main",
   requiredNames: string[] = ["Typecheck and API tests"],
+  requiredStepNames: string[] = [],
 ): Promise<TestExecutionEvidence> {
   if (!expectedSha.trim()) {
     return {
       testsExecuted: false, repository, ref, expectedSha, status: "sha-mismatch",
-      evidence: [], notes: ["An expected commit SHA is required to verify test execution."],
+      evidence: [], checks: [], notes: ["An expected commit SHA is required to verify test execution."],
     };
   }
   const github = new GitHubClient({ repository });
@@ -94,7 +105,7 @@ export async function inspectTestExecution(
     const result = await github.getWorkflowJobs(run.id);
     jobs.push(...result.jobs);
   }
-  const evaluated = evaluateTestExecutionEvidence(exactRuns, jobs, expectedSha, requiredNames);
+  const evaluated = evaluateTestExecutionEvidence(exactRuns, jobs, expectedSha, requiredNames, requiredStepNames);
   return { ...evaluated, repository, ref };
 }
 
@@ -106,11 +117,12 @@ export async function inspectRefTestExecution(
   repository: string,
   ref: string,
   requiredNames: string[],
+  requiredStepNames: string[] = [],
 ): Promise<TestExecutionEvidence> {
   try {
     const github = new GitHubClient({ repository });
     const expectedSha = await github.getCommitSha(ref);
-    return await inspectTestExecution(expectedSha, repository, ref, requiredNames);
+    return await inspectTestExecution(expectedSha, repository, ref, requiredNames, requiredStepNames);
   } catch (error) {
     return {
       testsExecuted: false,
@@ -119,6 +131,7 @@ export async function inspectRefTestExecution(
       expectedSha: "",
       status: "no-runs",
       evidence: [],
+      checks: [],
       notes: [`Could not verify CI evidence for ${repository}@${ref}: ${error instanceof Error ? error.message : String(error)}`],
     };
   }

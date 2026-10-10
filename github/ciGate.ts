@@ -4,12 +4,14 @@ export type CiGateResult =
   | { status: "passed"; runs: WorkflowRun[] }
   | { status: "failed" | "pending" | "no-runs"; runs: WorkflowRun[] };
 
-export type CiJob = { name: string; status: string; conclusion: string | null };
+export type CiJobStep = { name: string; status: string; conclusion: string | null };
+export type CiJob = { name: string; status: string; conclusion: string | null; steps?: CiJobStep[] };
 
 export function evaluateCiJobs(
   runs: WorkflowRun[],
   jobs: CiJob[],
   requiredNames: string[] = [],
+  requiredStepNames: string[] = [],
 ): CiGateResult {
   if (!runs.length) return { status: "no-runs", runs };
 
@@ -29,6 +31,16 @@ export function evaluateCiJobs(
   const requiredJobs = matched.flat();
   if (requiredJobs.some(job => job.status !== "completed")) return { status: "pending", runs };
   if (requiredJobs.some(job => job.conclusion !== "success")) return { status: "failed", runs };
+
+  if (requiredStepNames.length) {
+    const normalizedSteps = jobs.flatMap(job => (job.steps ?? []).map(step => ({ ...step, normalizedName: step.name.toLowerCase() })));
+    const requiredSteps = requiredStepNames.map(name => name.toLowerCase());
+    const matchedSteps = requiredSteps.map(name => normalizedSteps.filter(step => step.normalizedName === name));
+    if (matchedSteps.some(matches => matches.length === 0)) return { status: "pending", runs };
+    const steps = matchedSteps.flat();
+    if (steps.some(step => step.status !== "completed")) return { status: "pending", runs };
+    if (steps.some(step => step.conclusion !== "success")) return { status: "failed", runs };
+  }
   return { status: "passed", runs };
 }
 

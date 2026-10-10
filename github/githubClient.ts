@@ -78,7 +78,7 @@ export class GitHubClient {
   }
 
   async getWorkflowJobs(runId: number) {
-    return this.request<{ jobs: Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string }> }>(
+    return this.request<{ jobs: Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string; steps?: Array<{ name: string; number: number; status: string; conclusion: string | null }> }> }>(
       `/repos/${this.repository}/actions/runs/${runId}/jobs?per_page=100`,
     );
   }
