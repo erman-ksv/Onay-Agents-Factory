@@ -13,7 +13,7 @@ if (!goal) {
   process.exit(1);
 }
 
-if (process.env.OPENAI_API_KEY) {
+if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "deterministic") {
   const { runAiCommander } = await import("./aiCommander.js");
   console.log(await runAiCommander(goal));
 } else {
@@ -93,6 +93,6 @@ if (process.env.OPENAI_API_KEY) {
     task: plan,
     execution,
     summary,
-    note: "Handlers run in plan order and receive previous results. Code generation requires OPENAI_API_KEY. Test discovery is not test execution. This mode does not publish changes or open pull requests.",
+    note: "Handlers run in plan order and receive previous results. Set AGENT_FACTORY_MODE=deterministic to use this executor even when OPENAI_API_KEY is present. Code generation requires OPENAI_API_KEY. Test discovery is not test execution. This mode does not publish changes or open pull requests.",
   }, null, 2));
 }
