@@ -23,8 +23,9 @@ export async function runChangePipeline(input: {
   body: string;
   files: ChangeFile[];
   journal?: AgentRunJournal;
+  onEvent?: (event: import("./agentRunJournal.js").AgentRunEvent) => void;
 }) {
-  const journal = input.journal ?? new AgentRunJournal(input.goal);
+  const journal = input.journal ?? new AgentRunJournal(input.goal, undefined, input.onEvent);
   const finish = <T extends Record<string, unknown>>(result: T) => ({
     ...result,
     taskId: journal.taskId,
@@ -116,8 +117,14 @@ export async function runChangePipeline(input: {
   return finish({ status: "ci-passed" as const, review, security, pullRequest, ci, testEvidence });
 }
 
-export async function generateAndPrepareTezJetChange(input: { goal: string; branch: string; title: string; body: string }) {
-  const journal = new AgentRunJournal(input.goal);
+export async function generateAndPrepareTezJetChange(input: {
+  goal: string;
+  branch: string;
+  title: string;
+  body: string;
+  onEvent?: (event: import("./agentRunJournal.js").AgentRunEvent) => void;
+}) {
+  const journal = new AgentRunJournal(input.goal, undefined, input.onEvent);
   journal.record("agent_started", "explorer", "Reading TezJet repository context before any code generation.");
   const exploration = await inspectTezJet();
   const available = exploration.files.filter(
