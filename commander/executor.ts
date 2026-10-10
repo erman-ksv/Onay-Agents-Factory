@@ -43,14 +43,15 @@ export async function executePlan(
     }
 
     if (!handler) {
+      const reason = "No executable handler is registered for this agent yet.";
       const result: AgentStepResult = {
         agent: step.agent,
         objective: step.objective,
         status: "skipped",
-        error: "No executable handler is registered for this agent yet.",
+        error: reason,
       };
       results.push(result);
-      journal.record("agent_skipped", step.agent, result.error, { objective: step.objective });
+      journal.record("agent_skipped", step.agent, reason, { objective: step.objective });
       continue;
     }
 
