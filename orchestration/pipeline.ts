@@ -44,6 +44,9 @@ export async function runChangePipeline(input: { goal: string; branch: string; t
 
 export async function generateAndPrepareTezJetChange(input: { goal: string; branch: string; title: string; body: string }) {
   const exploration = await inspectTezJet();
+  const available = exploration.files.filter(
+    (file): file is { path: string; sha: string; content: string } => "content" in file,
+  );
   const unavailable = exploration.files.filter(
     (file): file is { path: string; error: string } => "error" in file,
   );
@@ -55,7 +58,7 @@ export async function generateAndPrepareTezJetChange(input: { goal: string; bran
     };
   }
 
-  const context = exploration.files
+  const context = available
     .map(file => `FILE: ${file.path}\n${file.content}`)
     .join("\n\n");
   const generated = await generateChanges(input.goal, context);
