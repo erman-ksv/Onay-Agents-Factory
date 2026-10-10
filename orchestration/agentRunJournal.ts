@@ -5,7 +5,9 @@ export type AgentRunEventType =
   | "artifact_created"
   | "verification_passed"
   | "blocked"
-  | "agent_completed";
+  | "agent_completed"
+  | "agent_failed"
+  | "agent_skipped";
 
 export type AgentRunEvent = {
   sequence: number;

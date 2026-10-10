@@ -6,6 +6,7 @@ import { inspectTezJet } from "../github/tezjetExplorer.js";
 import { executePlan } from "./executor.js";
 import { planTask } from "./planner.js";
 import { summarizeExecution } from "./summary.js";
+import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -14,9 +15,16 @@ if (!goal) {
   process.exit(1);
 }
 
+const journal = new AgentRunJournal(goal, undefined, (event) => {
+  console.log(JSON.stringify({ type: "agent_event", event }));
+});
+
 if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "deterministic") {
+  journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
-  console.log(await runAiCommander(goal));
+  const result = await runAiCommander(goal);
+  journal.record("agent_completed", "commander", "AI Commander returned its result. Specialist tool-level tracing is not yet connected in this mode.");
+  console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
 } else {
   const plan = planTask(goal);
   const execution = await executePlan(goal, plan.steps, {
@@ -28,6 +36,9 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
       const unavailable = result.files.filter(
         (file): file is { path: string; error: string } => "error" in file,
       );
+      if (unavailable.length > 0) {
+        throw new Error(`Explorer could not inspect required repository files: ${unavailable.map((file) => `${file.path}: ${file.error}`).join("; ")}`);
+      }
       return {
         repository: result.repository,
         ref: result.ref,
@@ -78,16 +89,18 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
       }
       return reviewChangeSet({ goal, files: generated.files });
     },
-  });
+  }, { journal });
 
   const summary = summarizeExecution(execution);
 
   console.log(JSON.stringify({
     commander: "TezJet Commander",
     mode: "deterministic",
+    taskId: journal.taskId,
+    events: journal.snapshot(),
     task: plan,
     execution,
     summary,
-    note: "Handlers run in plan order and receive previous results. Set AGENT_FACTORY_MODE=deterministic to use this executor even when OPENAI_API_KEY is present. Code generation requires OPENAI_API_KEY. Test discovery is not test execution. This mode does not publish changes or open pull requests.",
+    note: "Handlers run in plan order and receive previous results. Set AGENT_FACTORY_MODE=deterministic to use this executor even when OPENAI_API_KEY is present. Code generation requires OPENAI_API_KEY. Test discovery is not test execution. This mode does not publish changes or open pull requests. Agent events are emitted as JSON lines while the run is active.",
   }, null, 2));
 }
