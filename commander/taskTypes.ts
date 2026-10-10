@@ -5,6 +5,7 @@ export type AgentName =
   | "backend"
   | "frontend"
   | "database"
+  | "dispatch"
   | "product"
   | "ux"
   | "legal"
