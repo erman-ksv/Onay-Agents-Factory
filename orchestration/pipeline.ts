@@ -6,7 +6,7 @@ import { generateChanges } from "../agents/backend/coder.js";
 import { prepareTezJetChange } from "../github/changeWorkflow.js";
 import { waitForCiGate } from "../github/ciGate.js";
 import { retryFailedCi } from "./retryLoop.js";
-import { AgentRunJournal } from "./agentRunJournal.js";
+import { AgentRunJournal, type AgentRunEvent } from "./agentRunJournal.js";
 
 type ChangeFile = { path: string; content: string; message: string };
 const REQUIRED_TEZJET_CI_JOBS = ["Typecheck and API tests"];
@@ -23,7 +23,7 @@ export async function runChangePipeline(input: {
   body: string;
   files: ChangeFile[];
   journal?: AgentRunJournal;
-  onEvent?: (event: import("./agentRunJournal.js").AgentRunEvent) => void;
+  onEvent?: (event: AgentRunEvent) => void;
 }) {
   const journal = input.journal ?? new AgentRunJournal(input.goal, undefined, input.onEvent);
   const finish = <T extends Record<string, unknown>>(result: T) => ({
