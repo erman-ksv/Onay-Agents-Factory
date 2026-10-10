@@ -36,3 +36,14 @@ test("AI Commander prompt includes dispatch for taxi matching tasks", () => {
   const prompt = buildCommanderPrompt("Review taxi dispatch and FIFO driver matching");
   assert.match(prompt, /dispatch → dispatch_ride_operations_specialist/);
 });
+
+test("Russian read-only repository audits use inspection-only stages", () => {
+  const plan = planTask("Проверь структуру проекта TezJet-Agent-Factory. Определи роли Commander, Explorer, Backend, Frontend, Tester, Security и Reviewer. Ничего не изменяй в файлах.");
+  assert.deepEqual(plan.steps.map((step) => step.agent), ["explorer", "tester", "security"]);
+});
+
+test("Agent Factory target detection is explicit", async () => {
+  const { isAgentFactoryTarget } = await import("./planner.js");
+  assert.equal(isAgentFactoryTarget("Проверь TezJet-Agent-Factory"), true);
+  assert.equal(isAgentFactoryTarget("Review taxi dispatch"), false);
+});
