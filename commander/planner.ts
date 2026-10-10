@@ -16,7 +16,7 @@ const routes: Array<[AgentName, string, RegExp | null]> = [
   ["reviewer", "Perform an independent engineering review and identify blocking issues before merge.", null]
 ];
 
-const READ_ONLY_AUDIT = /\b(inspect|audit|check|review|analy[sz]e|report|explain|identify|verify)\b/i;
+const READ_ONLY_AUDIT = /\b(inspect|audit|check|analy[sz]e|report|explain|identify|verify)\b/i;
 const MUTATION_INTENT = /\b(implement|build|create|add|change|modify|fix|refactor|write|generate|develop|update|remove|delete)\b/i;
 const FACTORY_TARGET = /tezjet-agent-factory|agent factory/i;
 
