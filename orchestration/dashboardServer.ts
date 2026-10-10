@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 
 type DashboardEvent = {
@@ -67,7 +68,7 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
 }
 
 const commanderRunner: DashboardRunner = async (goal, emit) => {
-  const child = spawn("pnpm", ["dev", "--", goal], { stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
+  const child = spawn(process.execPath, [resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs"), "commander/commander.ts", goal], { stdio: ["ignore", "pipe", "pipe"], shell: false });
   const stdout = createInterface({ input: child.stdout });
   const stderr = createInterface({ input: child.stderr });
   stdout.on("line", line => {
