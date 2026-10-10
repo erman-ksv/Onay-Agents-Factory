@@ -8,6 +8,7 @@ import { waitForCiGate } from "../github/ciGate.js";
 import { retryFailedCi } from "./retryLoop.js";
 
 type ChangeFile = { path: string; content: string; message: string };
+const REQUIRED_TEZJET_CI_JOBS = ["Typecheck and API tests"];
 
 export async function analyzeTezJetTask(goal: string) {
   const [exploration, tests, security] = await Promise.all([inspectTezJet(), inspectTests(), inspectSecurity()]);
@@ -28,7 +29,7 @@ export async function runChangePipeline(input: { goal: string; branch: string; t
 
   const pullRequest = await prepareTezJetChange({ ...input, body: input.body });
   const headSha = pullRequest.head_sha;
-  const ci = await waitForCiGate({ branch: input.branch, headSha, requiredNames: ["test", "check", "lint", "type"] });
+  const ci = await waitForCiGate({ branch: input.branch, headSha, requiredNames: REQUIRED_TEZJET_CI_JOBS });
   if (ci.status === "failed") {
     const repair = await retryFailedCi({
       goal: input.goal,
