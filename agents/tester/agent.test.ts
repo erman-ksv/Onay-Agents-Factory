@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { discoverTestScripts } from "./agent.js";
+import { discoverTestScripts, evaluateTestExecutionEvidence } from "./agent.js";
+import type { WorkflowRun } from "../../github/githubClient.js";
+import type { CiJob } from "../../github/ciGate.js";
 
 test("discovers test, check, lint, and type scripts", () => {
   const result = discoverTestScripts(JSON.stringify({
@@ -33,4 +35,52 @@ test("handles malformed package JSON without throwing", () => {
 
   assert.equal(result.validJson, false);
   assert.deepEqual(result.scripts, []);
+});
+
+const expectedSha = "a".repeat(40);
+const otherSha = "b".repeat(40);
+const run = (headSha: string, status = "completed", conclusion: string | null = "success"): WorkflowRun => ({
+  id: 42,
+  name: "TezJet CI",
+  status,
+  conclusion,
+  head_sha: headSha,
+  html_url: "https://example.test/actions/runs/42",
+});
+const jobs: CiJob[] = [{ name: "Typecheck and API tests", status: "completed", conclusion: "success" }];
+
+test("accepts successful required CI evidence only for the exact expected SHA", () => {
+  const result = evaluateTestExecutionEvidence([run(expectedSha)], jobs, expectedSha);
+  assert.equal(result.testsExecuted, true);
+  assert.equal(result.status, "passed");
+  assert.equal(result.evidence[0]?.headSha, expectedSha);
+});
+
+test("does not accept successful CI evidence from a different SHA", () => {
+  const result = evaluateTestExecutionEvidence([run(otherSha)], jobs, expectedSha);
+  assert.equal(result.testsExecuted, false);
+  assert.equal(result.status, "sha-mismatch");
+  assert.match(result.notes[0] ?? "", /exact expected commit SHA/);
+});
+
+test("does not accept CI while the workflow is still running", () => {
+  const result = evaluateTestExecutionEvidence([run(expectedSha, "in_progress", null)], jobs, expectedSha);
+  assert.equal(result.testsExecuted, false);
+  assert.equal(result.status, "pending");
+});
+
+test("does not accept CI when the required test job is missing", () => {
+  const result = evaluateTestExecutionEvidence([run(expectedSha)], [], expectedSha);
+  assert.equal(result.testsExecuted, false);
+  assert.equal(result.status, "pending");
+});
+
+test("does not accept a failed required test job", () => {
+  const result = evaluateTestExecutionEvidence(
+    [run(expectedSha)],
+    [{ name: "Typecheck and API tests", status: "completed", conclusion: "failure" }],
+    expectedSha,
+  );
+  assert.equal(result.testsExecuted, false);
+  assert.equal(result.status, "failed");
 });
