@@ -6,6 +6,7 @@ const coder = new Agent({ name: "TezJet Coder", instructions: ROLE_SKILLS.coder 
 const backend = new Agent({ name: "TezJet Backend Specialist", instructions: ROLE_SKILLS.backend });
 const frontend = new Agent({ name: "TezJet Frontend & Mobile Specialist", instructions: ROLE_SKILLS.frontend });
 const database = new Agent({ name: "TezJet Database Specialist", instructions: ROLE_SKILLS.database });
+const dispatch = new Agent({ name: "TezJet Dispatch & Ride Operations Specialist", instructions: ROLE_SKILLS.dispatch });
 const tester = new Agent({ name: "TezJet Tester", instructions: ROLE_SKILLS.tester });
 const security = new Agent({ name: "TezJet Security Specialist", instructions: ROLE_SKILLS.security });
 const reviewer = new Agent({ name: "TezJet Independent Reviewer", instructions: ROLE_SKILLS.reviewer });
@@ -23,6 +24,7 @@ const commander = new Agent({
     backend.asTool({ toolName: "backend_specialist", toolDescription: "Analyze or implement backend/API changes." }),
     frontend.asTool({ toolName: "frontend_mobile_specialist", toolDescription: "Analyze or implement Android/iOS and frontend changes." }),
     database.asTool({ toolName: "database_specialist", toolDescription: "Analyze schema, migrations, persistence, and transaction safety." }),
+    dispatch.asTool({ toolName: "dispatch_ride_operations_specialist", toolDescription: "Review taxi matching, queue fairness, pickup eligibility, seat capacity, and ride lifecycle rules." }),
     tester.asTool({ toolName: "test_tezjet", toolDescription: "Design/evaluate tests and report which results are actually verified." }),
     security.asTool({ toolName: "security_review", toolDescription: "Threat-model the implementation and identify security blockers." }),
     legal.asTool({ toolName: "rasul_legal_compliance", toolDescription: "Identify legal/compliance issues, jurisdiction, primary-source research needs, risk, and questions for human counsel. Never make binding legal decisions." }),
