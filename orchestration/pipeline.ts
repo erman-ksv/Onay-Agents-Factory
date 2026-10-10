@@ -1,5 +1,5 @@
 import { inspectTezJet } from "../github/tezjetExplorer.js";
-import { inspectTests } from "../agents/tester/agent.js";
+import { inspectTestExecution, inspectTests } from "../agents/tester/agent.js";
 import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { generateChanges } from "../agents/backend/coder.js";
@@ -37,10 +37,35 @@ export async function runChangePipeline(input: { goal: string; branch: string; t
       repositoryContext: input.files.map(file => `FILE: ${file.path}\n${file.content}`).join("\n\n"),
       headSha,
     });
-    return { status: repair.status === "passed" ? "ci-passed" as const : "ci-repair" as const, review, security, pullRequest, ci, repair };
+    if (repair.status !== "passed") {
+      return { status: "ci-repair" as const, review, security, pullRequest, ci, repair };
+    }
+
+    // Retry may create a new commit. Verify CI evidence against that exact final SHA.
+    const testEvidence = await inspectTestExecution(
+      repair.headSha,
+      process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+      input.branch,
+      REQUIRED_TEZJET_CI_JOBS,
+    );
+    return testEvidence.testsExecuted
+      ? { status: "ci-passed" as const, review, security, pullRequest, ci, repair, testEvidence }
+      : { status: "test-evidence-blocked" as const, review, security, pullRequest, ci, repair, testEvidence };
   }
   if (ci.status !== "passed") return { status: "ci-blocked" as const, review, security, pullRequest, ci };
-  return { status: "ci-passed" as const, review, security, pullRequest, ci };
+
+  // The publish pipeline requires the Tester to independently confirm that the
+  // required job succeeded for this exact commit, not merely that CI was found.
+  const testEvidence = await inspectTestExecution(
+    headSha,
+    process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+    input.branch,
+    REQUIRED_TEZJET_CI_JOBS,
+  );
+  if (!testEvidence.testsExecuted) {
+    return { status: "test-evidence-blocked" as const, review, security, pullRequest, ci, testEvidence };
+  }
+  return { status: "ci-passed" as const, review, security, pullRequest, ci, testEvidence };
 }
 
 export async function generateAndPrepareTezJetChange(input: { goal: string; branch: string; title: string; body: string }) {
