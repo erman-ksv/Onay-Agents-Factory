@@ -36,6 +36,9 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
       const unavailable = result.files.filter(
         (file): file is { path: string; error: string } => "error" in file,
       );
+      if (unavailable.length > 0) {
+        throw new Error(`Explorer could not inspect required repository files: ${unavailable.map((file) => `${file.path}: ${file.error}`).join("; ")}`);
+      }
       return {
         repository: result.repository,
         ref: result.ref,
