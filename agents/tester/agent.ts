@@ -12,7 +12,7 @@ export type TestExecutionEvidence = {
   repository: string;
   ref: string;
   expectedSha: string;
-  status: CiGateResult["status"] | "sha-mismatch";
+  status: CiGateResult["status"] | "sha-mismatch" | "no-runs";
   evidence: Array<{ runId: number; name: string; headSha: string; conclusion: string | null; url: string }>;
   notes: string[];
 };
