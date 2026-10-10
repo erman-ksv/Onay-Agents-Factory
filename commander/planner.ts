@@ -16,8 +16,8 @@ const routes: Array<[AgentName, string, RegExp | null]> = [
   ["reviewer", "Perform an independent engineering review and identify blocking issues before merge.", null]
 ];
 
-const READ_ONLY_AUDIT = /\b(inspect|audit|check|analy[sz]e|report|explain|identify|verify|проверь|проверить|анализ|структуру|структура|определи|сообщи)\b/i;
-const MUTATION_INTENT = /\b(implement|build|create|add|change|modify|fix|refactor|write|generate|develop|update|remove|delete|создай|измени|исправь|добавь|реализуй|напиши)\b/i;
+const READ_ONLY_AUDIT = /(?:\b(inspect|audit|check|analy[sz]e|report|explain|identify|verify)\b|проверь|проверить|анализ|структуру|структура|определи|сообщи)/i;
+const MUTATION_INTENT = /(?:\b(implement|build|create|add|change|modify|fix|refactor|write|generate|develop|update|remove|delete)\b|создай|измени|изменяй|исправь|добавь|реализуй|напиши)/i;
 const FACTORY_TARGET = /tezjet-agent-factory|agent factory/i;
 
 export function isReadOnlyRepositoryAudit(goal: string): boolean {
