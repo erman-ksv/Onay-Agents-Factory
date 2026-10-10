@@ -98,6 +98,32 @@ export async function inspectTestExecution(
   return { ...evaluated, repository, ref };
 }
 
+/**
+ * Resolve the current branch head and verify trusted CI evidence for that exact SHA.
+ * A missing token, SHA, workflow, or required job is reported as unverified.
+ */
+export async function inspectRefTestExecution(
+  repository: string,
+  ref: string,
+  requiredNames: string[],
+): Promise<TestExecutionEvidence> {
+  try {
+    const github = new GitHubClient({ repository });
+    const expectedSha = await github.getCommitSha(ref);
+    return await inspectTestExecution(expectedSha, repository, ref, requiredNames);
+  } catch (error) {
+    return {
+      testsExecuted: false,
+      repository,
+      ref,
+      expectedSha: "",
+      status: "no-runs",
+      evidence: [],
+      notes: [`Could not verify CI evidence for ${repository}@${ref}: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+}
+
 export async function inspectTests(repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet", ref = "main") {
   const adapter = new TezJetRepositoryAdapter(repository);
   const packageJson = await adapter.read("package.json", ref);
