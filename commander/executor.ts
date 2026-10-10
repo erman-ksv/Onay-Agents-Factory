@@ -32,6 +32,7 @@ export async function executePlan(
 
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
+    if (!step) continue;
     const handler = handlers[step.agent];
 
     if (index > 0) {
