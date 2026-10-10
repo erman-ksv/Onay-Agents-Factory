@@ -33,3 +33,10 @@ test("snapshot does not expose mutable event details", () => {
   snapshot[1].details!.files = ["tampered.ts"];
   assert.deepEqual(journal.snapshot()[1].details?.files, ["a.ts"]);
 });
+
+test("constructor streams the initial task event immediately", () => {
+  const streamed: string[] = [];
+  const journal = new AgentRunJournal("stream this task", "task-stream", (event) => streamed.push(event.type));
+  journal.record("agent_started", "explorer", "Starting exploration.");
+  assert.deepEqual(streamed, ["task_received", "agent_started"]);
+});

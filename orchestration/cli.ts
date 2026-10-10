@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { analyzeTezJetTask, generateAndPrepareTezJetChange } from "./pipeline.js";
+import type { AgentRunEvent } from "./agentRunJournal.js";
 
 export type PipelineCliOptions = {
   goal: string;
@@ -60,7 +61,11 @@ export function parsePipelineArgs(args: string[]): PipelineCliOptions {
   };
 }
 
-export async function runPipelineCli(args: string[], env: NodeJS.ProcessEnv = process.env) {
+export async function runPipelineCli(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  onEvent?: (event: AgentRunEvent) => void,
+) {
   const options = parsePipelineArgs(args);
   if (options.help) {
     return {
@@ -84,13 +89,16 @@ export async function runPipelineCli(args: string[], env: NodeJS.ProcessEnv = pr
     branch: options.branch,
     title: options.title,
     body: options.body,
+    onEvent,
   });
   return { mode: "publish", result };
 }
 
 async function main() {
   try {
-    const result = await runPipelineCli(process.argv.slice(2));
+    const result = await runPipelineCli(process.argv.slice(2), process.env, (event) => {
+      console.log(JSON.stringify({ type: "agent_event", event }));
+    });
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
