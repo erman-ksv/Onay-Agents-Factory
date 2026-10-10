@@ -64,7 +64,7 @@ export class GitHubClient {
   }
 
   async getCommitSha(ref = "main"): Promise<string> {
-    const encodedRef = ref.split("/").map(encodeURIComponent).join("/");
+    const encodedRef = encodeURIComponent(ref);
     const result = await this.request<{ sha: string }>(`/repos/${this.repository}/commits/${encodedRef}`);
     return result.sha;
   }
