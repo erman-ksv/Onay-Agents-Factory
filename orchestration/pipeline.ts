@@ -44,7 +44,20 @@ export async function runChangePipeline(input: { goal: string; branch: string; t
 
 export async function generateAndPrepareTezJetChange(input: { goal: string; branch: string; title: string; body: string }) {
   const exploration = await inspectTezJet();
-  const context = exploration.files.map(file => `FILE: ${file.path}\n${file.content}`).join("\n\n");
+  const unavailable = exploration.files.filter(
+    (file): file is { path: string; error: string } => "error" in file,
+  );
+  if (unavailable.length) {
+    return {
+      status: "blocked" as const,
+      reason: "Repository exploration was incomplete; refusing to generate changes from partial context.",
+      unavailableFiles: unavailable.map(file => ({ path: file.path, error: file.error })),
+    };
+  }
+
+  const context = exploration.files
+    .map(file => `FILE: ${file.path}\n${file.content}`)
+    .join("\n\n");
   const generated = await generateChanges(input.goal, context);
   if (!generated.files.length) return { status: "no-change" as const, summary: generated.summary };
   return runChangePipeline({ ...input, files: generated.files });
