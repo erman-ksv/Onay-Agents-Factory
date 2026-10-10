@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AddressInfo } from "node:net";
-import { createDashboardServer } from "./dashboardServer.js";
+import { createDashboardServer, type DashboardRunner } from "./dashboardServer.js";
 
-async function startServer(runner?: Parameters<typeof createDashboardServer>[0]["runner"]) {
+async function startServer(runner?: DashboardRunner) {
   const server = createDashboardServer({ host: "127.0.0.1", port: 0, runner });
   if (!server.listening) await new Promise<void>(resolve => server.once("listening", resolve));
   const address = server.address() as AddressInfo;
