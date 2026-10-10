@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx commander/commander.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test commander/planner.test.ts"
+    "test": "tsx --test commander/planner.test.ts agents/security/agent.test.ts"
   },
   "dependencies": {
     "@openai/agents": "latest",
