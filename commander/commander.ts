@@ -2,9 +2,9 @@ import { generateChanges } from "../agents/backend/coder.js";
 import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
 import { inspectTests } from "../agents/tester/agent.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
-import { inspectTezJet } from "../github/tezjetExplorer.js";
+import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES, inspectTezJet } from "../github/tezjetExplorer.js";
 import { executePlan } from "./executor.js";
-import { planTask } from "./planner.js";
+import { isAgentFactoryTarget, planTask } from "./planner.js";
 import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 
@@ -27,9 +27,13 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
   console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
 } else {
   const plan = planTask(goal);
+  const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/TezJet-Agent-Factory" : (process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet");
+  const targetRef = isAgentFactoryTarget(goal) ? "dev/agent-factory-core" : "main";
+  const explorerPaths = isAgentFactoryTarget(goal) ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
+  const securityPaths = isAgentFactoryTarget(goal) ? ["package.json", "commander/planner.ts", "commander/executor.ts", "agents/tester/agent.ts", "agents/security/agent.ts", "agents/reviewer/agent.ts", "orchestration/pipeline.ts", "orchestration/dashboardServer.ts"] : undefined;
   const execution = await executePlan(goal, plan.steps, {
     explorer: async () => {
-      const result = await inspectTezJet();
+      const result = await inspectTezJet(explorerPaths, targetRef, targetRepository);
       const available = result.files.filter(
         (file): file is { path: string; sha: string; content: string } => "content" in file,
       );
@@ -58,7 +62,7 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
       },
     } : {}),
     tester: async () => {
-      const result = await inspectTests();
+      const result = await inspectTests(targetRepository, targetRef);
       return {
         repository: result.repository,
         ref: result.ref,
@@ -71,7 +75,7 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
       const coder = previousResults.find((result) => result.agent === "coder");
       const generated = coder?.output as { files?: Array<{ path: string; content: string }> } | undefined;
       const proposed = generated?.files ? inspectProposedChanges(generated.files) : null;
-      const repository = await inspectSecurity();
+      const repository = await inspectSecurity(securityPaths, targetRepository, targetRef);
       return {
         repository,
         proposedChanges: proposed,
