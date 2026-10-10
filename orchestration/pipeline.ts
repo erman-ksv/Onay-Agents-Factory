@@ -62,7 +62,7 @@ export async function runChangePipeline(input: {
     repository: process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
     branch: input.branch,
     headSha,
-    url: pullRequest.html_url ?? pullRequest.url,
+    url: pullRequest.html_url,
   });
 
   journal.handoff("github", "ci", "Checking required CI jobs against the proposed commit.", { headSha });
