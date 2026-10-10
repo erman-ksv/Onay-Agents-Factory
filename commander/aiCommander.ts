@@ -1,5 +1,6 @@
 import { Agent, run } from "@openai/agents";
 import { ROLE_SKILLS } from "./skills.js";
+import { buildCommanderPrompt } from "./buildCommanderPrompt.js";
 
 const explorer = new Agent({ name: "TezJet Explorer", instructions: ROLE_SKILLS.explorer });
 const coder = new Agent({ name: "TezJet Coder", instructions: ROLE_SKILLS.coder });
@@ -36,6 +37,6 @@ const commander = new Agent({
 });
 
 export async function runAiCommander(goal: string) {
-  const result = await run(commander, goal);
+  const result = await run(commander, buildCommanderPrompt(goal));
   return result.finalOutput;
 }
