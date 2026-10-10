@@ -1,6 +1,6 @@
 import { generateChanges } from "../agents/backend/coder.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
-import { inspectSecurity } from "../agents/security/agent.js";
+import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
 import { getCiFailureContext, waitForCiGate } from "../github/ciGate.js";
 import { TezJetRepositoryAdapter } from "../github/tezjetRepository.js";
 
@@ -32,6 +32,9 @@ export async function retryFailedCi(input: {
 
     const review = reviewChangeSet({ goal: input.goal, files: generated.files });
     if (!review.ready) return { status: "blocked" as const, attempts, review, headSha };
+
+    const proposedSecurity = inspectProposedChanges(generated.files);
+    if (proposedSecurity.status !== "clean") return { status: "blocked" as const, attempts, proposedSecurity, headSha };
 
     const security = await inspectSecurity(generated.files.map(file => file.path), "erman-ksv/TezJet", "main");
     if (security.status !== "clean") return { status: "blocked" as const, attempts, security, headSha };
