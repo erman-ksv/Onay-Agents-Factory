@@ -15,6 +15,7 @@ The Commander selects specialists based on the task. The planner routes legal/co
 - **Backend** — API contracts, auth, validation, transaction boundaries, idempotency and concurrency.
 - **Frontend & Mobile** — React/Expo, Android/iOS, accessibility, offline/error states and location permissions.
 - **Database** — schema, migrations, constraints, indexes, transaction safety and persistence.
+- **Dispatch & Ride Operations** — taxi matching, FIFO queue fairness, pickup eligibility, driver offer timeouts, seat capacity, and ride lifecycle invariants.
 - **Product Analyst** — scope, non-goals, business rules and measurable acceptance criteria.
 - **UX & Accessibility** — user journeys, mobile usability, accessible controls and permission/error flows.
 - **Tester** — deterministic unit/integration/regression tests, edge cases and concurrency.
