@@ -5,6 +5,7 @@ import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { inspectTezJet } from "../github/tezjetExplorer.js";
 import { executePlan } from "./executor.js";
 import { planTask } from "./planner.js";
+import { summarizeExecution } from "./summary.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -79,20 +80,7 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
     },
   });
 
-  const reviewReady = (execution.find((step) => step.agent === "reviewer")?.output as { ready?: boolean } | undefined)?.ready ?? false;
-  const proposedSecurityClean = (execution.find((step) => step.agent === "security")?.output as { proposedChanges?: { status?: string } } | undefined)?.proposedChanges?.status === "clean";
-  const hasIncompleteAgents = execution.some((step) => step.status !== "completed");
-  const status = hasIncompleteAgents ? "blocked" : !reviewReady || !proposedSecurityClean ? "needs-review" : "completed";
-
-  const summary = {
-    status,
-    canPublish: status === "completed",
-    completed: execution.filter((step) => step.status === "completed").length,
-    failed: execution.filter((step) => step.status === "failed").length,
-    skipped: execution.filter((step) => step.status === "skipped").length,
-    reviewReady,
-    proposedSecurityClean,
-  };
+  const summary = summarizeExecution(execution);
 
   console.log(JSON.stringify({
     commander: "TezJet Commander",
