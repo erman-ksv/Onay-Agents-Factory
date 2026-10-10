@@ -4,19 +4,45 @@ export type CiGateResult =
   | { status: "passed"; runs: WorkflowRun[] }
   | { status: "failed" | "pending" | "no-runs"; runs: WorkflowRun[] };
 
+export type CiJob = { name: string; status: string; conclusion: string | null };
+
+export function evaluateCiJobs(
+  runs: WorkflowRun[],
+  jobs: CiJob[],
+  requiredNames: string[] = [],
+): CiGateResult {
+  if (!runs.length) return { status: "no-runs", runs };
+
+  if (!requiredNames.length) {
+    if (runs.some(run => run.status !== "completed")) return { status: "pending", runs };
+    if (runs.some(run => run.conclusion !== "success")) return { status: "failed", runs };
+    return { status: "passed", runs };
+  }
+
+  const normalizedJobs = jobs.map(job => ({ ...job, normalizedName: job.name.toLowerCase() }));
+  const required = requiredNames.map(name => name.toLowerCase());
+  const matched = required.map(name => normalizedJobs.filter(job => job.normalizedName.includes(name)));
+
+  // Missing required checks are not evidence of success. Keep the gate closed.
+  if (matched.some(matches => matches.length === 0)) return { status: "pending", runs };
+  const requiredJobs = matched.flat();
+  if (requiredJobs.some(job => job.status !== "completed")) return { status: "pending", runs };
+  if (requiredJobs.some(job => job.conclusion !== "success")) return { status: "failed", runs };
+  return { status: "passed", runs };
+}
+
 export async function checkCiGate(branch: string, requiredNames: string[] = [], headSha?: string): Promise<CiGateResult> {
   const repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet";
   const github = new GitHubClient({ repository });
   const runs = await github.getWorkflowRuns(branch, headSha);
+  if (!runs.length) return { status: "no-runs", runs };
 
-  const relevant = requiredNames.length
-    ? runs.filter(run => requiredNames.some(name => run.name.toLowerCase().includes(name.toLowerCase())))
-    : runs;
-
-  if (!relevant.length) return { status: "no-runs", runs };
-  if (relevant.some(run => run.status !== "completed")) return { status: "pending", runs: relevant };
-  if (relevant.some(run => run.conclusion !== "success")) return { status: "failed", runs: relevant };
-  return { status: "passed", runs: relevant };
+  const jobGroups = [];
+  for (const run of runs) {
+    const result = await github.getWorkflowJobs(run.id);
+    jobGroups.push(...result.jobs);
+  }
+  return evaluateCiJobs(runs, jobGroups, requiredNames);
 }
 
 export async function waitForCiGate(input: {
