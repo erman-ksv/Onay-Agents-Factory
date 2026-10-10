@@ -16,13 +16,30 @@ const routes: Array<[AgentName, string, RegExp | null]> = [
   ["reviewer", "Perform an independent engineering review and identify blocking issues before merge.", null]
 ];
 
+const READ_ONLY_AUDIT = /\b(inspect|audit|check|review|analy[sz]e|report|explain|identify|verify)\b/i;
+const MUTATION_INTENT = /\b(implement|build|create|add|change|modify|fix|refactor|write|generate|develop|update|remove|delete)\b/i;
+const FACTORY_TARGET = /tezjet-agent-factory|agent factory/i;
+
+export function isReadOnlyRepositoryAudit(goal: string): boolean {
+  return READ_ONLY_AUDIT.test(goal) && !MUTATION_INTENT.test(goal);
+}
+
+export function isAgentFactoryTarget(goal: string): boolean {
+  return FACTORY_TARGET.test(goal);
+}
+
 export function planTask(goal: string): TaskPlan {
-  const steps = routes
-    .filter(([agent, , pattern]) => {
-      if (agent === "explorer" || agent === "coder" || agent === "tester" || agent === "security" || agent === "reviewer") return true;
-      return pattern?.test(goal) ?? false;
-    })
-    .map(([agent, objective]) => ({ agent, objective }));
+  const auditOnly = isReadOnlyRepositoryAudit(goal);
+  const steps = auditOnly
+    ? routes
+        .filter(([agent]) => agent === "explorer" || agent === "tester" || agent === "security")
+        .map(([agent, objective]) => ({ agent, objective }))
+    : routes
+        .filter(([agent, , pattern]) => {
+          if (agent === "explorer" || agent === "coder" || agent === "tester" || agent === "security" || agent === "reviewer") return true;
+          return pattern?.test(goal) ?? false;
+        })
+        .map(([agent, objective]) => ({ agent, objective }));
 
   return { id: "task-" + Date.now(), goal, steps, status: "queued" };
 }
