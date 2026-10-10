@@ -5,6 +5,7 @@ import { getCiFailureContext, waitForCiGate } from "../github/ciGate.js";
 import { TezJetRepositoryAdapter } from "../github/tezjetRepository.js";
 
 type ChangeFile = { path: string; content: string; message: string };
+const REQUIRED_TEZJET_CI_JOBS = ["Typecheck and API tests"];
 
 export async function retryFailedCi(input: {
   goal: string;
@@ -43,7 +44,7 @@ export async function retryFailedCi(input: {
       headSha = await adapter.write(file.path, file.content, file.message, input.branch);
     }
 
-    const ci = await waitForCiGate({ branch: input.branch, headSha, requiredNames: ["test", "check", "lint", "type"] });
+    const ci = await waitForCiGate({ branch: input.branch, headSha, requiredNames: REQUIRED_TEZJET_CI_JOBS });
     attempts.push({ attempt, files: generated.files.map(file => file.path), headSha, ci });
     if (ci.status === "passed") return { status: "passed" as const, attempts, headSha };
     if (ci.status !== "failed") return { status: "waiting" as const, attempts, headSha, gate: ci };
