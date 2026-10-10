@@ -1,6 +1,6 @@
 import { generateChanges } from "../agents/backend/coder.js";
 import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
-import { inspectTests } from "../agents/tester/agent.js";
+import { inspectRefTestExecution, inspectTests } from "../agents/tester/agent.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES, inspectTezJet } from "../github/tezjetExplorer.js";
 import { executePlan } from "./executor.js";
@@ -63,12 +63,21 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
     } : {}),
     tester: async () => {
       const result = await inspectTests(targetRepository, targetRef);
+      const requiredJobs = isAgentFactoryTarget(goal)
+        ? ["typecheck"]
+        : ["Typecheck and API tests"];
+      const executionEvidence = await inspectRefTestExecution(
+        targetRepository,
+        targetRef,
+        requiredJobs,
+      );
       return {
         repository: result.repository,
         ref: result.ref,
         discoveredScripts: result.scripts,
         notes: result.notes,
-        executionEvidence: "Test commands were discovered, not executed by this agent.",
+        executionEvidence,
+        testsExecuted: executionEvidence.testsExecuted,
       };
     },
     security: async ({ previousResults }) => {
