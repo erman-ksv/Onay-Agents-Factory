@@ -8,11 +8,23 @@ export const DEFAULT_EXPLORER_FILES = [
   "artifacts/api-server/src/routes/order.ts",
 ] as const;
 
+export const AGENT_FACTORY_EXPLORER_FILES = [
+  "package.json",
+  "commander/planner.ts",
+  "commander/executor.ts",
+  "commander/summary.ts",
+  "agents/tester/agent.ts",
+  "agents/security/agent.ts",
+  "agents/reviewer/agent.ts",
+  "orchestration/pipeline.ts",
+  "orchestration/dashboardServer.ts",
+] as const;
+
 export async function inspectTezJet(
   paths: readonly string[] = DEFAULT_EXPLORER_FILES,
   ref = "main",
+  repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
 ) {
-  const repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet";
   const adapter = new TezJetRepositoryAdapter(repository);
   const files = [];
   for (const path of paths) {
