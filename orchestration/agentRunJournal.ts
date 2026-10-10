@@ -27,10 +27,11 @@ export class AgentRunJournal {
   private readonly entries: AgentRunEvent[] = [];
   private readonly listeners = new Set<(event: AgentRunEvent) => void>();
 
-  constructor(goal: string, taskId = `task-${Date.now()}`) {
+  constructor(goal: string, taskId = `task-${Date.now()}`, onEvent?: (event: AgentRunEvent) => void) {
     if (!goal.trim()) throw new Error("A task goal is required.");
     this.goal = goal;
     this.taskId = taskId;
+    if (onEvent) this.listeners.add(onEvent);
     this.record("task_received", "commander", "Task received by Commander.", { goal });
   }
 
