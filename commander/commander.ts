@@ -79,12 +79,19 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
     },
   });
 
+  const reviewReady = (execution.find((step) => step.agent === "reviewer")?.output as { ready?: boolean } | undefined)?.ready ?? false;
+  const proposedSecurityClean = (execution.find((step) => step.agent === "security")?.output as { proposedChanges?: { status?: string } } | undefined)?.proposedChanges?.status === "clean";
+  const hasIncompleteAgents = execution.some((step) => step.status !== "completed");
+  const status = hasIncompleteAgents ? "blocked" : !reviewReady || !proposedSecurityClean ? "needs-review" : "completed";
+
   const summary = {
+    status,
+    canPublish: status === "completed",
     completed: execution.filter((step) => step.status === "completed").length,
     failed: execution.filter((step) => step.status === "failed").length,
     skipped: execution.filter((step) => step.status === "skipped").length,
-    reviewReady: (execution.find((step) => step.agent === "reviewer")?.output as { ready?: boolean } | undefined)?.ready ?? false,
-    proposedSecurityClean: (execution.find((step) => step.agent === "security")?.output as { proposedChanges?: { status?: string } } | undefined)?.proposedChanges?.status === "clean",
+    reviewReady,
+    proposedSecurityClean,
   };
 
   console.log(JSON.stringify({
