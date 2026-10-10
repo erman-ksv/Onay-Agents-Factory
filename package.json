@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx commander/commander.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test commander/planner.test.ts agents/security/agent.test.ts agents/reviewer/agent.test.ts github/ciGate.test.ts orchestration/cli.test.ts",
+    "test": "tsx --test commander/planner.test.ts commander/executor.test.ts agents/security/agent.test.ts agents/reviewer/agent.test.ts github/ciGate.test.ts orchestration/cli.test.ts",
     "pipeline": "tsx orchestration/cli.ts"
   },
   "dependencies": {
