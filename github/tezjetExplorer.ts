@@ -1,16 +1,15 @@
 import { TezJetRepositoryAdapter } from "./tezjetRepository.js";
 
-const DEFAULT_FILES = [
+export const DEFAULT_EXPLORER_FILES = [
   "package.json",
-  "server.js",
   "artifacts/api-server/src/controllers/orderController.ts",
   "artifacts/api-server/src/controllers/queueController.ts",
   "artifacts/api-server/src/store/memoryStore.ts",
   "artifacts/api-server/src/routes/order.ts",
-];
+] as const;
 
 export async function inspectTezJet(
-  paths = DEFAULT_FILES,
+  paths: readonly string[] = DEFAULT_EXPLORER_FILES,
   ref = "main",
 ) {
   const repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet";

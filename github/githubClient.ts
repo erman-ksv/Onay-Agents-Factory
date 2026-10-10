@@ -10,6 +10,14 @@ export type WorkflowRun = {
   head_sha?: string;
 };
 
+export function buildWorkflowRunsQuery(branch = "main", headSha?: string): string {
+  // When an exact SHA is supplied, do not also constrain by branch: GitHub's
+  // branch filter can exclude PR-head commits that are not on the default branch.
+  return headSha
+    ? `?per_page=20&head_sha=${encodeURIComponent(headSha)}`
+    : `?branch=${encodeURIComponent(branch)}&per_page=20`;
+}
+
 export class GitHubClient {
   private readonly token: string;
   private readonly apiBaseUrl: string;
@@ -56,11 +64,9 @@ export class GitHubClient {
   }
 
   async getWorkflowRuns(branch = "main", headSha?: string): Promise<WorkflowRun[]> {
-    const query = headSha
-      ? `&head_sha=${encodeURIComponent(headSha)}`
-      : "";
+    const query = buildWorkflowRunsQuery(branch, headSha);
     const result = await this.request<{ workflow_runs: WorkflowRun[] }>(
-      `/repos/${this.repository}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=20${query}`,
+      `/repos/${this.repository}/actions/runs${query}`,
     );
     return result.workflow_runs;
   }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import testCase from "node:test";
 import { evaluateCiJobs, type CiJob } from "./ciGate.js";
+import { buildWorkflowRunsQuery } from "./githubClient.js";
 import type { WorkflowRun } from "./githubClient.js";
 
 const runs: WorkflowRun[] = [
@@ -91,4 +92,19 @@ testCase("CI gate remains pending while any workflow run for the commit is in pr
     ["Typecheck and API tests"],
   );
   assert.equal(result.status, "pending");
+});
+
+
+testCase("exact-SHA workflow lookup does not filter to the default branch", () => {
+  assert.equal(
+    buildWorkflowRunsQuery("main", "abc123"),
+    "?per_page=20&head_sha=abc123",
+  );
+});
+
+testCase("workflow lookup without SHA keeps the requested branch filter", () => {
+  assert.equal(
+    buildWorkflowRunsQuery("dev/feature", undefined),
+    "?branch=dev%2Ffeature&per_page=20",
+  );
 });
