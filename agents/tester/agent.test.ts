@@ -47,7 +47,8 @@ const run = (headSha: string, status = "completed", conclusion: string | null = 
   head_sha: headSha,
   html_url: "https://example.test/actions/runs/42",
 });
-const jobs: CiJob[] = [{ name: "typecheck", status: "completed", conclusion: "success", steps: [
+const jobs: CiJob[] = [{ name: "Typecheck and API tests", status: "completed", conclusion: "success" }];
+const factoryJobs: CiJob[] = [{ name: "typecheck", status: "completed", conclusion: "success", steps: [
   { name: "Typecheck", status: "completed", conclusion: "success" },
   { name: "Test", status: "completed", conclusion: "success" },
 ] }];
@@ -89,7 +90,7 @@ test("does not accept a failed required test job", () => {
 });
 
 test("reports individual CI step evidence for typecheck and test", () => {
-  const result = evaluateTestExecutionEvidence([run(expectedSha)], jobs, expectedSha, ["typecheck"], ["Typecheck", "Test"]);
+  const result = evaluateTestExecutionEvidence([run(expectedSha)], factoryJobs, expectedSha, ["typecheck"], ["Typecheck", "Test"]);
   assert.equal(result.testsExecuted, true);
   assert.deepEqual(result.checks.map(check => [check.name, check.conclusion]), [
     ["Typecheck", "success"],
