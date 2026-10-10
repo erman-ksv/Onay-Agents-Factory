@@ -23,3 +23,16 @@ test("unrelated copy-editing tasks do not include Rasul", () => {
   const plan = planTask("Fix a typo in the welcome screen copy");
   assert.ok(!plan.steps.some((step) => step.agent === "legal"));
 });
+
+import { buildCommanderPrompt } from "./buildCommanderPrompt.js";
+
+test("AI Commander prompt includes Rasul for Uzbekistan launch tasks", () => {
+  const prompt = buildCommanderPrompt("Prepare TezJet launch in Uzbekistan");
+  assert.match(prompt, /legal → rasul_legal_compliance/);
+  assert.match(prompt, /Invoke every listed specialist tool at least once/);
+});
+
+test("AI Commander prompt includes dispatch for taxi matching tasks", () => {
+  const prompt = buildCommanderPrompt("Review taxi dispatch and FIFO driver matching");
+  assert.match(prompt, /dispatch → dispatch_ride_operations_specialist/);
+});
