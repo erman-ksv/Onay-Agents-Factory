@@ -8,6 +8,7 @@ export type CommanderSummary = {
   skipped: number;
   reviewReady: boolean;
   proposedSecurityClean: boolean;
+  testsExecuted: boolean;
 };
 
 export function summarizeExecution(execution: AgentStepResult[]): CommanderSummary {
@@ -16,8 +17,15 @@ export function summarizeExecution(execution: AgentStepResult[]): CommanderSumma
   const proposedSecurityClean =
     (execution.find((step) => step.agent === "security")?.output as { proposedChanges?: { status?: string } } | undefined)
       ?.proposedChanges?.status === "clean";
+  // Discovery is not execution: require explicit evidence that the planned tests actually ran.
+  const testsExecuted =
+    (execution.find((step) => step.agent === "tester")?.output as { testsExecuted?: boolean } | undefined)?.testsExecuted === true;
   const hasIncompleteAgents = execution.some((step) => step.status !== "completed");
-  const status = hasIncompleteAgents ? "blocked" : !reviewReady || !proposedSecurityClean ? "needs-review" : "completed";
+  const status = hasIncompleteAgents
+    ? "blocked"
+    : !reviewReady || !proposedSecurityClean || !testsExecuted
+      ? "needs-review"
+      : "completed";
 
   return {
     status,
@@ -27,5 +35,6 @@ export function summarizeExecution(execution: AgentStepResult[]): CommanderSumma
     skipped: execution.filter((step) => step.status === "skipped").length,
     reviewReady,
     proposedSecurityClean,
+    testsExecuted,
   };
 }
