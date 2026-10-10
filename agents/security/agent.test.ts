@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inspectProposedChanges } from "./agent.js";
+import { DEFAULT_SECURITY_PATHS, inspectProposedChanges } from "./agent.js";
+
+test("default repository scan targets known TezJet source files", () => {
+  assert.deepEqual(DEFAULT_SECURITY_PATHS, [
+    "package.json",
+    "artifacts/api-server/src/routes/order.ts",
+    "artifacts/api-server/src/controllers/orderController.ts",
+    "artifacts/api-server/src/controllers/queueController.ts",
+    "artifacts/api-server/src/store/memoryStore.ts",
+  ]);
+  assert.equal(DEFAULT_SECURITY_PATHS.includes(".env.example" as never), false);
+  assert.equal(DEFAULT_SECURITY_PATHS.includes("server.js" as never), false);
+});
 
 test("proposed changes with no secret-like values pass the content scan", () => {
   const result = inspectProposedChanges([
