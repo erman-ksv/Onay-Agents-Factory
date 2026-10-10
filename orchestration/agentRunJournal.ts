@@ -60,7 +60,7 @@ export class AgentRunJournal {
   snapshot(): AgentRunEvent[] {
     return this.entries.map((event) => ({
       ...event,
-      ...(event.details ? { details: { ...event.details } } : {}),
+      ...(event.details ? { details: structuredClone(event.details) } : {}),
     }));
   }
 
