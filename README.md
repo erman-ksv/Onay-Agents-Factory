@@ -43,7 +43,7 @@ Copy `.env.example` to your runtime environment and provide:
 
 Never commit tokens or secrets.
 
-## Run
+## Run the Commander
 
 ```bash
 pnpm install
@@ -51,7 +51,30 @@ pnpm typecheck
 pnpm dev -- "Review TezJet driver agreement and privacy obligations for the target jurisdiction"
 ```
 
-Without `OPENAI_API_KEY`, the CLI only prints a deterministic plan and does not modify GitHub. With both keys configured, the AI Commander can generate and gate a change set. Actual test execution must happen in a trusted CI/runner before merge; the factory must not claim tests ran unless a runner reports them.
+The Commander produces a task plan and specialist routing. Without `OPENAI_API_KEY`, it uses deterministic planning; with the key, it enables AI orchestration. **This command does not itself run the TezJet change pipeline.**
+
+## Run the TezJet change pipeline
+
+Start with read-only analysis. This inspects the configured TezJet repository and its test/security context but does not create a branch or pull request:
+
+```bash
+pnpm run pipeline -- --goal "Analyze the driver queue fairness rules"
+```
+
+To request a generated change and draft PR, explicitly supply a feature branch, PR title/body, and both write opt-ins:
+
+```bash
+AGENT_FACTORY_ENABLE_GITHUB_WRITES=true pnpm run pipeline -- \
+  --goal "Fix a confirmed dispatch bug" \
+  --branch "feat/dispatch-bug-fix" \
+  --title "Fix dispatch bug" \
+  --body "Summary, rationale, and validation plan" \
+  --publish
+```
+
+Publishing can write to the configured TezJet repository. Use only a feature branch, inspect the resulting draft PR, and never place tokens in command arguments or committed files. The CLI blocks direct `main`/`master` targets and refuses publishing unless the environment write gate is explicitly enabled. To see options, run `pnpm run pipeline -- --help`.
+
+The pipeline's analysis stage is not proof that generated changes are correct. A successful Agent Factory CI run validates the factory code, not a TezJet change. A TezJet change is considered CI-passed only when the target commit's required TezJet workflow has completed successfully. Review all diffs and CI evidence before any human-authorized merge.
 
 ## Safety and release gates
 
