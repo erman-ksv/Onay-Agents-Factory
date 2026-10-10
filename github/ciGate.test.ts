@@ -66,3 +66,29 @@ testCase("TezJet's combined job fails the gate if API tests fail", () => {
   );
   assert.equal(result.status, "failed");
 });
+
+testCase("CI gate cannot pass when a different workflow run for the commit failed", () => {
+  const mixedRuns: WorkflowRun[] = [
+    ...runs,
+    { id: 2, name: "Additional workflow", status: "completed", conclusion: "failure", html_url: "https://example.test/run/2" },
+  ];
+  const result = evaluateCiJobs(
+    mixedRuns,
+    [job("Typecheck and API tests", "success")],
+    ["Typecheck and API tests"],
+  );
+  assert.equal(result.status, "failed");
+});
+
+testCase("CI gate remains pending while any workflow run for the commit is in progress", () => {
+  const mixedRuns: WorkflowRun[] = [
+    ...runs,
+    { id: 2, name: "Additional workflow", status: "in_progress", conclusion: null, html_url: "https://example.test/run/2" },
+  ];
+  const result = evaluateCiJobs(
+    mixedRuns,
+    [job("Typecheck and API tests", "success")],
+    ["Typecheck and API tests"],
+  );
+  assert.equal(result.status, "pending");
+});

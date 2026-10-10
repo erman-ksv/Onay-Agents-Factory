@@ -13,11 +13,12 @@ export function evaluateCiJobs(
 ): CiGateResult {
   if (!runs.length) return { status: "no-runs", runs };
 
-  if (!requiredNames.length) {
-    if (runs.some(run => run.status !== "completed")) return { status: "pending", runs };
-    if (runs.some(run => run.conclusion !== "success")) return { status: "failed", runs };
-    return { status: "passed", runs };
-  }
+  // A required job succeeding must never mask a failed or still-running workflow
+  // for the same commit. Evaluate run-level status before matching job names.
+  if (runs.some(run => run.status !== "completed")) return { status: "pending", runs };
+  if (runs.some(run => run.conclusion !== "success")) return { status: "failed", runs };
+
+  if (!requiredNames.length) return { status: "passed", runs };
 
   const normalizedJobs = jobs.map(job => ({ ...job, normalizedName: job.name.toLowerCase() }));
   const required = requiredNames.map(name => name.toLowerCase());
