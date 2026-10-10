@@ -2,9 +2,9 @@ name: Agent Factory CI
 
 on:
   push:
-    branches: ["main", "dev/**", "feature/**", "fix/**"]
+    branches: ["main", "dev/**", "feature/**", "feat/**", "fix/**"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "dev/**"]
 
 jobs:
   typecheck:
