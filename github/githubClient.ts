@@ -63,6 +63,12 @@ export class GitHubClient {
     return this.request<{ html_url: string; number: number; head: { sha: string } }>(`/repos/${this.repository}/pulls`, { method: "POST", body: JSON.stringify({ head, base, title, body, draft: true }) });
   }
 
+  async getCommitSha(ref = "main"): Promise<string> {
+    const encodedRef = ref.split("/").map(encodeURIComponent).join("/");
+    const result = await this.request<{ sha: string }>(`/repos/${this.repository}/commits/${encodedRef}`);
+    return result.sha;
+  }
+
   async getWorkflowRuns(branch = "main", headSha?: string): Promise<WorkflowRun[]> {
     const query = buildWorkflowRunsQuery(branch, headSha);
     const result = await this.request<{ workflow_runs: WorkflowRun[] }>(
