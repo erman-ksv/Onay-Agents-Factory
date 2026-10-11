@@ -20,7 +20,7 @@ const journal = new AgentRunJournal(goal, undefined, (event) => {
   console.log(JSON.stringify({ type: "agent_event", event }));
 });
 
-if (selectProviderConfig(process.env).provider !== "none" && process.env.AGENT_FACTORY_MODE !== "deterministic") {
+if (!isAgentFactoryTarget(goal) && selectProviderConfig(process.env).provider !== "none" && process.env.AGENT_FACTORY_MODE !== "deterministic") {
   journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
   const result = await runAiCommander(goal);
