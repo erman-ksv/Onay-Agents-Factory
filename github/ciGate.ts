@@ -1,4 +1,5 @@
 import { GitHubClient, type WorkflowRun } from "./githubClient.js";
+import { getTargetRepository } from "./repositoryConfig.js";
 
 export type CiGateResult =
   | { status: "passed"; runs: WorkflowRun[] }
@@ -45,7 +46,7 @@ export function evaluateCiJobs(
 }
 
 export async function checkCiGate(branch: string, requiredNames: string[] = [], headSha?: string): Promise<CiGateResult> {
-  const repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet";
+  const repository = getTargetRepository();
   const github = new GitHubClient({ repository });
   const runs = await github.getWorkflowRuns(branch, headSha);
   if (!runs.length) return { status: "no-runs", runs };
@@ -79,7 +80,7 @@ export async function waitForCiGate(input: {
 }
 
 export async function getCiFailureContext(branch: string, headSha?: string) {
-  const repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet";
+  const repository = getTargetRepository();
   const github = new GitHubClient({ repository });
   const gate = await checkCiGate(branch, [], headSha);
   const failed = gate.runs.filter(run => run.conclusion && run.conclusion !== "success");
