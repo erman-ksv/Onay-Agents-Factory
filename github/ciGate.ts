@@ -1,4 +1,4 @@
-import { GitHubClient, type WorkflowRun } from "./githubClient.js";
+import { filterWorkflowRunsBySha, GitHubClient, type WorkflowRun } from "./githubClient.js";
 import { getTargetRepository } from "./repositoryConfig.js";
 
 export type CiGateResult =
@@ -48,7 +48,9 @@ export function evaluateCiJobs(
 export async function checkCiGate(branch: string, requiredNames: string[] = [], headSha?: string): Promise<CiGateResult> {
   const repository = getTargetRepository();
   const github = new GitHubClient({ repository });
-  const runs = await github.getWorkflowRuns(branch, headSha);
+  const fetchedRuns = await github.getWorkflowRuns(branch, headSha);
+  // Fail closed if GitHub returns any run that does not belong to the requested commit.
+  const runs = filterWorkflowRunsBySha(fetchedRuns, headSha);
   if (!runs.length) return { status: "no-runs", runs };
 
   const jobGroups = [];
