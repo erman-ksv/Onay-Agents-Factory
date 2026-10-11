@@ -43,3 +43,9 @@ export function planTask(goal: string): TaskPlan {
 
   return { id: "task-" + Date.now(), goal, steps, status: "queued" };
 }
+
+
+/** Self-targeted factory work must use handlers backed by real repository access. */
+export function shouldUseAiCommander(goal: string, providerConfigured: boolean, mode?: string): boolean {
+  return !isAgentFactoryTarget(goal) && providerConfigured && mode !== "deterministic";
+}
