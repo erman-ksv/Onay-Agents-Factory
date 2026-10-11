@@ -1,6 +1,7 @@
 import { TezJetRepositoryAdapter } from "../../github/tezjetRepository.js";
 import { GitHubClient, type WorkflowRun } from "../../github/githubClient.js";
 import { evaluateCiJobs, type CiJob, type CiGateResult } from "../../github/ciGate.js";
+import { getTargetRepository } from "../../github/repositoryConfig.js";
 
 export type TestScriptDiscovery = {
   scripts: string[];
@@ -59,7 +60,7 @@ export function evaluateTestExecutionEvidence(
   if (!expectedSha.trim() || exactRuns.length === 0) {
     return {
       testsExecuted: false,
-      repository: process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+      repository: getTargetRepository(),
       ref: "",
       expectedSha,
       status: "sha-mismatch",
@@ -72,7 +73,7 @@ export function evaluateTestExecutionEvidence(
   const gate = evaluateCiJobs(exactRuns, jobs, requiredNames, requiredStepNames);
   return {
     testsExecuted: gate.status === "passed",
-    repository: process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+    repository: getTargetRepository(),
     ref: "",
     expectedSha,
     status: gate.status,
@@ -86,7 +87,7 @@ export function evaluateTestExecutionEvidence(
 
 export async function inspectTestExecution(
   expectedSha: string,
-  repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+  repository = getTargetRepository(),
   ref = "main",
   requiredNames: string[] = ["Typecheck and API tests"],
   requiredStepNames: string[] = [],
@@ -137,7 +138,7 @@ export async function inspectRefTestExecution(
   }
 }
 
-export async function inspectTests(repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet", ref = "main") {
+export async function inspectTests(repository = getTargetRepository(), ref = "main") {
   const adapter = new TezJetRepositoryAdapter(repository);
   const packageJson = await adapter.read("package.json", ref);
   const discovery = discoverTestScripts(packageJson.content);
