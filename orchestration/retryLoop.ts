@@ -16,7 +16,7 @@ export async function retryFailedCi(input: {
   maxAttempts?: number;
 }) {
   const maxAttempts = Math.max(1, Math.min(input.maxAttempts ?? 2, 3));
-  const adapter = new TezJetRepositoryAdapter();
+  const adapter = new TezJetRepositoryAdapter(getTargetRepository());
   const attempts = [];
   let headSha = input.headSha;
 
