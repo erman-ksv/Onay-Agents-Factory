@@ -1,14 +1,13 @@
 import { GitHubClient } from "./githubClient.js";
 import { assertNoSecrets } from "./secretScanner.js";
-import { assertRepositoryAllowed, assertWritableBranch } from "./repositoryPolicy.js";
+import { assertRepositoryAllowed, assertWritableBranch, resolveAllowedRepositories } from "./repositoryPolicy.js";
 import { getTargetRepository } from "./repositoryConfig.js";
 
 export class TezJetRepositoryAdapter {
   private readonly github: GitHubClient;
 
   constructor(repository = getTargetRepository()) {
-    const allowed = (process.env.AGENT_ALLOWED_REPOSITORIES ?? getTargetRepository())
-      .split(",").map((x) => x.trim()).filter(Boolean);
+    const allowed = resolveAllowedRepositories(process.env.AGENT_ALLOWED_REPOSITORIES, getTargetRepository());
     assertRepositoryAllowed(repository, allowed);
     this.github = new GitHubClient({ repository });
   }
