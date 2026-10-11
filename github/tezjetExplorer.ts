@@ -1,4 +1,5 @@
 import { TezJetRepositoryAdapter } from "./tezjetRepository.js";
+import { getTargetRepository } from "./repositoryConfig.js";
 
 export const DEFAULT_EXPLORER_FILES = [
   "package.json",
@@ -23,7 +24,7 @@ export const AGENT_FACTORY_EXPLORER_FILES = [
 export async function inspectTezJet(
   paths: readonly string[] = DEFAULT_EXPLORER_FILES,
   ref = "main",
-  repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+  repository = getTargetRepository(),
 ) {
   const adapter = new TezJetRepositoryAdapter(repository);
   const files = [];
