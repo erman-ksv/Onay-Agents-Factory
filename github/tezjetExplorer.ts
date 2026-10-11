@@ -11,13 +11,23 @@ export const DEFAULT_EXPLORER_FILES = [
 
 export const AGENT_FACTORY_EXPLORER_FILES = [
   "package.json",
+  "commander/commander.ts",
   "commander/planner.ts",
   "commander/executor.ts",
+  "commander/aiCommander.ts",
+  "commander/providerConfig.ts",
+  "commander/modelProvider.ts",
   "commander/summary.ts",
   "agents/tester/agent.ts",
   "agents/security/agent.ts",
   "agents/reviewer/agent.ts",
+  "github/tezjetRepository.ts",
+  "github/repositoryPolicy.ts",
+  "github/changeWorkflow.ts",
+  "github/ciGate.ts",
+  "github/githubClient.ts",
   "orchestration/pipeline.ts",
+  "orchestration/retryLoop.ts",
   "orchestration/dashboardServer.ts",
 ] as const;
 
