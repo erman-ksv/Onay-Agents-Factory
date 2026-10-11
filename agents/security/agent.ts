@@ -1,4 +1,5 @@
 import { TezJetRepositoryAdapter } from "../../github/tezjetRepository.js";
+import { getTargetRepository } from "../../github/repositoryConfig.js";
 import { scanForSecrets } from "../../github/secretScanner.js";
 
 export type ProposedFile = { path: string; content: string };
@@ -33,7 +34,7 @@ export function inspectProposedChanges(files: ProposedFile[]) {
 
 export async function inspectSecurity(
   paths: string[] = [...DEFAULT_SECURITY_PATHS],
-  repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+  repository = getTargetRepository(),
   ref = "main",
 ) {
   const adapter = new TezJetRepositoryAdapter(repository);
