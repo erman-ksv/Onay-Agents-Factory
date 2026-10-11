@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "tsx commander/commander.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test commander/planner.test.ts commander/executor.test.ts commander/summary.test.ts agents/security/agent.test.ts agents/reviewer/agent.test.ts agents/tester/agent.test.ts github/ciGate.test.ts github/repositoryConfig.test.ts github/tezjetExplorer.test.ts orchestration/cli.test.ts orchestration/agentRunJournal.test.ts orchestration/dashboardServer.test.ts",
+    "test": "tsx --test commander/providerConfig.test.ts commander/planner.test.ts commander/executor.test.ts commander/summary.test.ts agents/security/agent.test.ts agents/reviewer/agent.test.ts agents/tester/agent.test.ts github/ciGate.test.ts github/repositoryConfig.test.ts github/tezjetExplorer.test.ts orchestration/cli.test.ts orchestration/agentRunJournal.test.ts orchestration/dashboardServer.test.ts",
     "pipeline": "tsx orchestration/cli.ts",
     "dashboard": "tsx orchestration/dashboardServer.ts"
   },
   "dependencies": {
     "@openai/agents": "latest",
-    "zod": "latest"
+    "zod": "latest",
+    "openai": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
