@@ -38,7 +38,7 @@ export async function retryFailedCi(input: {
     const proposedSecurity = inspectProposedChanges(generated.files);
     if (proposedSecurity.status !== "clean") return { status: "blocked" as const, attempts, proposedSecurity, headSha };
 
-    const security = await inspectSecurity(generated.files.map(file => file.path), getTargetRepository(), "main");
+    const security = await inspectSecurity(undefined, getTargetRepository(), "main");
     if (security.status !== "clean") return { status: "blocked" as const, attempts, security, headSha };
 
     for (const file of generated.files as ChangeFile[]) {
