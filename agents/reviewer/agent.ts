@@ -6,7 +6,7 @@ function normalizePath(path: string) {
   return path.trim().replace(/\\/g, "/");
 }
 
-export function reviewChangeSet(input: { goal: string; files: ReviewFile[] }) {
+export function reviewChangeSet(input: { goal: string; files: ReviewFile[]; allowWorkflowChanges?: boolean }) {
   const findings: ReviewFinding[] = [];
   const seenPaths = new Set<string>();
 
@@ -33,6 +33,10 @@ export function reviewChangeSet(input: { goal: string; files: ReviewFile[] }) {
 
     const segments = lowerPath.split("/");
     const basename = segments.at(-1) ?? "";
+    const automationPath = segments[0] === ".github" && (segments[1] === "workflows" || segments[1] === "actions");
+    if (automationPath && !input.allowWorkflowChanges) {
+      findings.push({ severity: "blocker", message: "Changes to GitHub workflows/actions require explicit AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES=true opt-in: " + path });
+    }
     const sensitiveName =
       /^\.env(?:\.(?!example$).*)?$/i.test(basename) ||
       /\.(?:pem|key|p12|pfx)$/i.test(basename) ||
