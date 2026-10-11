@@ -32,7 +32,7 @@ export async function retryFailedCi(input: {
     );
     if (!generated.files.length) return { status: "blocked" as const, attempts, reason: generated.summary, headSha };
 
-    const review = reviewChangeSet({ goal: input.goal, files: generated.files });
+    const review = reviewChangeSet({ goal: input.goal, files: generated.files, allowWorkflowChanges: process.env.AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES === "true" });
     if (!review.ready) return { status: "blocked" as const, attempts, review, headSha };
 
     const proposedSecurity = inspectProposedChanges(generated.files);
