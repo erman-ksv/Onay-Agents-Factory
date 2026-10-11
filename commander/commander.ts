@@ -4,7 +4,7 @@ import { inspectRefTestExecution, inspectTests } from "../agents/tester/agent.js
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES, inspectTezJet } from "../github/tezjetExplorer.js";
 import { executePlan } from "./executor.js";
-import { isAgentFactoryTarget, planTask } from "./planner.js";
+import { isAgentFactoryTarget, planTask, shouldUseAiCommander } from "./planner.js";
 import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 import { selectProviderConfig } from "./providerConfig.js";
@@ -20,7 +20,7 @@ const journal = new AgentRunJournal(goal, undefined, (event) => {
   console.log(JSON.stringify({ type: "agent_event", event }));
 });
 
-if (!isAgentFactoryTarget(goal) && selectProviderConfig(process.env).provider !== "none" && process.env.AGENT_FACTORY_MODE !== "deterministic") {
+if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "none", process.env.AGENT_FACTORY_MODE)) {
   journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
   const result = await runAiCommander(goal);
