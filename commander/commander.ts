@@ -1,5 +1,6 @@
 import { planTask } from "./planner.js";
 import { routeTask } from "./router.js";
+import { selectProviderConfig } from "./providerConfig.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -8,7 +9,7 @@ if (!goal) {
   process.exit(1);
 }
 
-if (process.env.OPENAI_API_KEY) {
+if (selectProviderConfig(process.env).provider !== "none") {
   const { runAiCommander } = await import("./aiCommander.js");
   console.log(await runAiCommander(goal));
 } else {
@@ -18,6 +19,6 @@ if (process.env.OPENAI_API_KEY) {
     mode: "deterministic",
     task: plan,
     execution: routeTask(plan.steps),
-    note: "Set OPENAI_API_KEY to enable AI orchestration."
+    note: "Set GEMINI_API_KEY or OPENAI_API_KEY to enable AI orchestration."
   }, null, 2));
 }
