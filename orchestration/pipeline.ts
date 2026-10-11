@@ -50,7 +50,7 @@ export async function runChangePipeline(input: {
   }
   journal.record("agent_completed", "security", "Proposed-change scan passed.");
 
-  const security = await inspectSecurity(input.files.map(file => file.path), getTargetRepository(), "main");
+  const security = await inspectSecurity(undefined, getTargetRepository(), "main");
   if (security.status !== "clean") {
     journal.record("blocked", "security", "Repository security checks did not pass.", { status: security.status });
     return finish({ status: "blocked" as const, review, security });
