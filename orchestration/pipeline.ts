@@ -34,7 +34,7 @@ export async function runChangePipeline(input: {
   });
 
   journal.record("agent_started", "reviewer", "Independent review started.", { files: input.files.map(file => file.path) });
-  const review = reviewChangeSet({ goal: input.goal, files: input.files });
+  const review = reviewChangeSet({ goal: input.goal, files: input.files, allowWorkflowChanges: process.env.AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES === "true" });
   journal.record("agent_completed", "reviewer", review.ready ? "Review passed." : "Review found blocking issues.", { ready: review.ready });
   if (!review.ready) {
     journal.record("blocked", "commander", "Stopped before publishing because independent review did not pass.");
