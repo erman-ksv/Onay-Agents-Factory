@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import testCase from "node:test";
 import { evaluateCiJobs, type CiJob } from "./ciGate.js";
-import { buildWorkflowRunsQuery } from "./githubClient.js";
+import { buildWorkflowRunsQuery, filterWorkflowRunsBySha } from "./githubClient.js";
 import type { WorkflowRun } from "./githubClient.js";
 
 const runs: WorkflowRun[] = [
@@ -107,4 +107,21 @@ testCase("workflow lookup without SHA keeps the requested branch filter", () => 
     buildWorkflowRunsQuery("dev/feature", undefined),
     "?branch=dev%2Ffeature&per_page=20",
   );
+});
+
+testCase("exact-SHA CI gate rejects runs from other commits and runs without SHA evidence", () => {
+  const result = filterWorkflowRunsBySha([
+    { ...runs[0], head_sha: "ABC123" },
+    { ...runs[0], id: 2, head_sha: "def456" },
+    { ...runs[0], id: 3, head_sha: undefined },
+  ], "abc123");
+  assert.deepEqual(result.map(run => run.id), [1]);
+});
+
+testCase("CI run filtering keeps all runs when no exact SHA was requested", () => {
+  const result = filterWorkflowRunsBySha([
+    { ...runs[0], head_sha: "abc123" },
+    { ...runs[0], id: 2, head_sha: "def456" },
+  ]);
+  assert.equal(result.length, 2);
 });
