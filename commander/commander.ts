@@ -8,6 +8,7 @@ import { isAgentFactoryTarget, planTask, shouldUseAiCommander } from "./planner.
 import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 import { selectProviderConfig } from "./providerConfig.js";
+import { getTargetRepository } from "../github/repositoryConfig.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -28,10 +29,10 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
   console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
 } else {
   const plan = planTask(goal);
-  const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/TezJet-Agent-Factory" : (process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet");
+  const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();
   const targetRef = isAgentFactoryTarget(goal) ? "dev/agent-factory-core" : "main";
   const explorerPaths = isAgentFactoryTarget(goal) ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
-  const securityPaths = isAgentFactoryTarget(goal) ? ["package.json", "commander/planner.ts", "commander/executor.ts", "agents/tester/agent.ts", "agents/security/agent.ts", "agents/reviewer/agent.ts", "orchestration/pipeline.ts", "orchestration/dashboardServer.ts"] : undefined;
+  const securityPaths = isAgentFactoryTarget(goal) ? ["package.json", "commander/commander.ts", "commander/planner.ts", "commander/executor.ts", "commander/providerConfig.ts", "commander/modelProvider.ts", "agents/tester/agent.ts", "agents/security/agent.ts", "agents/reviewer/agent.ts", "github/tezjetRepository.ts", "github/repositoryPolicy.ts", "github/changeWorkflow.ts", "github/ciGate.ts", "orchestration/pipeline.ts", "orchestration/retryLoop.ts", "orchestration/dashboardServer.ts"] : undefined;
   const execution = await executePlan(goal, plan.steps, {
     explorer: async () => {
       const result = await inspectTezJet(explorerPaths, targetRef, targetRepository);
