@@ -11,3 +11,10 @@ export function assertRepositoryAllowed(repository: string, allowedRepositories:
     throw new Error(`Repository "${repository}" is not allow-listed for Agent Factory automation.`);
   }
 }
+
+
+/** Resolve the repository allow-list without implicitly trusting a requested target. */
+export function resolveAllowedRepositories(configured: string | undefined, defaultRepository: string): string[] {
+  const source = configured?.trim() || defaultRepository;
+  return [...new Set(source.split(",").map((repository) => repository.trim()).filter(Boolean))];
+}
