@@ -10,6 +10,12 @@ export type WorkflowRun = {
   head_sha?: string;
 };
 
+export function filterWorkflowRunsBySha<T extends { head_sha?: string }>(runs: T[], headSha?: string): T[] {
+  if (!headSha) return runs;
+  const expected = headSha.toLowerCase();
+  return runs.filter(run => run.head_sha?.toLowerCase() === expected);
+}
+
 export function buildWorkflowRunsQuery(branch = "main", headSha?: string): string {
   // When an exact SHA is supplied, do not also constrain by branch: GitHub's
   // branch filter can exclude PR-head commits that are not on the default branch.
