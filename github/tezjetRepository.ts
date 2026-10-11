@@ -1,11 +1,12 @@
 import { GitHubClient } from "./githubClient.js";
 import { assertNoSecrets } from "./secretScanner.js";
 import { assertRepositoryAllowed, assertWritableBranch } from "./repositoryPolicy.js";
+import { getTargetRepository } from "./repositoryConfig.js";
 
 export class TezJetRepositoryAdapter {
   private readonly github: GitHubClient;
 
-  constructor(repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet") {
+  constructor(repository = getTargetRepository()) {
     const allowed = (process.env.AGENT_ALLOWED_REPOSITORIES ?? repository)
       .split(",").map((x) => x.trim()).filter(Boolean);
     assertRepositoryAllowed(repository, allowed);
