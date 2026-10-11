@@ -7,7 +7,7 @@ export class TezJetRepositoryAdapter {
   private readonly github: GitHubClient;
 
   constructor(repository = getTargetRepository()) {
-    const allowed = (process.env.AGENT_ALLOWED_REPOSITORIES ?? repository)
+    const allowed = (process.env.AGENT_ALLOWED_REPOSITORIES ?? getTargetRepository())
       .split(",").map((x) => x.trim()).filter(Boolean);
     assertRepositoryAllowed(repository, allowed);
     this.github = new GitHubClient({ repository });
