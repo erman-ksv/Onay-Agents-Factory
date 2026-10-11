@@ -1,4 +1,5 @@
 import { TezJetRepositoryAdapter } from "./tezjetRepository.js";
+import { getTargetRepository } from "./repositoryConfig.js";
 
 const PROTECTED = new Set(["main", "master"]);
 
@@ -14,7 +15,7 @@ export async function prepareTezJetChange(input: {
     throw new Error("Every change file must include path, content, and commit message.");
   }
 
-  const repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet";
+  const repository = getTargetRepository();
   const adapter = new TezJetRepositoryAdapter(repository);
   await adapter.prepareBranch(input.branch, "main");
 
