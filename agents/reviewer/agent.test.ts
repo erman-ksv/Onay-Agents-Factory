@@ -39,3 +39,13 @@ test("reviewer flags oversized files for human review without silently blocking"
   assert.equal(result.ready, true);
   assert.ok(result.findings.some((finding) => finding.severity === "medium"));
 });
+
+test("reviewer blocks GitHub automation changes unless explicitly enabled", () => {
+  const workflow = { path: ".github/workflows/ci.yml", content: "name: CI\\n" };
+  const blocked = reviewChangeSet({ goal: "Update CI", files: [workflow] });
+  assert.equal(blocked.ready, false);
+  assert.ok(blocked.findings.some((finding) => finding.message.includes("AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES=true")));
+
+  const allowed = reviewChangeSet({ goal: "Update CI", files: [workflow], allowWorkflowChanges: true });
+  assert.equal(allowed.ready, true);
+});
