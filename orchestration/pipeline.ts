@@ -7,6 +7,7 @@ import { prepareTezJetChange } from "../github/changeWorkflow.js";
 import { waitForCiGate } from "../github/ciGate.js";
 import { retryFailedCi } from "./retryLoop.js";
 import { AgentRunJournal, type AgentRunEvent } from "./agentRunJournal.js";
+import { getTargetRepository } from "../github/repositoryConfig.js";
 
 type ChangeFile = { path: string; content: string; message: string };
 const REQUIRED_TEZJET_CI_JOBS = ["Typecheck and API tests"];
@@ -49,7 +50,7 @@ export async function runChangePipeline(input: {
   }
   journal.record("agent_completed", "security", "Proposed-change scan passed.");
 
-  const security = await inspectSecurity(input.files.map(file => file.path), "erman-ksv/TezJet", "main");
+  const security = await inspectSecurity(input.files.map(file => file.path), getTargetRepository(), "main");
   if (security.status !== "clean") {
     journal.record("blocked", "security", "Repository security checks did not pass.", { status: security.status });
     return finish({ status: "blocked" as const, review, security });
@@ -60,7 +61,7 @@ export async function runChangePipeline(input: {
   const pullRequest = await prepareTezJetChange({ ...input, body: input.body });
   const headSha = pullRequest.head_sha;
   journal.record("artifact_created", "github", "Draft pull request created for the proposed change.", {
-    repository: process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+    repository: getTargetRepository(),
     branch: input.branch,
     headSha,
     url: pullRequest.html_url,
@@ -84,7 +85,7 @@ export async function runChangePipeline(input: {
     journal.handoff("ci", "tester", "Repair produced a new candidate commit; Tester must verify the exact final SHA.", { expectedSha: repair.headSha });
     const testEvidence = await inspectTestExecution(
       repair.headSha,
-      process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+      getTargetRepository(),
       input.branch,
       REQUIRED_TEZJET_CI_JOBS,
     );
@@ -104,7 +105,7 @@ export async function runChangePipeline(input: {
   journal.handoff("ci", "tester", "CI passed; independently verifying trusted evidence for the exact proposed commit.", { expectedSha: headSha });
   const testEvidence = await inspectTestExecution(
     headSha,
-    process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+    getTargetRepository(),
     input.branch,
     REQUIRED_TEZJET_CI_JOBS,
   );
