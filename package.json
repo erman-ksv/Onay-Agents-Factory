@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@openai/agents": "latest",
-    "zod": "latest",
-    "openai": "latest"
+    "openai": "7.31.0",
+    "zod": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
