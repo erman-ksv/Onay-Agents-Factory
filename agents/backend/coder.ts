@@ -1,9 +1,14 @@
 import { Agent, run } from "@openai/agents";
+import { configureModelProvider } from "../../commander/modelProvider.js";
+
+const provider = configureModelProvider();
+const modelOptions = provider.provider === "gemini" ? { model: provider.model } : {};
 
 export type ProposedChange = { path: string; content: string; message: string };
 export type CoderResult = { summary: string; files: ProposedChange[] };
 
 const coder = new Agent({
+  ...modelOptions,
   name: "TezJet Coder",
   instructions: [
     "You are a senior TezJet implementation engineer.",
@@ -17,6 +22,9 @@ const coder = new Agent({
 });
 
 export async function generateChanges(goal: string, repositoryContext: string): Promise<CoderResult> {
+  if (provider.provider === "none") {
+    throw new Error("AI code generation requires GEMINI_API_KEY or OPENAI_API_KEY in the Agent Factory runtime.");
+  }
   const result = await run(coder, `GOAL:\n${goal}\n\nREPOSITORY CONTEXT:\n${repositoryContext}`);
   const raw = String(result.finalOutput ?? "").trim();
   const cleaned = raw.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
