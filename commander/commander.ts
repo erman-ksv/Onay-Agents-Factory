@@ -7,6 +7,7 @@ import { executePlan } from "./executor.js";
 import { isAgentFactoryTarget, planTask } from "./planner.js";
 import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
+import { selectProviderConfig } from "./providerConfig.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -19,7 +20,7 @@ const journal = new AgentRunJournal(goal, undefined, (event) => {
   console.log(JSON.stringify({ type: "agent_event", event }));
 });
 
-if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "deterministic") {
+if (selectProviderConfig(process.env).provider !== "none" && process.env.AGENT_FACTORY_MODE !== "deterministic") {
   journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
   const result = await runAiCommander(goal);
@@ -51,7 +52,7 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
         repositoryContext: available.map((file) => `FILE: ${file.path}\n${file.content}`).join("\n\n"),
       };
     },
-    ...(process.env.OPENAI_API_KEY ? {
+    ...(selectProviderConfig(process.env).provider !== "none" ? {
       coder: async ({ goal, previousResults }) => {
         const exploration = previousResults.find((result) => result.agent === "explorer");
         const context = exploration?.output as { repositoryContext?: string } | undefined;
@@ -115,6 +116,6 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
     task: plan,
     execution,
     summary,
-    note: "Handlers run in plan order and receive previous results. Set AGENT_FACTORY_MODE=deterministic to use this executor even when OPENAI_API_KEY is present. Code generation requires OPENAI_API_KEY. Test discovery is not test execution. This mode does not publish changes or open pull requests. Agent events are emitted as JSON lines while the run is active.",
+    note: "Handlers run in plan order and receive previous results. Set AGENT_FACTORY_MODE=deterministic to use this executor even when OPENAI_API_KEY is present. Code generation requires GEMINI_API_KEY or OPENAI_API_KEY in the Agent Factory runtime. Test discovery is not test execution. This mode does not publish changes or open pull requests. Agent events are emitted as JSON lines while the run is active.",
   }, null, 2));
 }
