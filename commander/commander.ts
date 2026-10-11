@@ -1,5 +1,6 @@
 import { planTask } from "./planner.js";
 import { routeTask } from "./router.js";
+import { selectProviderConfig } from "./providerConfig.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -8,7 +9,7 @@ if (!goal) {
   process.exit(1);
 }
 
-if (process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) {
+if (selectProviderConfig(process.env).provider !== "none") {
   const { runAiCommander } = await import("./aiCommander.js");
   console.log(await runAiCommander(goal));
 } else {
