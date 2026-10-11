@@ -101,7 +101,7 @@ if (process.env.OPENAI_API_KEY && process.env.AGENT_FACTORY_MODE !== "determinis
           findings: [{ severity: "high", message: "No generated change set was available for review." }],
         };
       }
-      return reviewChangeSet({ goal, files: generated.files });
+      return reviewChangeSet({ goal, files: generated.files, allowWorkflowChanges: process.env.AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES === "true" });
     },
   }, { journal });
 
