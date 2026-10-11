@@ -6,18 +6,15 @@ import {
   setOpenAIAPI,
   setTracingDisabled
 } from "@openai/agents";
+import { selectProviderConfig } from "./providerConfig.js";
 
-// Gemini exposes an OpenAI-compatible Chat Completions endpoint.
-// Prefer Gemini when GEMINI_API_KEY is configured; otherwise retain OpenAI behavior.
-const geminiApiKey = process.env.GEMINI_API_KEY;
-const model = geminiApiKey
-  ? (process.env.GEMINI_MODEL || "gemini-2.5-flash")
-  : undefined;
+const provider = selectProviderConfig(process.env);
+const model = provider.provider === "gemini" ? provider.model : undefined;
 
-if (geminiApiKey) {
+if (provider.provider === "gemini") {
   const client = new OpenAI({
-    apiKey: geminiApiKey,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    apiKey: provider.apiKey,
+    baseURL: provider.baseURL
   });
 
   setDefaultOpenAIClient(client);
