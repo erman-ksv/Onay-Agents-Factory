@@ -39,7 +39,7 @@ Copy `.env.example` to your runtime environment and provide:
 - `OPENAI_API_KEY` — enables AI orchestration and specialist delegation.
 - `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
 - `TEZJET_REPOSITORY=erman-ksv/TezJet`
-- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet`
+- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet,erman-ksv/TezJet-Agent-Factory` — explicitly allow only repositories the agent may inspect or modify.
 
 Never commit tokens or secrets.
 
@@ -51,7 +51,7 @@ pnpm typecheck
 pnpm dev -- "Review TezJet driver agreement and privacy obligations for the target jurisdiction"
 ```
 
-The Commander produces a task plan and specialist routing. Without `OPENAI_API_KEY`, it uses deterministic planning; with the key, it enables AI orchestration. **This command does not itself run the TezJet change pipeline.**
+The Commander produces a task plan and specialist routing. For ordinary TezJet tasks, a configured AI key enables AI orchestration. Tasks explicitly targeting `TezJet-Agent-Factory` use the repository-backed deterministic executor so the system inspects real repository files instead of relying on LLM-only specialist tools. **This command does not itself publish changes or open pull requests.**
 
 ## Run the TezJet change pipeline
 
