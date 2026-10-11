@@ -47,3 +47,12 @@ test("Agent Factory target detection is explicit", async () => {
   assert.equal(isAgentFactoryTarget("Проверь TezJet-Agent-Factory"), true);
   assert.equal(isAgentFactoryTarget("Review taxi dispatch"), false);
 });
+
+
+test("Agent Factory tasks use repository-backed execution even when an AI key is configured", async () => {
+  const { shouldUseAiCommander } = await import("./planner.js");
+  assert.equal(shouldUseAiCommander("Fix TezJet-Agent-Factory executor", true), false);
+  assert.equal(shouldUseAiCommander("Review TezJet dispatch", true), true);
+  assert.equal(shouldUseAiCommander("Review TezJet dispatch", false), false);
+  assert.equal(shouldUseAiCommander("Review TezJet dispatch", true, "deterministic"), false);
+});
