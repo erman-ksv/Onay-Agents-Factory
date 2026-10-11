@@ -80,6 +80,7 @@ The pipeline's analysis stage is not proof that generated changes are correct. A
 
 - `main` is protected by application policy.
 - Proposed files are scanned for common secret patterns before writes.
+- Generated edits to `.github/workflows/**` and `.github/actions/**` are blocked unless `AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES=true` is explicitly set; inspect such diffs carefully because they can change CI execution.
 - Changes are created on a dedicated feature branch and submitted as a Draft PR.
 - Failed CI may trigger a bounded repair loop (maximum 3 attempts), with review and security gates before each repair.
 - No agent may claim a write, test, deployment, legal verification, or merge without evidence from the relevant tool.
