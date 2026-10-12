@@ -2,6 +2,7 @@ import { GitHubClient } from "./githubClient.js";
 import { assertNoSecrets } from "./secretScanner.js";
 import { assertRepositoryAllowed, assertWritableBranch, resolveAllowedRepositories } from "./repositoryPolicy.js";
 import { getTargetRepository } from "./repositoryConfig.js";
+import { reviewChangeSet } from "../agents/reviewer/agent.js";
 
 export class TezJetRepositoryAdapter {
   private readonly github: GitHubClient;
@@ -24,6 +25,14 @@ export class TezJetRepositoryAdapter {
   async write(path: string, content: string, message: string, branch: string) {
     assertWritableBranch(branch);
     assertNoSecrets([{ path, content }]);
+    const review = reviewChangeSet({
+      goal: message,
+      files: [{ path, content }],
+      allowWorkflowChanges: process.env.AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES === "true",
+    });
+    if (!review.ready) {
+      throw new Error("Write blocked by reviewer policy: " + review.findings.map((finding) => finding.message).join("; "));
+    }
     return this.github.upsertFile(path, content, message, branch);
   }
 
