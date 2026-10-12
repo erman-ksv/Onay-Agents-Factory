@@ -16,7 +16,7 @@ export function selectProviderConfig(env: ProviderEnvironment): ProviderConfig {
     return {
       provider: "gemini",
       apiKey: geminiApiKey,
-      model: env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
+      model: env.GEMINI_MODEL?.trim() || "gemini-3.8-flash",
       baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
     };
   }
@@ -26,3 +26,4 @@ export function selectProviderConfig(env: ProviderEnvironment): ProviderConfig {
 
   return { provider: "none" };
 }
+

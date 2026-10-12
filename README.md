@@ -36,12 +36,16 @@ Rasul is an AI legal research assistant, not a licensed lawyer. For each legal t
 
 Copy `.env.example` to your runtime environment and provide:
 
-- `OPENAI_API_KEY` — enables AI orchestration and specialist delegation.
+- `GEMINI_API_KEY` — enables Gemini AI orchestration and specialist delegation; Gemini takes precedence when both provider keys are configured.
+- `GEMINI_MODEL` — optional model override. The default is `gemini-3.8-flash` when this value is absent or blank; an explicit value takes precedence.
+- `OPENAI_API_KEY` — enables OpenAI AI orchestration when no Gemini key is configured.
 - `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
 - `TEZJET_REPOSITORY=erman-ksv/TezJet`
 - `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet,erman-ksv/TezJet-Agent-Factory` — explicitly allow only repositories the agent may inspect or modify.
 
 Never commit tokens or secrets.
+
+If Gemini returns a model-availability `404` saying `gemini-2.5-flash` is no longer available, set `GEMINI_MODEL=gemini-3.8-flash` or remove the stale model override and retry. Updating the default in code does not replace an existing runtime override. This model-availability error does not require replacing your API key.
 
 ## Run the Commander
 
