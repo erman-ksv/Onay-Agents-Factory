@@ -22,7 +22,7 @@ test("uses the default Gemini model when no model is specified", () => {
   const config = selectProviderConfig({ GEMINI_API_KEY: "gemini-secret" });
   assert.equal(config.provider, "gemini");
   if (config.provider !== "gemini") return;
-  assert.equal(config.model, "gemini-2.5-flash");
+  assert.equal(config.model, "gemini-3.8-flash");
 });
 
 test("falls back to OpenAI when Gemini is not configured", () => {
@@ -38,3 +38,4 @@ test("returns none when no usable provider key is configured", () => {
     OPENAI_API_KEY: ""
   }), { provider: "none" });
 });
+
