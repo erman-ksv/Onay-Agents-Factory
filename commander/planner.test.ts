@@ -49,10 +49,11 @@ test("Agent Factory target detection is explicit", async () => {
 });
 
 
-test("Agent Factory tasks use repository-backed execution even when an AI key is configured", async () => {
+test("Agent Factory tasks use executable AI tools when a provider is configured", async () => {
   const { shouldUseAiCommander } = await import("./planner.js");
-  assert.equal(shouldUseAiCommander("Fix TezJet-Agent-Factory executor", true), false);
+  assert.equal(shouldUseAiCommander("Fix TezJet-Agent-Factory executor", true), true);
   assert.equal(shouldUseAiCommander("Review TezJet dispatch", true), true);
   assert.equal(shouldUseAiCommander("Review TezJet dispatch", false), false);
   assert.equal(shouldUseAiCommander("Review TezJet dispatch", true, "deterministic"), false);
 });
+

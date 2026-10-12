@@ -7,7 +7,10 @@ export type AgentRunEventType =
   | "blocked"
   | "agent_completed"
   | "agent_failed"
-  | "agent_skipped";
+  | "agent_skipped"
+  | "tool_started"
+  | "tool_completed"
+  | "tool_failed";
 
 export type AgentRunEvent = {
   sequence: number;
@@ -72,3 +75,4 @@ export class AgentRunJournal {
     return () => this.listeners.delete(listener);
   }
 }
+

@@ -1,6 +1,22 @@
 export type GitHubConfig = { repository: string; token?: string; apiBaseUrl?: string };
 export type GitHubFile = { path: string; sha: string; content: string };
 
+/** Accept a branch name, never an alternate refs/heads spelling or symbolic expression. */
+export function assertValidBranchRef(ref: string): void {
+  const invalid = !ref || ref === "@" || ref.startsWith("-") || ref.startsWith("/") ||
+    ref.startsWith("refs/") || ref.endsWith("/") || ref.endsWith(".") ||
+    ref.includes("//") || ref.includes("..") || ref.includes("@{") ||
+    /[\u0000-\u0020\u007f~^:?*\[\\]/.test(ref) ||
+    ref.split("/").some(part => part.startsWith(".") || part.endsWith(".lock"));
+  if (invalid) throw new Error(`Invalid repository branch ref: ${ref}`);
+}
+
+export function assertCommitSha(sha: string): void {
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(sha)) {
+    throw new Error("A full immutable commit SHA is required.");
+  }
+}
+
 export type WorkflowRun = {
   id: number;
   name: string;
@@ -50,9 +66,12 @@ export class GitHubClient {
     return { path, sha: data.sha, content };
   }
 
-  async createBranch(name: string, from = "main"): Promise<void> {
-    const ref = await this.request<{ object: { sha: string } }>(`/repos/${this.repository}/git/ref/heads/${encodeURIComponent(from)}`);
-    await this.request(`/repos/${this.repository}/git/refs`, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${name}`, sha: ref.object.sha }) });
+  async createBranch(name: string, from = "main", fromSha?: string): Promise<void> {
+    assertValidBranchRef(name);
+    assertValidBranchRef(from);
+    if (fromSha !== undefined) assertCommitSha(fromSha);
+    const sha = fromSha ?? (await this.request<{ object: { sha: string } }>(`/repos/${this.repository}/git/ref/heads/${encodeURIComponent(from)}`)).object.sha;
+    await this.request(`/repos/${this.repository}/git/refs`, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${name}`, sha }) });
   }
 
   async upsertFile(path: string, content: string, message: string, branch: string): Promise<string> {
@@ -93,3 +112,4 @@ export class GitHubClient {
     return this.request<WorkflowRun>(`/repos/${this.repository}/actions/runs/${runId}`);
   }
 }
+
