@@ -6,7 +6,7 @@ function normalizePath(path: string) {
   return path.trim().replace(/\\/g, "/");
 }
 
-export function reviewChangeSet(input: { goal: string; files: ReviewFile[]; allowWorkflowChanges?: boolean }) {
+export function reviewChangeSet(input: { goal: string; files: ReviewFile[]; allowWorkflowChanges?: boolean; allowBuildConfigChanges?: boolean }) {
   const findings: ReviewFinding[] = [];
   const seenPaths = new Set<string>();
 
@@ -36,6 +36,14 @@ export function reviewChangeSet(input: { goal: string; files: ReviewFile[]; allo
     const automationPath = segments[0] === ".github" && (segments[1] === "workflows" || segments[1] === "actions");
     if (automationPath && !input.allowWorkflowChanges) {
       findings.push({ severity: "blocker", message: "Changes to GitHub workflows/actions require explicit AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES=true opt-in: " + path });
+    }
+    const protectedBuildConfig =
+      basename === "package.json" ||
+      /^tsconfig(?:\..+)?\.json$/.test(basename) ||
+      /^(?:vitest|jest|playwright|cypress|karma|ava)\.config\.(?:[cm]?[jt]s|json)$/.test(basename) ||
+      /^\.mocharc(?:\..+)?$/.test(basename);
+    if (protectedBuildConfig && !input.allowBuildConfigChanges) {
+      findings.push({ severity: "blocker", message: "Changes to package.json, tsconfig or test-runner config can weaken test and typecheck evidence and need an explicit allowBuildConfigChanges opt-in: " + path });
     }
     const sensitiveName =
       /^\.env(?:\.(?!example$).*)?$/i.test(basename) ||
