@@ -1,4 +1,4 @@
-import { GitHubClient } from "./githubClient.js";
+import { assertValidBranchRef, GitHubClient } from "./githubClient.js";
 import { assertNoSecrets } from "./secretScanner.js";
 import { assertRepositoryAllowed, assertWritableBranch, resolveAllowedRepositories } from "./repositoryPolicy.js";
 import { getTargetRepository } from "./repositoryConfig.js";
@@ -17,12 +17,15 @@ export class TezJetRepositoryAdapter {
     return this.github.getFile(path, ref);
   }
 
-  async prepareBranch(branch: string, from = "main") {
+  async prepareBranch(branch: string, from = "main", fromSha?: string) {
+    assertValidBranchRef(branch);
+    assertValidBranchRef(from);
     assertWritableBranch(branch);
-    return this.github.createBranch(branch, from);
+    return this.github.createBranch(branch, from, fromSha);
   }
 
   async write(path: string, content: string, message: string, branch: string) {
+    assertValidBranchRef(branch);
     assertWritableBranch(branch);
     assertNoSecrets([{ path, content }]);
     const review = reviewChangeSet({
@@ -37,7 +40,11 @@ export class TezJetRepositoryAdapter {
   }
 
   async openDraftPullRequest(branch: string, title: string, body = "", base = "main") {
+    assertValidBranchRef(branch);
+    assertValidBranchRef(base);
     assertWritableBranch(branch);
+    if (branch === base) throw new Error("The feature branch must differ from the pull request base.");
     return this.github.createPullRequest(branch, title, body, base);
   }
 }
+

@@ -51,7 +51,21 @@ pnpm typecheck
 pnpm dev -- "Review TezJet driver agreement and privacy obligations for the target jurisdiction"
 ```
 
-The Commander produces a task plan and specialist routing. For ordinary TezJet tasks, a configured AI key enables AI orchestration. Tasks explicitly targeting `TezJet-Agent-Factory` use the repository-backed deterministic executor so the system inspects real repository files instead of relying on LLM-only specialist tools. **This command does not itself publish changes or open pull requests.**
+The Commander produces a task plan and specialist routing. A configured Gemini or OpenAI key enables AI orchestration, including tasks explicitly targeting `TezJet-Agent-Factory`. Explorer reads actual files at an immutable commit, Coder generates complete proposed files from that context, Security scans the repository and proposal, and Reviewer applies change-policy gates. Advisory specialists receive the actual repository context. Every tool invocation, return, and failure is recorded in the task journal with its actor and tool name.
+
+The default command proposes changes without publishing. For a change task, `completed` requires files written to a candidate commit and successful required CI/test evidence for that exact commit, in the correct repository and branch. Model prose, script discovery, and a successful base-branch workflow cannot establish completion. A read-only audit verifies the inspected commit and never publishes changes.
+
+To allow AI Commander to create a feature branch and draft PR, supply publication metadata and the existing runtime write opt-in:
+
+```bash
+AGENT_FACTORY_ENABLE_GITHUB_WRITES=true pnpm dev -- "Fix a confirmed TezJet bug" \
+  --publish --branch "fix/confirmed-bug" \
+  --title "Fix confirmed bug" --body "Problem, intended behavior and validation"
+```
+
+The publication target comes from the task configuration; the model cannot supply a different repository, branch, or PR metadata. Factory tasks target `dev/agent-factory-core` and require the `typecheck` CI job with successful `Typecheck` and `Test` steps. Set `AGENT_FACTORY_MODE=deterministic` to use the existing deterministic inspection/proposal executor, which does not publish through Commander.
+
+Commander exits with `0` for verified completion, `10` for blocked execution, and `11` when a proposal or result still needs review. `11` does not identify a provider/API failure. Inspect `result.status`, `result.reasons`, and `result.evidence` in AI mode for the actual outcome. A missing or empty model explanation cannot mark a run completed.
 
 ## Run the TezJet change pipeline
 
@@ -85,3 +99,4 @@ The pipeline's analysis stage is not proof that generated changes are correct. A
 - Failed CI may trigger a bounded repair loop (maximum 3 attempts), with review and security gates before each repair.
 - No agent may claim a write, test, deployment, legal verification, or merge without evidence from the relevant tool.
 - Legal and other high-impact outputs are drafts only; qualified humans retain final responsibility.
+

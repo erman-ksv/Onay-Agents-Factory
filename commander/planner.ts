@@ -45,7 +45,8 @@ export function planTask(goal: string): TaskPlan {
 }
 
 
-/** Self-targeted factory work must use handlers backed by real repository access. */
+/** AI mode now uses repository-backed tools, including for factory tasks. */
 export function shouldUseAiCommander(goal: string, providerConfigured: boolean, mode?: string): boolean {
-  return !isAgentFactoryTarget(goal) && providerConfigured && mode !== "deterministic";
+  return providerConfigured && mode !== "deterministic";
 }
+

@@ -1,5 +1,6 @@
 import { filterWorkflowRunsBySha, GitHubClient, type WorkflowRun } from "./githubClient.js";
 import { getTargetRepository } from "./repositoryConfig.js";
+import { assertRepositoryAllowed, resolveAllowedRepositories } from "./repositoryPolicy.js";
 
 export type CiGateResult =
   | { status: "passed"; runs: WorkflowRun[] }
@@ -21,7 +22,7 @@ export function evaluateCiJobs(
   if (runs.some(run => run.status !== "completed")) return { status: "pending", runs };
   if (runs.some(run => run.conclusion !== "success")) return { status: "failed", runs };
 
-  if (!requiredNames.length) return { status: "passed", runs };
+  if (!requiredNames.length && !requiredStepNames.length) return { status: "passed", runs };
 
   const normalizedJobs = jobs.map(job => ({ ...job, normalizedName: job.name.toLowerCase() }));
   const required = requiredNames.map(name => name.toLowerCase());
@@ -45,12 +46,26 @@ export function evaluateCiJobs(
   return { status: "passed", runs };
 }
 
-export async function checkCiGate(branch: string, requiredNames: string[] = [], headSha?: string): Promise<CiGateResult> {
-  const repository = getTargetRepository();
+export type CiGateOptions = { repository?: string; requiredStepNames?: string[] };
+export type CiGateInput = CiGateOptions & { branch: string; requiredNames?: string[]; headSha?: string };
+
+export function checkCiGate(input: CiGateInput): Promise<CiGateResult>;
+export function checkCiGate(branch: string, requiredNames?: string[], headSha?: string, options?: CiGateOptions): Promise<CiGateResult>;
+export async function checkCiGate(
+  branchOrInput: string | CiGateInput,
+  requiredNames: string[] = [],
+  headSha?: string,
+  options: CiGateOptions = {},
+): Promise<CiGateResult> {
+  const input = typeof branchOrInput === "string"
+    ? { branch: branchOrInput, requiredNames, headSha, ...options }
+    : branchOrInput;
+  const repository = input.repository ?? getTargetRepository();
+  assertRepositoryAllowed(repository, resolveAllowedRepositories(process.env.AGENT_ALLOWED_REPOSITORIES, getTargetRepository()));
   const github = new GitHubClient({ repository });
-  const fetchedRuns = await github.getWorkflowRuns(branch, headSha);
+  const fetchedRuns = await github.getWorkflowRuns(input.branch, input.headSha);
   // Fail closed if GitHub returns any run that does not belong to the requested commit.
-  const runs = filterWorkflowRunsBySha(fetchedRuns, headSha);
+  const runs = filterWorkflowRunsBySha(fetchedRuns, input.headSha);
   if (!runs.length) return { status: "no-runs", runs };
 
   const jobGroups = [];
@@ -58,13 +73,10 @@ export async function checkCiGate(branch: string, requiredNames: string[] = [], 
     const result = await github.getWorkflowJobs(run.id);
     jobGroups.push(...result.jobs);
   }
-  return evaluateCiJobs(runs, jobGroups, requiredNames);
+  return evaluateCiJobs(runs, jobGroups, input.requiredNames ?? [], input.requiredStepNames ?? []);
 }
 
-export async function waitForCiGate(input: {
-  branch: string;
-  headSha?: string;
-  requiredNames?: string[];
+export async function waitForCiGate(input: CiGateInput & {
   timeoutMs?: number;
   pollMs?: number;
 }): Promise<CiGateResult> {
@@ -73,12 +85,12 @@ export async function waitForCiGate(input: {
   const started = Date.now();
 
   while (Date.now() - started <= timeoutMs) {
-    const gate = await checkCiGate(input.branch, input.requiredNames ?? [], input.headSha);
+    const gate = await checkCiGate(input);
     if (gate.status === "passed" || gate.status === "failed") return gate;
     await new Promise(resolve => setTimeout(resolve, pollMs));
   }
 
-  return checkCiGate(input.branch, input.requiredNames ?? [], input.headSha);
+  return checkCiGate(input);
 }
 
 export async function getCiFailureContext(branch: string, headSha?: string) {
@@ -93,3 +105,4 @@ export async function getCiFailureContext(branch: string, headSha?: string) {
   }
   return { gate, failures: jobs };
 }
+

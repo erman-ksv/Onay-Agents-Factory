@@ -9,9 +9,10 @@ import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 import { selectProviderConfig } from "./providerConfig.js";
 import { getTargetRepository } from "../github/repositoryConfig.js";
-import { AI_MODE_STATUS, commanderExitCode } from "./exitCode.js";
+import { commanderExitCode } from "./exitCode.js";
+import { parseCommanderArgs } from "./commanderArgs.js";
 
-const goal = process.argv.slice(2).join(" ").trim();
+const { goal, publication } = parseCommanderArgs(process.argv.slice(2));
 
 if (!goal) {
   console.error("Usage: pnpm dev -- <describe the task>");
@@ -25,11 +26,13 @@ const journal = new AgentRunJournal(goal, undefined, (event) => {
 if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "none", process.env.AGENT_FACTORY_MODE)) {
   journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
-  const result = await runAiCommander(goal);
-  journal.record("agent_completed", "commander", "AI Commander returned its result. Specialist tool-level tracing is not yet connected in this mode.");
+  const result = await runAiCommander(goal, { journal, publication });
   console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
-  process.exitCode = commanderExitCode(AI_MODE_STATUS);
+  process.exitCode = commanderExitCode(result.status);
 } else {
+  if (publication) {
+    throw new Error("Publishing through Commander requires an AI provider and AI mode; no files were written.");
+  }
   const plan = planTask(goal);
   const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();
   const targetRef = isAgentFactoryTarget(goal) ? "dev/agent-factory-core" : "main";
@@ -109,7 +112,7 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
     },
   }, { journal });
 
-  const summary = summarizeExecution(execution);
+  const summary = summarizeExecution(execution, { proposalOnly: true });
 
   console.log(JSON.stringify({
     commander: "TezJet Commander",
@@ -123,3 +126,4 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
   }, null, 2));
   process.exitCode = commanderExitCode(summary.status);
 }
+

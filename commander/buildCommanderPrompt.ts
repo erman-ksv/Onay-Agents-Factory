@@ -1,7 +1,7 @@
 import { planTask } from "./planner.js";
 import type { AgentName } from "./taskTypes.js";
 
-const toolNames: Record<AgentName, string> = {
+export const COMMANDER_TOOL_NAMES: Record<AgentName, string> = {
   explorer: "explore_tezjet",
   coder: "code_tezjet",
   backend: "backend_specialist",
@@ -20,7 +20,7 @@ const toolNames: Record<AgentName, string> = {
 export function buildCommanderPrompt(goal: string): string {
   const plan = planTask(goal);
   const required = plan.steps.map((step, index) =>
-    `${index + 1}. ${step.agent} → ${toolNames[step.agent]}: ${step.objective}`
+    `${index + 1}. ${step.agent} → ${COMMANDER_TOOL_NAMES[step.agent]}: ${step.objective}`
   );
 
   return [
@@ -38,3 +38,4 @@ export function buildCommanderPrompt(goal: string): string {
     "- Keep the main branch untouched; propose changes and verification evidence before any merge."
   ].join("\n");
 }
+

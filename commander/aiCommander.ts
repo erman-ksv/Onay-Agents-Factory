@@ -1,46 +1,123 @@
-import { Agent, run } from "@openai/agents";
+import { Agent, run, tool, type Tool, type Model } from "@openai/agents";
+import { z } from "zod";
 import { ROLE_SKILLS } from "./skills.js";
-import { buildCommanderPrompt } from "./buildCommanderPrompt.js";
+import { buildCommanderPrompt, COMMANDER_TOOL_NAMES } from "./buildCommanderPrompt.js";
 import { configureModelProvider } from "./modelProvider.js";
+import { isAgentFactoryTarget, isReadOnlyRepositoryAudit, planTask } from "./planner.js";
+import { AiExecutionSession, type AiExecutionDependencies, type AiExecutionOptions } from "./aiExecution.js";
+import { getTargetRepository } from "../github/repositoryConfig.js";
+import { GitHubClient } from "../github/githubClient.js";
+import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES, inspectTezJet } from "../github/tezjetExplorer.js";
+import { generateChanges } from "../agents/backend/coder.js";
+import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
+import { inspectTestExecution, inspectTests } from "../agents/tester/agent.js";
+import { reviewChangeSet } from "../agents/reviewer/agent.js";
+import { prepareTezJetChange } from "../github/changeWorkflow.js";
+import { waitForCiGate } from "../github/ciGate.js";
+import { assertRepositoryAllowed, resolveAllowedRepositories } from "../github/repositoryPolicy.js";
 
-const provider = configureModelProvider();
-const modelOptions = provider.provider === "gemini" ? { model: provider.model } : {};
+export type AiCommanderOptions = {
+  journal?: AiExecutionOptions["journal"];
+  publication?: AiExecutionOptions["publication"];
+  env?: NodeJS.ProcessEnv;
+  dependencies?: AiExecutionDependencies;
+  model?: Model;
+};
 
-const explorer = new Agent({ name: "TezJet Explorer", ...modelOptions, instructions: ROLE_SKILLS.explorer });
-const coder = new Agent({ name: "TezJet Coder", ...modelOptions, instructions: ROLE_SKILLS.coder });
-const backend = new Agent({ name: "TezJet Backend Specialist", ...modelOptions, instructions: ROLE_SKILLS.backend });
-const frontend = new Agent({ name: "TezJet Frontend & Mobile Specialist", ...modelOptions, instructions: ROLE_SKILLS.frontend });
-const database = new Agent({ name: "TezJet Database Specialist", ...modelOptions, instructions: ROLE_SKILLS.database });
-const dispatch = new Agent({ name: "TezJet Dispatch & Ride Operations Specialist", ...modelOptions, instructions: ROLE_SKILLS.dispatch });
-const tester = new Agent({ name: "TezJet Tester", ...modelOptions, instructions: ROLE_SKILLS.tester });
-const security = new Agent({ name: "TezJet Security Specialist", ...modelOptions, instructions: ROLE_SKILLS.security });
-const reviewer = new Agent({ name: "TezJet Independent Reviewer", ...modelOptions, instructions: ROLE_SKILLS.reviewer });
-const legal = new Agent({ name: "Rasul — Legal & Compliance Specialist", ...modelOptions, instructions: ROLE_SKILLS.legal });
-const devops = new Agent({ name: "TezJet DevOps & Release Specialist", ...modelOptions, instructions: ROLE_SKILLS.devops });
-const product = new Agent({ name: "TezJet Product Analyst", ...modelOptions, instructions: ROLE_SKILLS.product });
-const ux = new Agent({ name: "TezJet UX & Accessibility Specialist", ...modelOptions, instructions: ROLE_SKILLS.ux });
-
-const commander = new Agent({
-  name: "TezJet Commander",
-  ...modelOptions, instructions: `You are the lead engineering orchestrator for TezJet. Select specialists according to the task; for cross-cutting work, delegate to multiple relevant roles. For legal/compliance tasks, always involve Rasul and explicitly identify jurisdiction. For production-impacting tasks, involve DevOps and Security. Start with repository exploration when context is missing, then request an explicit change set from Coder and the relevant specialists. Require testing, security review, and independent review before declaring work ready. Specialists provide advice and proposed changes; they do not gain authority to deploy, sign, send, file, negotiate, or make binding legal/financial commitments. Never claim code was written, tests ran, or changes were merged unless an actual tool result proves it. Clearly separate verified facts, assumptions, recommendations, and blockers.`,
-  tools: [
-    explorer.asTool({ toolName: "explore_tezjet", toolDescription: "Inspect the repository and report relevant architecture, files, constraints, and risks." }),
-    coder.asTool({ toolName: "code_tezjet", toolDescription: "Produce an explicit code change set with complete contents for changed files." }),
-    backend.asTool({ toolName: "backend_specialist", toolDescription: "Analyze or implement backend/API changes." }),
-    frontend.asTool({ toolName: "frontend_mobile_specialist", toolDescription: "Analyze or implement Android/iOS and frontend changes." }),
-    database.asTool({ toolName: "database_specialist", toolDescription: "Analyze schema, migrations, persistence, and transaction safety." }),
-    dispatch.asTool({ toolName: "dispatch_ride_operations_specialist", toolDescription: "Review taxi matching, queue fairness, pickup eligibility, seat capacity, and ride lifecycle rules." }),
-    tester.asTool({ toolName: "test_tezjet", toolDescription: "Design/evaluate tests and report which results are actually verified." }),
-    security.asTool({ toolName: "security_review", toolDescription: "Threat-model the implementation and identify security blockers." }),
-    legal.asTool({ toolName: "rasul_legal_compliance", toolDescription: "Identify legal/compliance issues, jurisdiction, primary-source research needs, risk, and questions for human counsel. Never make binding legal decisions." }),
-    devops.asTool({ toolName: "devops_release_review", toolDescription: "Review CI, secrets, deployment safety, monitoring, migrations, and rollback." }),
-    product.asTool({ toolName: "product_requirements", toolDescription: "Turn goals into scope, acceptance criteria, and business-rule checks." }),
-    ux.asTool({ toolName: "ux_accessibility_review", toolDescription: "Review journeys, mobile UX, accessibility, permission flows, and error states." }),
-    reviewer.asTool({ toolName: "final_review", toolDescription: "Perform independent engineering review and identify blockers before merge." })
-  ]
-});
-
-export async function runAiCommander(goal: string) {
-  const result = await run(commander, buildCommanderPrompt(goal));
-  return result.finalOutput;
+/** Fresh executable tools and evidence state for each task. */
+export function createAiCommander(goal: string, options: AiCommanderOptions = {}) {
+  const env = options.env ?? process.env;
+  const provider = configureModelProvider(env);
+  const modelOptions = options.model ? { model: options.model } : provider.provider === "gemini" ? { model: provider.model } : {};
+  const factory = isAgentFactoryTarget(goal);
+  const repository = factory ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();
+  const ref = factory ? "dev/agent-factory-core" : "main";
+  const paths = factory ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
+  const requiredNames = factory ? ["typecheck"] : ["Typecheck and API tests"];
+  const requiredStepNames = factory ? ["Typecheck", "Test"] : [];
+  const plan = planTask(goal);
+  const dependencies: AiExecutionDependencies = options.dependencies ?? {
+    getHead: async () => {
+      assertRepositoryAllowed(repository, resolveAllowedRepositories(env.AGENT_ALLOWED_REPOSITORIES, getTargetRepository()));
+      return new GitHubClient({ repository }).getCommitSha(ref);
+    },
+    getCandidateHead: candidateRef => new GitHubClient({ repository }).getCommitSha(candidateRef),
+    explore: sha => inspectTezJet(paths, sha, repository),
+    generate: context => generateChanges(goal, context),
+    review: files => reviewChangeSet({ goal, files, allowWorkflowChanges: env.AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES === "true" }),
+    scan: inspectProposedChanges,
+    inspectSecurity: sha => inspectSecurity([...paths], repository, sha),
+    discoverTests: () => inspectTests(repository, ref),
+    publish: (files, baseSha) => {
+      if (!options.publication) throw new Error("No publication request was supplied.");
+      return prepareTezJetChange({ ...options.publication, files, repository, baseRef: ref, baseSha });
+    },
+    verify: async (sha, candidateRef) => {
+      await waitForCiGate({ branch: candidateRef, repository, headSha: sha, requiredNames, requiredStepNames });
+      return inspectTestExecution(sha, repository, candidateRef, requiredNames, requiredStepNames);
+    },
+  };
+  const session = new AiExecutionSession({
+    goal, repository, ref, requiredActors: plan.steps.map(step => step.agent),
+    auditOnly: isReadOnlyRepositoryAudit(goal), publication: options.publication,
+    writesEnabled: env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true", journal: options.journal,
+  }, dependencies);
+  const executable = (actor: string, name: string, description: string, execute: () => Promise<unknown> | unknown) => tool({
+    name, description, parameters: z.object({}),
+    execute: async () => JSON.stringify(await session.invoke(actor, name, execute)),
+  });
+  const tools: Tool[] = [
+    executable("explorer", "explore_tezjet", "Read actual repository files at an immutable commit. Required before other agents.", () => session.explore()),
+    executable("coder", "code_tezjet", "Run AI Coder using inspected context and store proposed complete file contents. Does not write yet.", () => session.generate()),
+    executable("security", "security_review", "Scan the repository and current proposed files for secrets. Repeat after regenerating files.", () => session.inspectSecurity()),
+    executable("reviewer", "final_review", "Apply independent path, workflow and build configuration policy review to current files.", () => session.reviewChanges()),
+    executable("github", "publish_change_set", "Write reviewed files on the explicitly authorized feature branch and create a draft PR. Requires all specialists except Tester to have returned.", () => session.publish()),
+    executable("tester", "test_tezjet", "Discover scripts and verify required CI jobs/test steps for the exact published commit. Call after publication to verify changes.", () => session.test()),
+  ];
+  const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
+  for (const role of advisoryRoles) {
+    const specialist = new Agent({ name: "TezJet " + role + " Specialist", ...modelOptions, instructions: ROLE_SKILLS[role] });
+    const name = COMMANDER_TOOL_NAMES[role];
+    tools.push(tool({
+      name, description: "Ask the " + role + " specialist to review actual repository context and proposed changes. Advice does not prove writes or tests.",
+      parameters: z.object({ input: z.string() }),
+      execute: async ({ input }) => JSON.stringify(await session.invoke(role, name, async () => {
+        const context = session.specialistContext();
+        const result = await run(specialist, "TASK:\n" + goal + "\n\nREQUEST:\n" + input + "\n\nREPOSITORY CONTEXT:\n" + context +
+          '\n\nReturn ONLY JSON: {"ready":boolean,"findings":[{"severity":"blocker"|"high"|"medium"|"low","message":string}],"summary":string}. Set ready=false for unresolved blockers. Advice is not execution evidence.');
+        if (typeof result.finalOutput !== "string" || !result.finalOutput.trim()) throw new Error(role + " specialist returned no result.");
+        const raw = result.finalOutput.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+        return session.recordAdvice(role, JSON.parse(raw));
+      })),
+    }));
+  }
+  const commander = new Agent({
+    name: "TezJet Commander", ...modelOptions, modelSettings: { parallelToolCalls: false },
+    instructions: [
+      "Coordinate specialists through executable tools. Host evidence, not final prose, determines completion.",
+      "Explore first. For changes call code_tezjet, every required advisory specialist, security_review and final_review.",
+      "If publishing is explicitly enabled, call publish_change_set after reviews pass, then test_tezjet for the exact candidate commit.",
+      "For read-only audits use exploration, security_review and test_tezjet. Do not generate or publish.",
+      "Regeneration invalidates earlier reviews. Script discovery and base-branch CI do not verify proposals.",
+      "If publishing is disabled, explain the proposal and remaining verification steps; do not claim files were applied.",
+      "Respect tool errors and pending/failed CI. Never invent edits, tools, commands, PRs, tests, legal verification, merge or deployment.",
+      "For legal tasks involve Rasul. Humans review legal commitments, merges and deployments.",
+    ].join("\n"), tools,
+  });
+  const publishing = options.publication && env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true";
+  const prompt = buildCommanderPrompt(goal) + "\n\nPublication enabled for this run: " +
+    (publishing ? "yes; publish then verify tests on branch " + options.publication!.branch : "no; return a proposal and do not call publish_change_set.");
+  return { commander, session, prompt };
 }
+
+export async function runAiCommander(goal: string, options: AiCommanderOptions = {}) {
+  const { commander, session, prompt } = createAiCommander(goal, options);
+  try {
+    const result = await run(commander, prompt, { maxTurns: 30 });
+    await session.verifyFinalCandidate();
+    return session.finish(result.finalOutput);
+  } catch (error) {
+    return session.finish(undefined, error instanceof Error ? error.message : String(error));
+  }
+}
+

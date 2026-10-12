@@ -66,3 +66,15 @@ test("allows publish only with completed agents, executed tests, ready review, a
   assert.equal(summary.failed, 0);
   assert.equal(summary.skipped, 0);
 });
+
+test("proposal-only Commander cannot complete from successful base-branch tests", () => {
+  const summary = summarizeExecution([
+    result("coder", "completed", { files: [{ path: "src/change.ts", content: "export const proposed = true;" }] }),
+    result("tester", "completed", { testsExecuted: true, executionEvidence: { expectedSha: "base-commit", status: "passed" } }),
+    result("security", "completed", { proposedChanges: { status: "clean" } }),
+    result("reviewer", "completed", { ready: true }),
+  ], { proposalOnly: true });
+  assert.equal(summary.status, "needs-review");
+  assert.equal(summary.canPublish, false);
+});
+
