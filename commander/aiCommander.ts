@@ -1,4 +1,4 @@
-import { Agent, run, tool, type Tool } from "@openai/agents";
+import { Agent, run, tool, type Tool, type Model } from "@openai/agents";
 import { z } from "zod";
 import { ROLE_SKILLS } from "./skills.js";
 import { buildCommanderPrompt, COMMANDER_TOOL_NAMES } from "./buildCommanderPrompt.js";
@@ -21,13 +21,14 @@ export type AiCommanderOptions = {
   publication?: AiExecutionOptions["publication"];
   env?: NodeJS.ProcessEnv;
   dependencies?: AiExecutionDependencies;
+  model?: Model;
 };
 
 /** Fresh executable tools and evidence state for each task. */
 export function createAiCommander(goal: string, options: AiCommanderOptions = {}) {
   const env = options.env ?? process.env;
   const provider = configureModelProvider(env);
-  const modelOptions = provider.provider === "gemini" ? { model: provider.model } : {};
+  const modelOptions = options.model ? { model: options.model } : provider.provider === "gemini" ? { model: provider.model } : {};
   const factory = isAgentFactoryTarget(goal);
   const repository = factory ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();
   const ref = factory ? "dev/agent-factory-core" : "main";
