@@ -9,6 +9,7 @@ import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 import { selectProviderConfig } from "./providerConfig.js";
 import { getTargetRepository } from "../github/repositoryConfig.js";
+import { commanderExitCode } from "./exitCode.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -119,4 +120,5 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
     summary,
     note: "Handlers run in plan order and receive previous results. Set AGENT_FACTORY_MODE=deterministic to use this executor even when OPENAI_API_KEY is present. Code generation requires GEMINI_API_KEY or OPENAI_API_KEY in the Agent Factory runtime. Test discovery is not test execution. This mode does not publish changes or open pull requests. Agent events are emitted as JSON lines while the run is active.",
   }, null, 2));
+  process.exitCode = commanderExitCode(summary.status);
 }
