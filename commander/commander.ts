@@ -23,11 +23,15 @@ const journal = new AgentRunJournal(goal, undefined, (event) => {
   console.log(JSON.stringify({ type: "agent_event", event }));
 });
 
-if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "none", process.env.AGENT_FACTORY_MODE)) {
+const providerConfig = selectProviderConfig(process.env);
+const provider = providerConfig.provider;
+const model = providerConfig.provider === "gemini" ? providerConfig.model : null;
+
+if (shouldUseAiCommander(goal, provider !== "none", process.env.AGENT_FACTORY_MODE)) {
   journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
   const result = await runAiCommander(goal, { journal, publication });
-  console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
+  console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", provider, model, taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
   process.exitCode = commanderExitCode(result.status);
 } else {
   if (publication) {
@@ -58,7 +62,7 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
         repositoryContext: available.map((file) => `FILE: ${file.path}\n${file.content}`).join("\n\n"),
       };
     },
-    ...(selectProviderConfig(process.env).provider !== "none" ? {
+    ...(provider !== "none" ? {
       coder: async ({ goal, previousResults }) => {
         const exploration = previousResults.find((result) => result.agent === "explorer");
         const context = exploration?.output as { repositoryContext?: string } | undefined;
@@ -117,6 +121,8 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
   console.log(JSON.stringify({
     commander: "TezJet Commander",
     mode: "deterministic",
+    provider,
+    model,
     taskId: journal.taskId,
     events: journal.snapshot(),
     task: plan,
@@ -126,4 +132,3 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
   }, null, 2));
   process.exitCode = commanderExitCode(summary.status);
 }
-
