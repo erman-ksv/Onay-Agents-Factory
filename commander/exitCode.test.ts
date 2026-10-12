@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { COMMANDER_EXIT_CODES, commanderExitCode } from "./exitCode.js";
+import { AI_MODE_STATUS, COMMANDER_EXIT_CODES, commanderExitCode } from "./exitCode.js";
 
 test("maps Commander statuses to exit codes", () => {
   assert.equal(commanderExitCode("completed"), 0);
@@ -35,4 +35,9 @@ test("CLI exits with 10 when no AI provider key is configured", () => {
   const report = JSON.parse(child.stdout.slice(start)) as { summary?: { status?: string } };
   assert.equal(report.summary?.status, "blocked");
   assert.equal(child.status, COMMANDER_EXIT_CODES.blocked, child.stderr);
+});
+
+test("AI mode never reports success without readiness checks", () => {
+  assert.equal(AI_MODE_STATUS, "needs-review");
+  assert.notEqual(commanderExitCode(AI_MODE_STATUS), 0);
 });

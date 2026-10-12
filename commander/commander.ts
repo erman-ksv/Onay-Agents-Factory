@@ -9,7 +9,7 @@ import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 import { selectProviderConfig } from "./providerConfig.js";
 import { getTargetRepository } from "../github/repositoryConfig.js";
-import { commanderExitCode } from "./exitCode.js";
+import { AI_MODE_STATUS, commanderExitCode } from "./exitCode.js";
 
 const goal = process.argv.slice(2).join(" ").trim();
 
@@ -28,6 +28,7 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
   const result = await runAiCommander(goal);
   journal.record("agent_completed", "commander", "AI Commander returned its result. Specialist tool-level tracing is not yet connected in this mode.");
   console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
+  process.exitCode = commanderExitCode(AI_MODE_STATUS);
 } else {
   const plan = planTask(goal);
   const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();

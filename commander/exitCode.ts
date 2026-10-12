@@ -17,3 +17,5 @@ export function commanderExitCode(status: string): number {
       return COMMANDER_EXIT_CODES.unhandledError;
   }
 }
+
+export const AI_MODE_STATUS = "needs-review";
