@@ -112,7 +112,7 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
     },
   }, { journal });
 
-  const summary = summarizeExecution(execution);
+  const summary = summarizeExecution(execution, { proposalOnly: true });
 
   console.log(JSON.stringify({
     commander: "TezJet Commander",

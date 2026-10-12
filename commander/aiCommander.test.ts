@@ -54,11 +54,11 @@ test("SDK model tool calls execute the actual Commander handlers end to end", as
     publication: { branch, title: "Fix verification", body: "Test candidate execution." },
   });
   assert.equal(result.status, "completed", result.reasons.join("; "));
-  assert.deepEqual(calls, ["resolve-base", "read-files", "generate-files", "scan-repository", "scan-proposal", "review", "write-and-open-pr", "discover-tests", "verify-ci", "resolve-candidate"]);
+  assert.deepEqual(calls, ["resolve-base", "read-files", "generate-files", "scan-repository", "scan-proposal", "review", "write-and-open-pr", "discover-tests", "verify-ci", "resolve-candidate", "resolve-candidate"]);
   assert.equal(model.requests.length, names.length + 1);
   assert.deepEqual(result.evidence.changedFiles, ["commander/summary.ts"]);
   assert.equal(result.evidence.tests?.expectedSha, candidateSha);
-  assert.equal(result.events.filter(event => event.type === "tool_completed").length, names.length);
+  assert.equal(result.events.filter(event => event.type === "tool_completed").length, names.length + 1);
 });
 
 test("SDK final prose without function calls cannot claim successful execution", async () => {
@@ -80,4 +80,19 @@ test("SDK tool calls cannot enable GitHub writes without the host opt-in", async
   assert.ok(!calls.includes("write-and-open-pr"));
   assert.ok(!calls.includes("verify-ci"));
   assert.ok(result.events.some(event => event.type === "tool_failed" && event.details?.tool === "publish_change_set"));
+});
+
+test("branch advancement during the final model turn invalidates completed execution", async () => {
+  const calls: string[] = [];
+  const deps = dependencies(calls);
+  let checks = 0;
+  deps.getCandidateHead = async () => ++checks === 1 ? candidateSha : "d".repeat(40);
+  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+    model: new ScriptedModel(names), env: { AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" }, dependencies: deps,
+    publication: { branch, title: "Fix verification", body: "Check head again after the final model turn." },
+  });
+  assert.equal(result.status, "needs-review");
+  assert.equal(result.evidence.testsExecuted, false);
+  assert.equal(result.evidence.tests?.status, "sha-mismatch");
+  assert.equal(checks, 2);
 });

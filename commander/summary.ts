@@ -11,7 +11,7 @@ export type CommanderSummary = {
   testsExecuted: boolean;
 };
 
-export function summarizeExecution(execution: AgentStepResult[]): CommanderSummary {
+export function summarizeExecution(execution: AgentStepResult[], options: { proposalOnly?: boolean } = {}): CommanderSummary {
   const reviewReady =
     (execution.find((step) => step.agent === "reviewer")?.output as { ready?: boolean } | undefined)?.ready ?? false;
   const proposedSecurityClean =
@@ -23,7 +23,7 @@ export function summarizeExecution(execution: AgentStepResult[]): CommanderSumma
   const hasIncompleteAgents = execution.some((step) => step.status !== "completed");
   const status = hasIncompleteAgents
     ? "blocked"
-    : !reviewReady || !proposedSecurityClean || !testsExecuted
+    : options.proposalOnly || !reviewReady || !proposedSecurityClean || !testsExecuted
       ? "needs-review"
       : "completed";
 
@@ -38,3 +38,4 @@ export function summarizeExecution(execution: AgentStepResult[]): CommanderSumma
     testsExecuted,
   };
 }
+

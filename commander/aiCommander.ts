@@ -114,6 +114,7 @@ export async function runAiCommander(goal: string, options: AiCommanderOptions =
   const { commander, session, prompt } = createAiCommander(goal, options);
   try {
     const result = await run(commander, prompt, { maxTurns: 30 });
+    await session.verifyFinalCandidate();
     return session.finish(result.finalOutput);
   } catch (error) {
     return session.finish(undefined, error instanceof Error ? error.message : String(error));

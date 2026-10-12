@@ -233,6 +233,19 @@ export class AiExecutionSession {
       this.tests.evidence.length > 0 && this.tests.evidence.every(run => run.headSha === sha && run.conclusion === "success");
   }
 
+  async verifyFinalCandidate() {
+    if (this.options.auditOnly || !this.testsVerified() || !this.publication || !this.options.publication) return;
+    await this.invoke("tester", "verify_final_head", async () => {
+      const headSha = await this.dependencies.getCandidateHead(this.options.publication!.branch);
+      if (headSha !== this.publication!.head_sha) {
+        this.tests!.testsExecuted = false;
+        this.tests!.status = "sha-mismatch";
+        this.tests!.notes.push("The candidate branch changed before Commander returned its final result.");
+      }
+      return { headSha, expectedSha: this.publication!.head_sha, verified: this.testsVerified() };
+    });
+  }
+
   finish(output: unknown, runnerError?: string) {
     const reasons: string[] = [];
     const missingActors = this.options.requiredActors.filter(actor => !this.completedActors.has(actor));
