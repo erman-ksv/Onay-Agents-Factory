@@ -1,4 +1,4 @@
-import { Agent, run, tool, type Tool, type Model } from "@openai/agents";
+import { Agent, Runner, tool, type Tool, type Model } from "@openai/agents";
 import { z } from "zod";
 import { ROLE_SKILLS } from "./skills.js";
 import { buildCommanderPrompt, COMMANDER_TOOL_NAMES } from "./buildCommanderPrompt.js";
@@ -32,9 +32,10 @@ export type AiCommanderOptions = {
 };
 
 /** Fresh executable tools and evidence state for each task. */
-export function createAiCommander(goal: string, options: AiCommanderOptions = {}) {
+function createAiCommanderExecution(goal: string, options: AiCommanderOptions = {}) {
   const env = options.env ?? process.env;
   const provider = configureModelProvider(env);
+  const runner = new Runner(provider.provider !== "none" ? { modelProvider: provider.modelProvider } : {});
   const modelOptions = options.model ? { model: options.model } : provider.provider !== "none" && provider.model ? { model: provider.model } : {};
   const factory = isAgentFactoryTarget(goal);
   const repository = factory ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();
@@ -118,7 +119,7 @@ export function createAiCommander(goal: string, options: AiCommanderOptions = {}
       parameters: z.object({ input: z.string() }),
       execute: async ({ input }) => JSON.stringify(await session.invoke(role, name, async () => {
         const context = session.specialistContext();
-        const result = await run(specialist, "TASK:\n" + goal + "\n\nREQUEST:\n" + input + "\n\nREPOSITORY CONTEXT:\n" + context +
+        const result = await runner.run(specialist, "TASK:\n" + goal + "\n\nREQUEST:\n" + input + "\n\nREPOSITORY CONTEXT:\n" + context +
           '\n\nReturn ONLY JSON: {"ready":boolean,"findings":[{"severity":"blocker"|"high"|"medium"|"low","message":string}],"summary":string}. Set ready=false for unresolved blockers. Advice is not execution evidence.');
         if (typeof result.finalOutput !== "string" || !result.finalOutput.trim()) throw new Error(role + " specialist returned no result.");
         const raw = result.finalOutput.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
@@ -142,16 +143,21 @@ export function createAiCommander(goal: string, options: AiCommanderOptions = {}
   const publishing = options.publication && env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true";
   const prompt = buildCommanderPrompt(goal) + "\n\nPublication enabled for this run: " +
     (publishing ? "yes; publish then verify tests on branch " + options.publication!.branch : "no; return a proposal and do not call publish_change_set.");
-  return { commander, session, prompt, provider: provider.provider };
+  return { commander, session, prompt, runner, provider: provider.provider };
+}
+
+export function createAiCommander(goal: string, options: AiCommanderOptions = {}) {
+  const { runner: _runner, ...commander } = createAiCommanderExecution(goal, options);
+  return commander;
 }
 
 export async function runAiCommander(goal: string, options: AiCommanderOptions = {}) {
-  const { commander, session, prompt, provider } = createAiCommander(goal, options);
+  const { commander, session, prompt, runner, provider } = createAiCommanderExecution(goal, options);
   try {
     if (provider === "none" && !options.model) {
       throw new Error(providerRequirementMessage(options.env ?? process.env));
     }
-    const result = await run(commander, prompt, { maxTurns: 30 });
+    const result = await runner.run(commander, prompt, { maxTurns: 30 });
     await session.verifyFinalCandidate();
     return session.finish(result.finalOutput);
   } catch (error) {

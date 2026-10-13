@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import {
+  OpenAIProvider,
   setDefaultOpenAIClient,
   setOpenAIAPI,
   setTracingDisabled,
@@ -13,7 +14,14 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
 
   const client = new OpenAI({
     apiKey: config.apiKey,
-    ...(config.provider === "gemini" ? { baseURL: config.baseURL } : {}),
+    baseURL: config.provider === "gemini" ? config.baseURL : "https://api.openai.com/v1",
+  });
+  // The SDK's shared runner/provider caches its first client. Each factory run
+  // needs an explicit provider so its selected key, endpoint and API stay pinned.
+  const modelProvider = new OpenAIProvider({
+    openAIClient: client,
+    useResponses: config.provider === "openai",
+    useResponsesWebSocket: false,
   });
   setDefaultOpenAIClient(client);
 
@@ -26,5 +34,5 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
     setOpenAIAPI("responses");
   }
 
-  return config;
+  return { ...config, modelProvider };
 }

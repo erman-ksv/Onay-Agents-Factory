@@ -7,6 +7,12 @@ setTracingDisabled(true);
 const result = { summary: "Verified configuration", files: [{ path: "example.ts", content: "export const fixed = true;", message: "Fix example" }] };
 
 test("Coder uses a fresh per-invocation provider and restores the native API after Gemini", async t => {
+  const previousBaseURL = process.env.OPENAI_BASE_URL;
+  process.env.OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
+  t.after(() => {
+    if (previousBaseURL === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = previousBaseURL;
+  });
   const requests: Array<{ url: string; key: string; body: Record<string, unknown> }> = [];
   t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -35,14 +41,44 @@ test("Coder uses a fresh per-invocation provider and restores the native API aft
     AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "openai-test-key", OPENAI_MODEL: "openai-test-model",
     GEMINI_API_KEY: "unused-gemini-key",
   }), result);
+  assert.deepEqual(await generateChanges("Fix example", "example context", {
+    AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "second-gemini-test-key", GEMINI_MODEL: "second-gemini-test-model",
+  }), result);
+  assert.deepEqual(await generateChanges("Fix example", "example context", {
+    AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "second-openai-test-key", OPENAI_MODEL: "second-openai-test-model",
+  }), result);
+  assert.deepEqual(await generateChanges("Fix example", "example context", {
+    AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "third-openai-test-key", OPENAI_MODEL: "third-openai-test-model",
+  }), result);
+  assert.deepEqual(await generateChanges("Fix example", "example context", {
+    AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "third-gemini-test-key", GEMINI_MODEL: "third-gemini-test-model",
+  }), result);
+  assert.deepEqual(await generateChanges("Fix example", "example context", {
+    AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "fourth-gemini-test-key", GEMINI_MODEL: "fourth-gemini-test-model",
+  }), result);
 
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 7);
   assert.equal(requests[0].url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
   assert.equal(requests[0].key, "Bearer gemini-test-key");
   assert.equal(requests[0].body.model, "gemini-test-model");
   assert.equal(requests[1].url, "https://api.openai.com/v1/responses");
   assert.equal(requests[1].key, "Bearer openai-test-key");
   assert.equal(requests[1].body.model, "openai-test-model");
+  assert.equal(requests[2].url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+  assert.equal(requests[2].key, "Bearer second-gemini-test-key");
+  assert.equal(requests[2].body.model, "second-gemini-test-model");
+  assert.equal(requests[3].url, "https://api.openai.com/v1/responses");
+  assert.equal(requests[3].key, "Bearer second-openai-test-key");
+  assert.equal(requests[3].body.model, "second-openai-test-model");
+  assert.equal(requests[4].url, "https://api.openai.com/v1/responses");
+  assert.equal(requests[4].key, "Bearer third-openai-test-key");
+  assert.equal(requests[4].body.model, "third-openai-test-model");
+  assert.equal(requests[5].url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+  assert.equal(requests[5].key, "Bearer third-gemini-test-key");
+  assert.equal(requests[5].body.model, "third-gemini-test-model");
+  assert.equal(requests[6].url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+  assert.equal(requests[6].key, "Bearer fourth-gemini-test-key");
+  assert.equal(requests[6].body.model, "fourth-gemini-test-model");
 });
 
 test("Coder rejects a missing selected key before SDK execution, even after another provider was configured", async t => {

@@ -276,12 +276,14 @@ test("the expected base guard also rejects a mismatching injected source before 
 });
 
 test("Commander applies the host-selected OpenAI model when both provider keys exist", () => {
-  const { commander, provider } = createAiCommander("Fix TezJet-Agent-Factory", {
+  const configured = createAiCommander("Fix TezJet-Agent-Factory", {
     env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "openai-test-key",
       OPENAI_MODEL: "selected-commander-model", GEMINI_API_KEY: "unused-gemini-key" },
   });
-  assert.equal(provider, "openai");
-  assert.equal(commander.model, "selected-commander-model");
+  assert.equal(configured.provider, "openai");
+  assert.equal(configured.commander.model, "selected-commander-model");
+  assert.equal("runner" in configured, false);
+  assert.doesNotMatch(JSON.stringify(configured), /openai-test-key|unused-gemini-key/);
 });
 
 test("Commander rejects a missing selected key before invoking the model or any tools", async t => {
@@ -296,4 +298,68 @@ test("Commander rejects a missing selected key before invoking the model or any 
   assert.ok(result.reasons.some(reason => /selected OpenAI provider requires OPENAI_API_KEY/.test(reason)));
   assert.deepEqual(calls, []);
   assert.equal(networkCalls, 0);
+});
+
+test("Commander and advisory specialists retain task-selected clients across provider and credential changes", async t => {
+  const requests: Array<{ url: string; key: string; model: unknown }> = [];
+  t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    const index = requests.push({ url, key: headers.get("authorization") ?? "", model: body.model }) - 1;
+    // Configure an unrelated task while the original Commander is still running.
+    if (index === 0 || index === 4) createAiCommander("Audit TezJet-Agent-Factory", {
+      env: index === 0 ? { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "unrelated-openai-key" } :
+        { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "unrelated-gemini-key" },
+    });
+    const toolName = index === 0 || index === 4 ? "explore_tezjet" : index === 1 || index === 5 ? "database_specialist" : undefined;
+    const argumentsJson = toolName === "database_specialist" ? '{"input":"Review repository context."}' : "{}";
+    const text = index === 2 || index === 6 ? '{"ready":true,"findings":[],"summary":"Context reviewed."}' : "Provider configuration verified.";
+    const response = url.endsWith("/chat/completions") ? {
+      id: "chat-test", object: "chat.completion", created: 1, model: body.model,
+      choices: [{ index: 0, message: toolName ? { role: "assistant", content: null,
+        tool_calls: [{ id: "call-" + index, type: "function", function: { name: toolName, arguments: argumentsJson } }] } :
+        { role: "assistant", content: text }, finish_reason: toolName ? "tool_calls" : "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    } : {
+      id: "resp-test", object: "response", created_at: 1, status: "completed", model: body.model,
+      output: toolName ? [{ id: "fc-" + index, type: "function_call", call_id: "call-" + index,
+        name: toolName, arguments: argumentsJson, status: "completed" }] :
+        [{ id: "msg-test", type: "message", role: "assistant", status: "completed",
+          content: [{ type: "output_text", text, annotations: [] }] }],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2,
+        input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } },
+    };
+    return new Response(JSON.stringify(response), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  const goal = "Audit TezJet-Agent-Factory database without modifying files";
+  const gemini = await runAiCommander(goal, {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-test-key", GEMINI_MODEL: "gemini-test-model" },
+    dependencies: dependencies([]),
+  });
+  const openai = await runAiCommander(goal, {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "openai-test-key", OPENAI_MODEL: "openai-test-model" },
+    dependencies: dependencies([]),
+  });
+  await runAiCommander(goal, {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "second-openai-test-key", OPENAI_MODEL: "second-openai-test-model" },
+    dependencies: dependencies([]),
+  });
+  await runAiCommander(goal, {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "second-gemini-test-key", GEMINI_MODEL: "second-gemini-test-model" },
+    dependencies: dependencies([]),
+  });
+  await runAiCommander(goal, {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "third-gemini-test-key", GEMINI_MODEL: "third-gemini-test-model" },
+    dependencies: dependencies([]),
+  });
+  assert.ok(gemini.events.some(event => event.type === "tool_completed" && event.details?.tool === "database_specialist"));
+  assert.ok(openai.events.some(event => event.type === "tool_completed" && event.details?.tool === "database_specialist"));
+  assert.deepEqual(requests, [
+    ...Array.from({ length: 4 }, () => ({ url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: "Bearer gemini-test-key", model: "gemini-test-model" })),
+    ...Array.from({ length: 4 }, () => ({ url: "https://api.openai.com/v1/responses", key: "Bearer openai-test-key", model: "openai-test-model" })),
+    { url: "https://api.openai.com/v1/responses", key: "Bearer second-openai-test-key", model: "second-openai-test-model" },
+    { url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: "Bearer second-gemini-test-key", model: "second-gemini-test-model" },
+    { url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: "Bearer third-gemini-test-key", model: "third-gemini-test-model" },
+  ]);
 });

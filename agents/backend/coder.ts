@@ -1,14 +1,14 @@
-import { Agent, run } from "@openai/agents";
+import { Agent, Runner } from "@openai/agents";
 import { configureModelProvider } from "../../commander/modelProvider.js";
 import { providerRequirementMessage } from "../../commander/providerConfig.js";
 
 export type ProposedChange = { path: string; content: string; message: string };
 export type CoderResult = { summary: string; files: ProposedChange[] };
 
-export function createCoderAgent(env: NodeJS.ProcessEnv = process.env) {
+function createCoderExecution(env: NodeJS.ProcessEnv) {
   const provider = configureModelProvider(env);
   if (provider.provider === "none") throw new Error(providerRequirementMessage(env));
-  return new Agent({
+  const coder = new Agent({
     ...(provider.model ? { model: provider.model } : {}),
     name: "TezJet Coder",
     instructions: [
@@ -21,11 +21,16 @@ export function createCoderAgent(env: NodeJS.ProcessEnv = process.env) {
       "If the context is insufficient, return an empty files array and explain why in summary.",
     ].join("\n"),
   });
+  return { coder, runner: new Runner({ modelProvider: provider.modelProvider }) };
+}
+
+export function createCoderAgent(env: NodeJS.ProcessEnv = process.env) {
+  return createCoderExecution(env).coder;
 }
 
 export async function generateChanges(goal: string, repositoryContext: string, env: NodeJS.ProcessEnv = process.env): Promise<CoderResult> {
-  const coder = createCoderAgent(env);
-  const result = await run(coder, `GOAL:\n${goal}\n\nREPOSITORY CONTEXT:\n${repositoryContext}`);
+  const { coder, runner } = createCoderExecution(env);
+  const result = await runner.run(coder, `GOAL:\n${goal}\n\nREPOSITORY CONTEXT:\n${repositoryContext}`);
   const raw = String(result.finalOutput ?? "").trim();
   const cleaned = raw.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
   const parsed = JSON.parse(cleaned) as CoderResult;
