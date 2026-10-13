@@ -7,6 +7,9 @@ import {
 } from "@openai/agents";
 import { selectProviderConfig } from "./providerConfig.js";
 
+/** Retry only failed HTTP requests inside the provider client, never an entire agent run. */
+export const GEMINI_TRANSIENT_MAX_RETRIES = 4;
+
 /** Configure the SDK for the current invocation, including provider switches. */
 export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
   const config = selectProviderConfig(env);
@@ -14,6 +17,9 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
 
   const client = new OpenAI({
     apiKey: config.apiKey,
+    // OpenAI SDK retries 408/409/429/5xx with bounded backoff and Retry-After.
+    // This is scoped to a failed model HTTP request; do not replay runner.run().
+    maxRetries: config.provider === "gemini" ? GEMINI_TRANSIENT_MAX_RETRIES : 2,
     baseURL: config.provider === "gemini" ? config.baseURL : "https://api.openai.com/v1",
   });
   // The SDK's shared runner/provider caches its first client. Each factory run
