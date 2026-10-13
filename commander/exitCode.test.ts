@@ -9,6 +9,11 @@ test("maps Commander statuses to exit codes", () => {
   assert.equal(commanderExitCode("blocked"), 10);
   assert.equal(commanderExitCode("needs-review"), 11);
   assert.equal(commanderExitCode("unexpected"), COMMANDER_EXIT_CODES.unhandledError);
+  assert.equal(commanderExitCode("ci-passed"), 0);
+  for (const status of ["ci-repair", "test-evidence-blocked", "no-change"]) {
+    assert.equal(commanderExitCode(status), COMMANDER_EXIT_CODES.blocked);
+  }
+  assert.equal(commanderExitCode("ci-blocked"), COMMANDER_EXIT_CODES.needsReview);
 });
 
 test("CLI exits with 10 when no AI provider key is configured", () => {

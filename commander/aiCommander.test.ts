@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Usage, setTracingDisabled, type Model, type ModelRequest, type ModelResponse } from "@openai/agents";
-import { runAiCommander } from "./aiCommander.js";
+import { createAiCommander, runAiCommander } from "./aiCommander.js";
 import type { AiExecutionDependencies } from "./aiExecution.js";
+import { GitHubClient } from "../github/githubClient.js";
 
 setTracingDisabled(true);
 const repository = "erman-ksv/TezJet-Agent-Factory";
@@ -10,6 +11,29 @@ const baseSha = "a".repeat(40);
 const candidateSha = "b".repeat(40);
 const branch = "fix/sdk-execution-test";
 const names = ["explore_tezjet", "code_tezjet", "security_review", "final_review", "publish_change_set", "test_tezjet"];
+
+test("default TezJet handlers reject a green job that skips API integration tests", async t => {
+  t.mock.method(GitHubClient.prototype, "getCommitSha", async () => baseSha);
+  t.mock.method(GitHubClient.prototype, "getFile", async (path: string) => ({
+    path, sha: "c".repeat(40), content: path === "package.json" ? '{"scripts":{"test":"run-tests"}}' : "export const inspected = true;",
+  }));
+  t.mock.method(GitHubClient.prototype, "getWorkflowRuns", async () => [{
+    id: 321, run_attempt: 1, name: "CI", status: "completed", conclusion: "success", head_sha: baseSha,
+    html_url: "https://github.com/erman-ksv/TezJet/actions/runs/321",
+  }]);
+  t.mock.method(GitHubClient.prototype, "getWorkflowJobs", async () => ({ jobs: [{
+    id: 1, run_id: 321, run_attempt: 1, head_sha: baseSha, name: "Typecheck and API tests", status: "completed", conclusion: "success",
+    html_url: "https://github.com/erman-ksv/TezJet/actions/runs/321/job/1", steps: [
+      { number: 1, name: "Typecheck", status: "completed", conclusion: "success" },
+      { number: 2, name: "API integration tests", status: "completed", conclusion: "skipped" },
+    ],
+  }] }));
+  const { session } = createAiCommander("Audit TezJet repository without changing files", { env: {} });
+  await session.explore();
+  const result = await session.test();
+  assert.equal(result.testsExecuted, false);
+  assert.equal("executionEvidence" in result && result.executionEvidence?.status, "failed");
+});
 
 /** The actual SDK runner dispatches these model tool calls; no provider/network is used. */
 class ScriptedModel implements Model {
@@ -94,5 +118,25 @@ test("branch advancement during the final model turn invalidates completed execu
   assert.equal(result.status, "needs-review");
   assert.equal(result.evidence.testsExecuted, false);
   assert.equal(result.evidence.tests?.status, "sha-mismatch");
+  assert.equal(checks, 2);
+});
+
+test("failed final head lookup clears SDK Commander test evidence", async () => {
+  const calls: string[] = [];
+  const deps = dependencies(calls);
+  let checks = 0;
+  deps.getCandidateHead = async () => {
+    if (++checks > 1) throw new Error("Final GitHub head lookup failed");
+    return candidateSha;
+  };
+  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+    model: new ScriptedModel(names), env: { AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" }, dependencies: deps,
+    publication: { branch, title: "Fix verification", body: "Require successful final head verification." },
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.evidence.testsExecuted, false);
+  assert.equal(result.evidence.tests, undefined);
+  assert.ok(result.reasons.includes("Final GitHub head lookup failed"));
+  assert.ok(result.events.some(event => event.type === "tool_failed" && event.details?.tool === "verify_final_head"));
   assert.equal(checks, 2);
 });

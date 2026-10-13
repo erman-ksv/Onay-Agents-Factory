@@ -52,11 +52,19 @@ export class AgentRunJournal {
       type,
       actor,
       message,
-      ...(details ? { details } : {}),
+      ...(details ? { details: structuredClone(details) } : {}),
     };
     this.entries.push(event);
-    for (const listener of this.listeners) listener(event);
-    return event;
+    for (const listener of this.listeners) {
+      try {
+        listener(structuredClone(event));
+      } catch {
+        // Observers must not interrupt execution or corrupt the task journal.
+        // Remove a broken observer so later tool events can still be recorded.
+        this.listeners.delete(listener);
+      }
+    }
+    return structuredClone(event);
   }
 
   handoff(from: string, to: string, message: string, details?: Record<string, unknown>) {

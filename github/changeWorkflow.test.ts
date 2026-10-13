@@ -99,7 +99,7 @@ test("generic CI gates require the configured steps for the exact candidate SHA"
     return [{ id: 1, name: "CI", status: "completed", conclusion: "success", html_url: "https://example.test/run/1", head_sha: candidateSha }];
   });
   t.mock.method(GitHubClient.prototype, "getWorkflowJobs", async () => ({ jobs: [{
-    id: 1, name: "typecheck", status: "completed", conclusion: "success", html_url: "https://example.test/job/1",
+    id: 1, run_id: 1, head_sha: candidateSha, name: "typecheck", status: "completed", conclusion: "success", html_url: "https://example.test/job/1",
     steps: [{ name: "Typecheck", number: 1, status: "completed", conclusion: "success" }],
   }] }));
   const options = { repository, requiredStepNames: ["Typecheck", "Test"] };
@@ -117,7 +117,7 @@ test("CI wait forwards repository and step gates when checking a successful cand
     return [{ id: 1, name: "CI", status: "completed", conclusion: "success", html_url: "https://example.test/run/1", head_sha: candidateSha }];
   });
   t.mock.method(GitHubClient.prototype, "getWorkflowJobs", async () => ({ jobs: [{
-    id: 1, name: "typecheck", status: "completed", conclusion: "success", html_url: "https://example.test/job/1",
+    id: 1, run_id: 1, head_sha: candidateSha, name: "typecheck", status: "completed", conclusion: "success", html_url: "https://example.test/job/1",
     steps: ["Typecheck", "Test"].map((name, index) => ({ name, number: index + 1, status: "completed", conclusion: "success" })),
   }] }));
   const result = await waitForCiGate({ branch, repository, headSha: candidateSha, requiredNames: ["typecheck"], requiredStepNames: ["Typecheck", "Test"] });

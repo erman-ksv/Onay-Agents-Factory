@@ -67,6 +67,8 @@ export class AiExecutionSession {
   invoke<T>(actor: string, tool: string, action: () => Promise<T> | T): Promise<T | { error: string }> {
     const operation = this.queue.then(async () => {
       this.failures.delete(tool);
+      this.completedActors.delete(actor);
+      this.assessments.delete(actor);
       this.journal.handoff("commander", actor, "Commander invoked an executable tool.", { tool });
       this.journal.record("agent_started", actor, "Agent tool execution started.", { tool });
       this.journal.record("tool_started", actor, "Executing tool.", { tool });
@@ -91,6 +93,15 @@ export class AiExecutionSession {
 
   async explore() {
     if (this.publishAttempted) throw new Error("Cannot replace repository context after a publication attempt.");
+    // A failed refresh must not leave the previous context or its gates usable.
+    this.baseSha = undefined;
+    this.context = undefined;
+    this.files = [];
+    this.review = undefined;
+    this.security = undefined;
+    this.tests = undefined;
+    this.invalidateAssessments();
+    this.completedActors.delete("explorer");
     const sha = await this.dependencies.getHead();
     if (!sha.trim()) throw new Error("Explorer could not resolve the repository commit.");
     const exploration = await this.dependencies.explore(sha);
@@ -101,11 +112,6 @@ export class AiExecutionSession {
     }
     this.baseSha = sha;
     this.context = available.map(file => `FILE: ${file.path}\n${file.content}`).join("\n\n");
-    this.files = [];
-    this.review = undefined;
-    this.security = undefined;
-    this.tests = undefined;
-    this.invalidateAssessments();
     this.journal.record("artifact_created", "explorer", "Repository context read from an immutable commit.", {
       repository: this.options.repository, baseSha: sha, files: available.map(file => file.path),
     });
@@ -136,10 +142,11 @@ export class AiExecutionSession {
   }
 
   reviewChanges() {
+    this.review = undefined;
     if (!this.files.length) throw new Error("Independent review requires a generated change set.");
-    this.review = this.dependencies.review(this.files);
+    this.review = structuredClone(this.dependencies.review(structuredClone(this.files)));
     if (this.review.ready) this.journal.record("verification_passed", "reviewer", "Change policy review passed.", { files: this.files.map(file => file.path) });
-    return this.review;
+    return structuredClone(this.review);
   }
 
   specialistContext() {
@@ -156,18 +163,18 @@ export class AiExecutionSession {
     if (checked.findings.some(finding => finding.severity === "blocker" || finding.severity === "high")) checked.ready = false;
     this.assessments.set(actor, checked);
     this.journal.record("artifact_created", actor, "Specialist assessment recorded for the current proposal.", { ready: checked.ready, findings: checked.findings });
-    return { ...checked, verifiedExecution: false };
+    return { ...structuredClone(checked), verifiedExecution: false };
   }
 
   async inspectSecurity() {
     if (!this.baseSha) throw new Error("Security requires successful repository exploration first.");
     if (!this.options.auditOnly && !this.files.length) throw new Error("Security requires a generated change set.");
     this.security = undefined;
-    const repository = await this.dependencies.inspectSecurity(this.baseSha);
-    const proposed = this.files.length ? this.dependencies.scan(this.files) : null;
+    const repository = structuredClone(await this.dependencies.inspectSecurity(this.baseSha));
+    const proposed = this.files.length ? structuredClone(this.dependencies.scan(structuredClone(this.files))) : null;
     this.security = { repository, proposed };
     if (this.securityClean()) this.journal.record("verification_passed", "security", "Repository and proposed-change secret scans passed.");
-    return this.security;
+    return structuredClone(this.security);
   }
 
   private securityClean() {
@@ -197,22 +204,22 @@ export class AiExecutionSession {
     if (!publication.head_sha?.trim() || !publication.html_url?.trim() || !Number.isInteger(publication.number)) {
       throw new Error("GitHub did not return a verifiable draft PR and candidate commit.");
     }
-    this.publication = publication;
+    this.publication = structuredClone(publication);
     this.tests = undefined;
     this.journal.record("artifact_created", "github", "Files written and a draft PR created.", {
       repository: this.options.repository, branch: this.options.publication.branch,
       headSha: publication.head_sha, url: publication.html_url, files: this.files.map(file => file.path),
     });
-    return publication;
+    return structuredClone(this.publication);
   }
 
   async test() {
+    this.tests = undefined;
     const discovery = await this.dependencies.discoverTests();
     const sha = this.options.auditOnly ? this.baseSha : this.publication?.head_sha;
     const ref = this.options.auditOnly ? this.options.ref : this.options.publication?.branch;
-    this.tests = undefined;
     if (!sha || !ref) return { discovery, testsExecuted: false, note: "No published candidate exists. Test discovery does not verify proposed files." };
-    const evidence = await this.dependencies.verify(sha, ref);
+    const evidence = structuredClone(await this.dependencies.verify(sha, ref));
     if (!this.options.auditOnly && await this.dependencies.getCandidateHead(ref) !== sha) {
       evidence.testsExecuted = false;
       evidence.status = "sha-mismatch";
@@ -222,7 +229,7 @@ export class AiExecutionSession {
     if (this.testsVerified()) this.journal.record("verification_passed", "tester", "Required CI jobs and test steps passed for the exact commit.", {
       repository: this.options.repository, expectedSha: sha, runs: evidence.evidence.map(run => run.url),
     });
-    return { discovery, executionEvidence: evidence, testsExecuted: this.testsVerified() };
+    return { discovery, executionEvidence: structuredClone(evidence), testsExecuted: this.testsVerified() };
   }
 
   private testsVerified() {
@@ -236,12 +243,15 @@ export class AiExecutionSession {
   async verifyFinalCandidate() {
     if (this.options.auditOnly || !this.testsVerified() || !this.publication || !this.options.publication) return;
     await this.invoke("tester", "verify_final_head", async () => {
+      const evidence = this.tests!;
+      this.tests = undefined;
       const headSha = await this.dependencies.getCandidateHead(this.options.publication!.branch);
       if (headSha !== this.publication!.head_sha) {
-        this.tests!.testsExecuted = false;
-        this.tests!.status = "sha-mismatch";
-        this.tests!.notes.push("The candidate branch changed before Commander returned its final result.");
+        evidence.testsExecuted = false;
+        evidence.status = "sha-mismatch";
+        evidence.notes.push("The candidate branch changed before Commander returned its final result.");
       }
+      this.tests = evidence;
       return { headSha, expectedSha: this.publication!.head_sha, verified: this.testsVerified() };
     });
   }
@@ -266,10 +276,10 @@ export class AiExecutionSession {
       status === "completed" ? "Task execution evidence verified. Merge and deployment remain separate actions." : "Task execution could not be fully verified.", { status, reasons });
     return {
       status, output, reasons, missingActors, taskId: this.journal.taskId,
-      evidence: { repository: this.options.repository, baseSha: this.baseSha, proposedFiles: this.files.map(file => file.path),
+      evidence: structuredClone({ repository: this.options.repository, baseSha: this.baseSha, proposedFiles: this.files.map(file => file.path),
         changedFiles: this.publication ? this.files.map(file => file.path) : [], publication: this.publication,
         publicationAttempted: this.publishAttempted, publicationBranch: this.options.publication?.branch,
-        review: this.review, security: this.security, assessments: Object.fromEntries(this.assessments), tests: this.tests, testsExecuted: this.testsVerified() },
+        review: this.review, security: this.security, assessments: Object.fromEntries(this.assessments), tests: this.tests, testsExecuted: this.testsVerified() }),
       events: this.journal.snapshot(),
     };
   }

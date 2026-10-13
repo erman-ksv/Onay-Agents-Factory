@@ -47,8 +47,8 @@ const run = (headSha: string, status = "completed", conclusion: string | null = 
   head_sha: headSha,
   html_url: "https://example.test/actions/runs/42",
 });
-const jobs: CiJob[] = [{ name: "Typecheck and API tests", status: "completed", conclusion: "success" }];
-const factoryJobs: CiJob[] = [{ name: "typecheck", status: "completed", conclusion: "success", steps: [
+const jobs: CiJob[] = [{ run_id: 42, name: "Typecheck and API tests", status: "completed", conclusion: "success" }];
+const factoryJobs: CiJob[] = [{ run_id: 42, name: "typecheck", status: "completed", conclusion: "success", steps: [
   { name: "Typecheck", status: "completed", conclusion: "success" },
   { name: "Test", status: "completed", conclusion: "success" },
 ] }];
@@ -82,7 +82,7 @@ test("does not accept CI when the required test job is missing", () => {
 test("does not accept a failed required test job", () => {
   const result = evaluateTestExecutionEvidence(
     [run(expectedSha)],
-    [{ name: "Typecheck and API tests", status: "completed", conclusion: "failure" }],
+    [{ run_id: 42, name: "Typecheck and API tests", status: "completed", conclusion: "failure" }],
     expectedSha,
   );
   assert.equal(result.testsExecuted, false);
@@ -100,7 +100,7 @@ test("reports individual CI step evidence for typecheck and test", () => {
 
 test("does not pass when a required CI step is missing", () => {
   const result = evaluateTestExecutionEvidence([run(expectedSha)], [
-    { name: "typecheck", status: "completed", conclusion: "success", steps: [
+    { run_id: 42, name: "typecheck", status: "completed", conclusion: "success", steps: [
       { name: "Typecheck", status: "completed", conclusion: "success" },
     ] },
   ], expectedSha, ["typecheck"], ["Typecheck", "Test"]);
@@ -110,7 +110,7 @@ test("does not pass when a required CI step is missing", () => {
 
 test("does not pass when the Test step failed even if job evidence is inconsistent", () => {
   const result = evaluateTestExecutionEvidence([run(expectedSha)], [
-    { name: "typecheck", status: "completed", conclusion: "success", steps: [
+    { run_id: 42, name: "typecheck", status: "completed", conclusion: "success", steps: [
       { name: "Typecheck", status: "completed", conclusion: "success" },
       { name: "Test", status: "completed", conclusion: "failure" },
     ] },

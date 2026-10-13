@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { analyzeTezJetTask, generateAndPrepareTezJetChange } from "./pipeline.js";
 import type { AgentRunEvent } from "./agentRunJournal.js";
+import { commanderExitCode } from "../commander/exitCode.js";
 
 export type PipelineCliOptions = {
   goal: string;
@@ -100,6 +101,7 @@ async function main() {
       console.log(JSON.stringify({ type: "agent_event", event }));
     });
     console.log(JSON.stringify(result, null, 2));
+    if ("result" in result) process.exitCode = commanderExitCode(result.result.status);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
