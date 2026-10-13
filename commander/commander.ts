@@ -7,7 +7,7 @@ import { executePlan } from "./executor.js";
 import { isAgentFactoryTarget, planTask, shouldUseAiCommander } from "./planner.js";
 import { summarizeExecution } from "./summary.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
-import { selectProviderConfig } from "./providerConfig.js";
+import { providerRequirementMessage, selectProviderConfig } from "./providerConfig.js";
 import { getTargetRepository } from "../github/repositoryConfig.js";
 import { commanderExitCode } from "./exitCode.js";
 import { parseCommanderArgs } from "./commanderArgs.js";
@@ -23,7 +23,13 @@ const journal = new AgentRunJournal(goal, undefined, (event) => {
   console.log(JSON.stringify({ type: "agent_event", event }));
 });
 
-if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "none", process.env.AGENT_FACTORY_MODE)) {
+const provider = selectProviderConfig(process.env);
+if (provider.provider === "none" && process.env.AGENT_FACTORY_PROVIDER?.trim() && process.env.AGENT_FACTORY_MODE !== "deterministic") {
+  const reasons = [providerRequirementMessage(process.env)];
+  journal.record("blocked", "commander", reasons[0]);
+  console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result: { status: "blocked", reasons }, events: journal.snapshot() }, null, 2));
+  process.exitCode = commanderExitCode("blocked");
+} else if (shouldUseAiCommander(goal, provider.provider !== "none", process.env.AGENT_FACTORY_MODE)) {
   journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
   const result = await runAiCommander(goal, { journal, publication });
@@ -58,7 +64,7 @@ if (shouldUseAiCommander(goal, selectProviderConfig(process.env).provider !== "n
         repositoryContext: available.map((file) => `FILE: ${file.path}\n${file.content}`).join("\n\n"),
       };
     },
-    ...(selectProviderConfig(process.env).provider !== "none" ? {
+    ...(provider.provider !== "none" ? {
       coder: async ({ goal, previousResults }) => {
         const exploration = previousResults.find((result) => result.agent === "explorer");
         const context = exploration?.output as { repositoryContext?: string } | undefined;

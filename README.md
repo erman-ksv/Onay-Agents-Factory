@@ -36,9 +36,11 @@ Rasul is an AI legal research assistant, not a licensed lawyer. For each legal t
 
 Copy `.env.example` to your runtime environment and provide:
 
-- `GEMINI_API_KEY` — enables Gemini AI orchestration and specialist delegation; Gemini takes precedence when both provider keys are configured.
+- `AGENT_FACTORY_PROVIDER` — optional explicit `gemini` or `openai` choice. The selected provider requires its own key and never falls back to another provider. When unset, automatic selection gives Gemini precedence.
+- `GEMINI_API_KEY` — enables Gemini AI orchestration and specialist delegation.
 - `GEMINI_MODEL` — optional model override. The default is `gemini-3.8-flash` when this value is absent or blank; an explicit value takes precedence.
-- `OPENAI_API_KEY` — enables OpenAI AI orchestration when no Gemini key is configured.
+- `OPENAI_API_KEY` — enables OpenAI AI orchestration when explicitly selected, or when automatic selection finds no Gemini key.
+- `OPENAI_MODEL` — optional OpenAI model override; blank uses the SDK default. Commander and Coder configure the selected provider and model for each invocation.
 - `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
 - `TEZJET_REPOSITORY=erman-ksv/TezJet`
 - `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet,erman-ksv/TezJet-Agent-Factory` — explicitly allow only repositories the agent may inspect or modify.
@@ -70,6 +72,12 @@ AGENT_FACTORY_ENABLE_GITHUB_WRITES=true pnpm dev -- "Fix a confirmed TezJet bug"
 The publication target comes from the task configuration; the model cannot supply a different repository, branch, or PR metadata. Factory tasks target `dev/agent-factory-core` and require the `typecheck` CI job with successful `Typecheck` and `Test` steps. Set `AGENT_FACTORY_MODE=deterministic` to use the existing deterministic inspection/proposal executor, which does not publish through Commander.
 
 Commander exits with `0` for verified completion, `10` for blocked execution, and `11` when a proposal or result still needs review. `11` does not identify a provider/API failure. Inspect `result.status`, `result.reasons`, and `result.evidence` in AI mode for the actual outcome. A missing or empty model explanation cannot mark a run completed.
+
+## Verify the real model cycle
+
+The `live-cycle` command runs the production Commander with the selected provider, an immutable expected base SHA, and persisted task evidence. It starts with a read-only audit. Explicit publication options can then request the small journal task-ID fix, limited by the host to two files, with a draft PR and CI verification for the final commit. Its unit tests use a marked test executor and do not prove a live provider run.
+
+See [the live-cycle runbook](docs/LIVE_CYCLE_RUNBOOK.md) for Gemini and OpenAI commands, required runtime configuration, artifacts, and acceptance criteria. The current verification uses Gemini; the CLI also supports explicit OpenAI selection.
 
 ## Run the TezJet change pipeline
 

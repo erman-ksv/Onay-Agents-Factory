@@ -28,6 +28,8 @@ export const AGENT_FACTORY_EXPLORER_FILES = [
   "github/githubClient.ts",
   "orchestration/pipeline.ts",
   "orchestration/retryLoop.ts",
+  "orchestration/agentRunJournal.ts",
+  "orchestration/agentRunJournal.test.ts",
   "orchestration/dashboardServer.ts",
 ] as const;
 

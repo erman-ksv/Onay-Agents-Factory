@@ -91,6 +91,84 @@ test("AI mutation completes only after actual tools publish and verify the exact
   assert.equal(result.events.find(event => event.type === "verification_passed" && event.actor === "tester")?.details?.expectedSha, candidateSha);
 });
 
+test("a generated change outside the host file scope is rejected without storing or publishing any files", async () => {
+  const unexpected = { path: "commander/planner.ts", content: "export const unrelated = true;\n", message: "Unrequested planner change" };
+  const { session, calls } = setup({ generate: async () => ({ summary: "Exceeds requested work", files: [...files, unexpected] }) },
+    { allowedChangePaths: [files[0].path] });
+  await session.invoke("explorer", "explore_tezjet", () => session.explore());
+  const coding = await session.invoke("coder", "code_tezjet", () => session.generate());
+  assert.ok("error" in coding);
+  assert.match(coding.error, /outside the configured task scope: commander\/planner\.ts/);
+  const result = session.finish("Coder exceeded the requested scope.");
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.evidence.proposedFiles, []);
+  assert.deepEqual(result.evidence.changedFiles, []);
+  assert.equal(result.events.some(event => event.type === "artifact_created" && event.actor === "coder"), false);
+  assert.ok("error" in await session.invoke("github", "publish_changes", () => session.publish()));
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+});
+
+test("host file scope matches exact paths and an empty scope does not authorize changes", async t => {
+  const variants = [
+    { name: "empty scope", allowed: [] },
+    { name: "wildcard scope", allowed: ["commander/*"] },
+    { name: "leading path alias", allowed: ["./" + files[0].path] },
+    { name: "different casing", allowed: [files[0].path.toUpperCase()] },
+  ];
+  for (const { name, allowed } of variants) await t.test(name, async () => {
+    const { session, calls } = setup({}, { allowedChangePaths: allowed });
+    await session.invoke("explorer", "explore_tezjet", () => session.explore());
+    const result = await session.invoke("coder", "code_tezjet", () => session.generate());
+    assert.ok("error" in result);
+    assert.match(result.error, /outside the configured task scope/);
+    assert.deepEqual(session.finish("Scope rejected.").evidence.proposedFiles, []);
+    assert.equal(calls.some(call => call.tool === "publish"), false);
+  });
+});
+
+test("a scope narrowed after reviews is rechecked before starting publication", async () => {
+  const allowedChangePaths = [files[0].path];
+  const { session, calls } = setup({}, { allowedChangePaths });
+  await prepare(session);
+  allowedChangePaths[0] = "orchestration/agentRunJournal.ts";
+  const publicationResult = await session.invoke("github", "publish_changes", () => session.publish());
+  assert.ok("error" in publicationResult);
+  assert.match(publicationResult.error, /outside the configured task scope/);
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+  const result = session.finish("The host changed the permitted file scope.");
+  assert.equal(result.status, "blocked");
+  assert.equal(result.evidence.publicationAttempted, false);
+  assert.deepEqual(result.evidence.changedFiles, []);
+  assert.equal(result.events.some(event => event.details?.tool === "write_candidate"), false);
+});
+
+test("an explicit valid host file scope permits the reviewed and verified candidate", async () => {
+  const { session, calls } = setup({}, { allowedChangePaths: [files[0].path] });
+  const result = await execute(session);
+  assert.equal(result.status, "completed");
+  assert.deepEqual(result.reasons, []);
+  assert.deepEqual(calls.filter(call => call.tool === "publish").map(call => call.args), [[files, baseSha]]);
+  assert.deepEqual(result.evidence.changedFiles, [files[0].path]);
+});
+
+test("regeneration outside the host scope invalidates an earlier approved proposal", async () => {
+  let generation = 0;
+  const { session, calls } = setup({ generate: async () => {
+    generation++;
+    return { summary: "Requested change", files: generation === 1 ? structuredClone(files)
+      : [{ ...files[0], path: "commander/planner.ts" }] };
+  } }, { allowedChangePaths: [files[0].path] });
+  await prepare(session);
+  assert.ok("error" in await session.invoke("coder", "code_tezjet", () => session.generate()));
+  const result = session.finish("Coder changed an unapproved file on the second attempt.");
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.evidence.proposedFiles, []);
+  assert.equal(result.evidence.review, undefined);
+  assert.equal(result.evidence.security, undefined);
+  assert.ok("error" in await session.invoke("github", "publish_changes", () => session.publish()));
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+});
+
 test("a model saying done without executing tools is blocked", () => {
   const { session, calls } = setup();
   const result = session.finish("Done. I changed the code and all tests passed.");

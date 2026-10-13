@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test commander/*.test.ts agents/*/*.test.ts github/*.test.ts orchestration/*.test.ts",
     "pipeline": "tsx orchestration/cli.ts",
+    "live-cycle": "tsx orchestration/liveCycle.ts",
     "dashboard": "tsx orchestration/dashboardServer.ts"
   },
   "dependencies": {

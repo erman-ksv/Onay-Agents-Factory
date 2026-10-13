@@ -34,6 +34,8 @@ export type AiExecutionOptions = {
   publication?: { branch: string; title: string; body: string };
   writesEnabled: boolean;
   journal?: AgentRunJournal;
+  /** Exact repository paths authorized by the host for this task. */
+  allowedChangePaths?: readonly string[];
 };
 
 /** Evidence belongs to this run, never to a model's prose or tool arguments. */
@@ -60,6 +62,15 @@ export class AiExecutionSession {
     this.assessments.clear();
     for (const actor of this.completedActors) {
       if (actor !== "explorer") this.completedActors.delete(actor);
+    }
+  }
+
+  private assertChangeScope(files: readonly ProposedChange[]) {
+    const allowed = this.options.allowedChangePaths;
+    if (allowed === undefined) return;
+    const outsideScope = files.filter(file => !allowed.includes(file.path)).map(file => file.path);
+    if (outsideScope.length) {
+      throw new Error("Proposed change paths are outside the configured task scope: " + outsideScope.join(", "));
     }
   }
 
@@ -134,6 +145,7 @@ export class AiExecutionSession {
         typeof file.content !== "string" || !file.content.trim() || typeof file.message !== "string" || !file.message.trim())) {
       throw new Error("Coder returned no valid explicit change set.");
     }
+    this.assertChangeScope(generated.files);
     this.files = structuredClone(generated.files);
     this.journal.record("artifact_created", "coder", "Generated a proposed change set; files have not yet been written.", {
       files: this.files.map(file => file.path), baseSha: this.baseSha,
@@ -196,6 +208,7 @@ export class AiExecutionSession {
     const missing = this.options.requiredActors.filter(actor => actor !== "tester" && !this.completedActors.has(actor));
     if (missing.length) throw new Error("Required specialists have not returned: " + missing.join(", "));
     if (this.publishAttempted) throw new Error("Publication has already been attempted; inspect its branch before retrying.");
+    this.assertChangeScope(this.files);
     this.publishAttempted = true;
     this.journal.record("tool_started", "github", "Publication attempt started; a failure may leave a branch requiring inspection.", {
       tool: "write_candidate", branch: this.options.publication.branch, files: this.files.map(file => file.path), baseSha: this.baseSha,
