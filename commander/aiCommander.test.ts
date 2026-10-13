@@ -371,7 +371,7 @@ test("Gemini SDK retries a 503 after an executed Explorer tool without executing
   let explorerCalls = 0;
   t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
-    assert.match(url, /generativelanguage\\.googleapis\\.com\\/v1beta\\/openai\\/chat\\/completions/);
+    assert.equal(url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
     const attempt = ++httpCalls;
     if (attempt === 2) {
       return new Response(JSON.stringify({ error: { message: "temporary overload" } }), {
