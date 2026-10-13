@@ -1,4 +1,4 @@
-import { filterWorkflowRunsBySha, GitHubClient, type WorkflowRun } from "./githubClient.js";
+import { assertCommitSha, filterWorkflowRunsBySha, GitHubClient, type WorkflowRun } from "./githubClient.js";
 import { getTargetRepository } from "./repositoryConfig.js";
 import { assertRepositoryAllowed, resolveAllowedRepositories } from "./repositoryPolicy.js";
 
@@ -7,7 +7,23 @@ export type CiGateResult =
   | { status: "failed" | "pending" | "no-runs"; runs: WorkflowRun[] };
 
 export type CiJobStep = { name: string; status: string; conclusion: string | null };
-export type CiJob = { name: string; status: string; conclusion: string | null; steps?: CiJobStep[] };
+export type CiJob = {
+  name: string; status: string; conclusion: string | null; steps?: CiJobStep[];
+  run_id?: number; run_attempt?: number; head_sha?: string;
+};
+
+/** Only jobs with provenance from the selected run and attempt can prove CI. */
+export function filterCiJobsForRuns(runs: WorkflowRun[], jobs: CiJob[]): CiJob[] {
+  return jobs.filter(job => runs.some(run => job.run_id === run.id &&
+    (run.run_attempt === undefined || job.run_attempt === run.run_attempt) &&
+    (!job.head_sha || !run.head_sha || job.head_sha.toLowerCase() === run.head_sha.toLowerCase())));
+}
+
+function matchesJobName(actual: string, required: string): boolean {
+  const name = actual.trim().toLowerCase();
+  const expected = required.trim().toLowerCase();
+  return !!expected && (name === expected || (name.startsWith(`${expected} (`) && name.endsWith(")")));
+}
 
 export function evaluateCiJobs(
   runs: WorkflowRun[],
@@ -24,24 +40,27 @@ export function evaluateCiJobs(
 
   if (!requiredNames.length && !requiredStepNames.length) return { status: "passed", runs };
 
-  const normalizedJobs = jobs.map(job => ({ ...job, normalizedName: job.name.toLowerCase() }));
-  const required = requiredNames.map(name => name.toLowerCase());
-  const matched = required.map(name => normalizedJobs.filter(job => job.normalizedName.includes(name)));
+  const verifiedJobs = filterCiJobsForRuns(runs, jobs);
+  const matched = requiredNames.map(name => verifiedJobs.filter(job => matchesJobName(job.name, name)));
 
   // Missing required checks are not evidence of success. Keep the gate closed.
   if (matched.some(matches => matches.length === 0)) return { status: "pending", runs };
-  const requiredJobs = matched.flat();
+  const requiredJobs = requiredNames.length ? [...new Set(matched.flat())] : verifiedJobs;
+  if (!requiredJobs.length) return { status: "pending", runs };
   if (requiredJobs.some(job => job.status !== "completed")) return { status: "pending", runs };
   if (requiredJobs.some(job => job.conclusion !== "success")) return { status: "failed", runs };
 
   if (requiredStepNames.length) {
-    const normalizedSteps = jobs.flatMap(job => (job.steps ?? []).map(step => ({ ...step, normalizedName: step.name.toLowerCase() })));
-    const requiredSteps = requiredStepNames.map(name => name.toLowerCase());
-    const matchedSteps = requiredSteps.map(name => normalizedSteps.filter(step => step.normalizedName === name));
-    if (matchedSteps.some(matches => matches.length === 0)) return { status: "pending", runs };
-    const steps = matchedSteps.flat();
-    if (steps.some(step => step.status !== "completed")) return { status: "pending", runs };
-    if (steps.some(step => step.conclusion !== "success")) return { status: "failed", runs };
+    // Each required job must contain its own required steps. Pooling steps from
+    // unrelated jobs or matrix entries can turn a skipped test into false proof.
+    for (const job of requiredJobs) {
+      const matchedSteps = requiredStepNames.map(name => (job.steps ?? []).filter(step =>
+        !!name.trim() && step.name.trim().toLowerCase() === name.trim().toLowerCase()));
+      if (matchedSteps.some(matches => matches.length === 0)) return { status: "pending", runs };
+      const steps = matchedSteps.flat();
+      if (steps.some(step => step.status !== "completed")) return { status: "pending", runs };
+      if (steps.some(step => step.conclusion !== "success")) return { status: "failed", runs };
+    }
   }
   return { status: "passed", runs };
 }
@@ -63,14 +82,15 @@ export async function checkCiGate(
   const repository = input.repository ?? getTargetRepository();
   assertRepositoryAllowed(repository, resolveAllowedRepositories(process.env.AGENT_ALLOWED_REPOSITORIES, getTargetRepository()));
   const github = new GitHubClient({ repository });
-  const fetchedRuns = await github.getWorkflowRuns(input.branch, input.headSha);
-  // Fail closed if GitHub returns any run that does not belong to the requested commit.
-  const runs = filterWorkflowRunsBySha(fetchedRuns, input.headSha);
+  const expectedSha = input.headSha ?? await github.getCommitSha(input.branch);
+  assertCommitSha(expectedSha);
+  const fetchedRuns = await github.getWorkflowRuns(input.branch, expectedSha);
+  const runs = filterWorkflowRunsBySha(fetchedRuns, expectedSha);
   if (!runs.length) return { status: "no-runs", runs };
 
   const jobGroups = [];
   for (const run of runs) {
-    const result = await github.getWorkflowJobs(run.id);
+    const result = await github.getWorkflowJobs(run.id, run.run_attempt);
     jobGroups.push(...result.jobs);
   }
   return evaluateCiJobs(runs, jobGroups, input.requiredNames ?? [], input.requiredStepNames ?? []);
@@ -83,24 +103,34 @@ export async function waitForCiGate(input: CiGateInput & {
   const timeoutMs = Math.max(10_000, input.timeoutMs ?? 300_000);
   const pollMs = Math.max(2_000, input.pollMs ?? 10_000);
   const started = Date.now();
+  const repository = input.repository ?? getTargetRepository();
+  assertRepositoryAllowed(repository, resolveAllowedRepositories(process.env.AGENT_ALLOWED_REPOSITORIES, getTargetRepository()));
+  const expectedSha = input.headSha ?? await new GitHubClient({ repository }).getCommitSha(input.branch);
+  assertCommitSha(expectedSha);
+  const pinnedInput = { ...input, headSha: expectedSha };
 
   while (Date.now() - started <= timeoutMs) {
-    const gate = await checkCiGate(input);
+    const gate = await checkCiGate(pinnedInput);
     if (gate.status === "passed" || gate.status === "failed") return gate;
     await new Promise(resolve => setTimeout(resolve, pollMs));
   }
 
-  return checkCiGate(input);
+  return checkCiGate(pinnedInput);
 }
 
-export async function getCiFailureContext(branch: string, headSha?: string) {
-  const repository = getTargetRepository();
+export async function getCiFailureContext(
+  branch: string,
+  headSha?: string,
+  requiredNames: string[] = [],
+  options: CiGateOptions = {},
+) {
+  const repository = options.repository ?? getTargetRepository();
   const github = new GitHubClient({ repository });
-  const gate = await checkCiGate(branch, [], headSha);
-  const failed = gate.runs.filter(run => run.conclusion && run.conclusion !== "success");
+  const gate = await checkCiGate(branch, requiredNames, headSha, options);
+  const failed = gate.status === "passed" ? [] : gate.runs;
   const jobs = [];
   for (const run of failed) {
-    const result = await github.getWorkflowJobs(run.id);
+    const result = await github.getWorkflowJobs(run.id, run.run_attempt);
     jobs.push({ run, jobs: result.jobs });
   }
   return { gate, failures: jobs };

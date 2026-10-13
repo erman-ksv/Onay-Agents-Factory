@@ -40,3 +40,43 @@ test("constructor streams the initial task event immediately", () => {
   journal.record("agent_started", "explorer", "Starting exploration.");
   assert.deepEqual(streamed, ["task_received", "agent_started"]);
 });
+
+test("a failing observer cannot block tool events or healthy subscribers", () => {
+  const journal = new AgentRunJournal("task", "task-failure", () => {
+    throw new Error("Disconnected dashboard");
+  });
+  let failedCalls = 0;
+  journal.subscribe(() => {
+    failedCalls++;
+    throw new Error("Disconnected observer");
+  });
+  const received: string[] = [];
+  journal.subscribe((event) => received.push(event.type));
+
+  journal.record("tool_started", "coder", "Writing candidate.");
+  journal.record("tool_completed", "coder", "Candidate written.");
+
+  assert.equal(failedCalls, 1);
+  assert.deepEqual(received, ["tool_started", "tool_completed"]);
+  assert.deepEqual(journal.snapshot().map((event) => event.type), [
+    "task_received", "tool_started", "tool_completed",
+  ]);
+});
+
+test("event inputs, subscribers and returned events cannot rewrite the journal", () => {
+  const journal = new AgentRunJournal("task");
+  const details = { files: ["verified.ts"] };
+  journal.subscribe((event) => {
+    event.actor = "tampered";
+    event.details!.files = ["subscriber.ts"];
+  });
+  let receivedActor = "";
+  journal.subscribe((event) => { receivedActor = event.actor; });
+  const recorded = journal.record("artifact_created", "coder", "Patch created.", details);
+  details.files.push("input.ts");
+  recorded.details!.files = ["return.ts"];
+
+  assert.equal(receivedActor, "coder");
+  assert.equal(journal.snapshot()[1].actor, "coder");
+  assert.deepEqual(journal.snapshot()[1].details?.files, ["verified.ts"]);
+});

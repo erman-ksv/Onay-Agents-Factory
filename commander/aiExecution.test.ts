@@ -91,6 +91,84 @@ test("AI mutation completes only after actual tools publish and verify the exact
   assert.equal(result.events.find(event => event.type === "verification_passed" && event.actor === "tester")?.details?.expectedSha, candidateSha);
 });
 
+test("a generated change outside the host file scope is rejected without storing or publishing any files", async () => {
+  const unexpected = { path: "commander/planner.ts", content: "export const unrelated = true;\n", message: "Unrequested planner change" };
+  const { session, calls } = setup({ generate: async () => ({ summary: "Exceeds requested work", files: [...files, unexpected] }) },
+    { allowedChangePaths: [files[0].path] });
+  await session.invoke("explorer", "explore_tezjet", () => session.explore());
+  const coding = await session.invoke("coder", "code_tezjet", () => session.generate());
+  assert.ok("error" in coding);
+  assert.match(coding.error, /outside the configured task scope: commander\/planner\.ts/);
+  const result = session.finish("Coder exceeded the requested scope.");
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.evidence.proposedFiles, []);
+  assert.deepEqual(result.evidence.changedFiles, []);
+  assert.equal(result.events.some(event => event.type === "artifact_created" && event.actor === "coder"), false);
+  assert.ok("error" in await session.invoke("github", "publish_changes", () => session.publish()));
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+});
+
+test("host file scope matches exact paths and an empty scope does not authorize changes", async t => {
+  const variants = [
+    { name: "empty scope", allowed: [] },
+    { name: "wildcard scope", allowed: ["commander/*"] },
+    { name: "leading path alias", allowed: ["./" + files[0].path] },
+    { name: "different casing", allowed: [files[0].path.toUpperCase()] },
+  ];
+  for (const { name, allowed } of variants) await t.test(name, async () => {
+    const { session, calls } = setup({}, { allowedChangePaths: allowed });
+    await session.invoke("explorer", "explore_tezjet", () => session.explore());
+    const result = await session.invoke("coder", "code_tezjet", () => session.generate());
+    assert.ok("error" in result);
+    assert.match(result.error, /outside the configured task scope/);
+    assert.deepEqual(session.finish("Scope rejected.").evidence.proposedFiles, []);
+    assert.equal(calls.some(call => call.tool === "publish"), false);
+  });
+});
+
+test("a scope narrowed after reviews is rechecked before starting publication", async () => {
+  const allowedChangePaths = [files[0].path];
+  const { session, calls } = setup({}, { allowedChangePaths });
+  await prepare(session);
+  allowedChangePaths[0] = "orchestration/agentRunJournal.ts";
+  const publicationResult = await session.invoke("github", "publish_changes", () => session.publish());
+  assert.ok("error" in publicationResult);
+  assert.match(publicationResult.error, /outside the configured task scope/);
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+  const result = session.finish("The host changed the permitted file scope.");
+  assert.equal(result.status, "blocked");
+  assert.equal(result.evidence.publicationAttempted, false);
+  assert.deepEqual(result.evidence.changedFiles, []);
+  assert.equal(result.events.some(event => event.details?.tool === "write_candidate"), false);
+});
+
+test("an explicit valid host file scope permits the reviewed and verified candidate", async () => {
+  const { session, calls } = setup({}, { allowedChangePaths: [files[0].path] });
+  const result = await execute(session);
+  assert.equal(result.status, "completed");
+  assert.deepEqual(result.reasons, []);
+  assert.deepEqual(calls.filter(call => call.tool === "publish").map(call => call.args), [[files, baseSha]]);
+  assert.deepEqual(result.evidence.changedFiles, [files[0].path]);
+});
+
+test("regeneration outside the host scope invalidates an earlier approved proposal", async () => {
+  let generation = 0;
+  const { session, calls } = setup({ generate: async () => {
+    generation++;
+    return { summary: "Requested change", files: generation === 1 ? structuredClone(files)
+      : [{ ...files[0], path: "commander/planner.ts" }] };
+  } }, { allowedChangePaths: [files[0].path] });
+  await prepare(session);
+  assert.ok("error" in await session.invoke("coder", "code_tezjet", () => session.generate()));
+  const result = session.finish("Coder changed an unapproved file on the second attempt.");
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.evidence.proposedFiles, []);
+  assert.equal(result.evidence.review, undefined);
+  assert.equal(result.evidence.security, undefined);
+  assert.ok("error" in await session.invoke("github", "publish_changes", () => session.publish()));
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+});
+
 test("a model saying done without executing tools is blocked", () => {
   const { session, calls } = setup();
   const result = session.finish("Done. I changed the code and all tests passed.");
@@ -401,4 +479,169 @@ test("read-only audits verify the explored base commit without generating or pub
   assert.equal("error" in await session.invoke("coder", "code_tezjet", () => session.generate()), true);
   assert.equal("error" in await session.invoke("github", "publish_changes", () => session.publish()), true);
   assert.equal(calls.some(call => call.tool === "generate" || call.tool === "publish"), false);
+});
+
+test("failed repository refresh clears the prior context and all proposal gates", async t => {
+  for (const failure of ["resolve", "read"]) await t.test(failure, async () => {
+    let resolutions = 0;
+    let reads = 0;
+    const { session, calls } = setup({
+      getHead: async () => {
+        if (++resolutions > 1 && failure === "resolve") throw new Error("Head lookup failed");
+        return baseSha;
+      },
+      explore: async sha => {
+        if (++reads > 1 && failure === "read") throw new Error("Repository refresh failed");
+        return { repository, ref: sha, files: [{ path: files[0].path, sha: baseSha, content: "old code" }] };
+      },
+    });
+    await prepare(session);
+    assert.ok("error" in await session.invoke("explorer", "explore_tezjet", () => session.explore()));
+    const result = session.finish("The refresh failed.");
+    assert.equal(result.status, "blocked");
+    assert.equal(result.evidence.baseSha, undefined);
+    assert.deepEqual(result.evidence.proposedFiles, []);
+    assert.equal(result.evidence.review, undefined);
+    assert.equal(result.evidence.security, undefined);
+    assert.ok(result.missingActors.includes("explorer"));
+    assert.ok("error" in await session.invoke("coder", "code_tezjet", () => session.generate()));
+    assert.equal(calls.filter(call => call.tool === "generate").length, 1);
+  });
+});
+
+test("failed repeated review clears the previous approval and reviewer completion", async () => {
+  let reviews = 0;
+  const { session } = setup({ review: () => {
+    if (++reviews > 1) throw new Error("Reviewer unavailable");
+    return structuredClone(review);
+  } });
+  await prepare(session);
+  assert.ok("error" in await session.invoke("reviewer", "final_review", () => session.reviewChanges()));
+  const result = session.finish("The earlier review passed.");
+  assert.equal(result.status, "blocked");
+  assert.equal(result.evidence.review, undefined);
+  assert.ok(result.missingActors.includes("reviewer"));
+});
+
+test("failed repeated test discovery invalidates previously successful test evidence", async () => {
+  let discoveries = 0;
+  const { session } = setup({ discoverTests: async () => {
+    if (++discoveries > 1) throw new Error("Test discovery unavailable");
+    return { scripts: ["test: tsx --test"] };
+  } });
+  assert.equal((await execute(session)).status, "completed");
+  assert.ok("error" in await session.invoke("tester", "test_tezjet", () => session.test()));
+  const result = session.finish("The earlier CI passed.");
+  assert.equal(result.status, "blocked");
+  assert.equal(result.evidence.testsExecuted, false);
+  assert.equal(result.evidence.tests, undefined);
+  assert.ok(result.missingActors.includes("tester"));
+});
+
+test("failed final head verification cannot retain a verified candidate claim", async () => {
+  let lookups = 0;
+  const { session } = setup({ getCandidateHead: async () => {
+    if (++lookups > 1) throw new Error("Final candidate head unavailable");
+    return candidateSha;
+  } });
+  await execute(session);
+  await session.verifyFinalCandidate();
+  const result = session.finish("The earlier CI passed.");
+  assert.equal(result.status, "blocked");
+  assert.equal(result.evidence.testsExecuted, false);
+  assert.equal(result.evidence.tests, undefined);
+  assert.ok(result.reasons.includes("Final candidate head unavailable"));
+});
+
+test("mutating returned or dependency-owned rejected reviews cannot authorize publication", async () => {
+  const rejected = { ...review, ready: false, findings: [{ severity: "blocker" as const, path: files[0].path, message: "Rejected change" }] };
+  const { session, calls } = setup({ review: () => rejected });
+  await session.invoke("explorer", "explore_tezjet", () => session.explore());
+  await session.invoke("coder", "code_tezjet", () => session.generate());
+  const returned = await session.invoke("reviewer", "final_review", () => session.reviewChanges());
+  assert.ok("ready" in returned);
+  returned.ready = true;
+  returned.findings.length = 0;
+  rejected.ready = true;
+  rejected.findings.length = 0;
+  await session.invoke("security", "security_review", () => session.inspectSecurity());
+  assert.ok("error" in await session.invoke("github", "publish_changes", () => session.publish()));
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+  const result = session.finish("The caller changed the review response.");
+  assert.equal(result.evidence.review?.ready, false);
+  assert.equal(result.evidence.review?.findings.length, 1);
+});
+
+test("review and security inputs cannot mutate the stored proposed files", async () => {
+  const { session, calls } = setup({
+    review: proposed => { proposed[0].content = "changed by reviewer"; return structuredClone(review); },
+    scan: proposed => { proposed[0].path = "changed/by/security.ts"; return structuredClone(proposedSecurity); },
+  });
+  const result = await execute(session);
+  assert.equal(result.status, "completed");
+  assert.deepEqual(calls.find(call => call.tool === "publish")?.args, [files, baseSha]);
+});
+
+test("security response mutations cannot turn a failed scan into a publication gate", async () => {
+  const rejected = { agent: "security" as const, repository, ref: baseSha, status: "findings" as "clean" | "findings", findings: [] };
+  const { session, calls } = setup({ inspectSecurity: async () => rejected });
+  await session.invoke("explorer", "explore_tezjet", () => session.explore());
+  await session.invoke("coder", "code_tezjet", () => session.generate());
+  await session.invoke("reviewer", "final_review", () => session.reviewChanges());
+  const returned = await session.invoke("security", "security_review", () => session.inspectSecurity());
+  assert.ok("repository" in returned);
+  returned.repository.status = "clean";
+  rejected.status = "clean";
+  const snapshot = session.finish("Scan returned findings.");
+  snapshot.evidence.security!.repository.status = "clean";
+  assert.ok("error" in await session.invoke("github", "publish_changes", () => session.publish()));
+  assert.equal(calls.some(call => call.tool === "publish"), false);
+  assert.equal(session.finish("The caller changed scan responses.").evidence.security?.repository.status, "findings");
+});
+
+test("test and finish responses cannot promote failed CI evidence to completed", async () => {
+  const failed = passingEvidence();
+  failed.testsExecuted = false;
+  failed.status = "failed";
+  failed.evidence[0].conclusion = "failure";
+  const { session } = setup({ verify: async () => failed });
+  await prepare(session);
+  await session.invoke("github", "publish_changes", () => session.publish());
+  const returned = await session.invoke("tester", "test_tezjet", () => session.test());
+  assert.ok("executionEvidence" in returned && returned.executionEvidence);
+  returned.executionEvidence.testsExecuted = true;
+  returned.executionEvidence.status = "passed";
+  returned.executionEvidence.evidence[0].conclusion = "success";
+  failed.testsExecuted = true;
+  failed.status = "passed";
+  failed.evidence[0].conclusion = "success";
+  const result = session.finish("Done.");
+  assert.equal(result.status, "needs-review");
+  assert.equal(result.evidence.testsExecuted, false);
+  assert.equal(result.evidence.tests?.status, "failed");
+  result.evidence.tests!.testsExecuted = true;
+  result.evidence.tests!.status = "passed";
+  result.evidence.tests!.evidence[0].conclusion = "success";
+  result.evidence.publication!.head_sha = baseSha;
+  result.evidence.review!.ready = false;
+  const again = session.finish("Done.");
+  assert.equal(again.status, "needs-review");
+  assert.equal(again.evidence.tests?.status, "failed");
+  assert.equal(again.evidence.publication?.head_sha, candidateSha);
+  assert.equal(again.evidence.review?.ready, true);
+});
+
+test("returned specialist advice is detached from the current assessment", async () => {
+  const assessment = { ready: true, findings: [{ severity: "low" as const, message: "Advisory note" }] };
+  const { session } = setup({}, { requiredActors: [...mutationActors, "backend"] });
+  await prepare(session);
+  const returned = await session.invoke("backend", "backend_specialist", () => session.recordAdvice("backend", assessment));
+  assert.ok("findings" in returned);
+  returned.findings[0].severity = "high";
+  returned.findings[0].message = "Changed by caller";
+  const snapshot = session.finish("Advice recorded.");
+  assert.equal(snapshot.evidence.assessments.backend.findings[0].severity, "low");
+  assert.equal(snapshot.evidence.assessments.backend.findings[0].message, "Advisory note");
+  snapshot.evidence.assessments.backend.ready = false;
+  assert.equal(session.finish("Advice unchanged.").evidence.assessments.backend.ready, true);
 });

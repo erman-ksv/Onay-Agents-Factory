@@ -8,10 +8,15 @@ export const COMMANDER_EXIT_CODES = {
 export function commanderExitCode(status: string): number {
   switch (status) {
     case "completed":
+    case "ci-passed":
       return COMMANDER_EXIT_CODES.completed;
     case "blocked":
+    case "ci-repair":
+    case "test-evidence-blocked":
+    case "no-change":
       return COMMANDER_EXIT_CODES.blocked;
     case "needs-review":
+    case "ci-blocked":
       return COMMANDER_EXIT_CODES.needsReview;
     default:
       return COMMANDER_EXIT_CODES.unhandledError;

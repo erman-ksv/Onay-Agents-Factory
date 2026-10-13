@@ -1,6 +1,6 @@
 import { TezJetRepositoryAdapter } from "../../github/tezjetRepository.js";
-import { GitHubClient, type WorkflowRun } from "../../github/githubClient.js";
-import { evaluateCiJobs, type CiJob, type CiGateResult } from "../../github/ciGate.js";
+import { assertCommitSha, filterWorkflowRunsBySha, GitHubClient, type WorkflowRun } from "../../github/githubClient.js";
+import { evaluateCiJobs, filterCiJobsForRuns, type CiJob, type CiGateResult } from "../../github/ciGate.js";
 import { getTargetRepository } from "../../github/repositoryConfig.js";
 
 export type TestScriptDiscovery = {
@@ -14,8 +14,9 @@ export type TestExecutionEvidence = {
   ref: string;
   expectedSha: string;
   status: CiGateResult["status"] | "sha-mismatch" | "no-runs";
-  evidence: Array<{ runId: number; name: string; headSha: string; conclusion: string | null; url: string }>;
-  checks: Array<{ jobName: string; name: string; status: string; conclusion: string | null }>;
+  evidence: Array<{ runId: number; runAttempt?: number; name: string; headSha: string; conclusion: string | null; url: string }>;
+  checks: Array<{ runId?: number; runAttempt?: number; jobName: string; name: string; status: string; conclusion: string | null }>;
+  jobs?: CiJob[];
   notes: string[];
 };
 
@@ -42,35 +43,41 @@ export function evaluateTestExecutionEvidence(
   requiredNames: string[] = ["Typecheck and API tests"],
   requiredStepNames: string[] = [],
 ) : TestExecutionEvidence {
-  const exactRuns = runs.filter((run) => run.head_sha === expectedSha);
+  const validSha = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(expectedSha);
+  const exactRuns = validSha ? filterWorkflowRunsBySha(runs, expectedSha) : [];
   const evidence = exactRuns.map((run) => ({
     runId: run.id,
+    runAttempt: run.run_attempt,
     name: run.name,
     headSha: run.head_sha ?? "",
     conclusion: run.conclusion,
     url: run.html_url,
   }));
-  const checks = jobs.flatMap((job) => (job.steps ?? []).map((step) => ({
+  const verifiedJobs = filterCiJobsForRuns(exactRuns, jobs);
+  const checks = verifiedJobs.flatMap((job) => (job.steps ?? []).map((step) => ({
+    runId: job.run_id,
+    runAttempt: job.run_attempt,
     jobName: job.name,
     name: step.name,
     status: step.status,
     conclusion: step.conclusion,
   })));
 
-  if (!expectedSha.trim() || exactRuns.length === 0) {
+  if (!validSha || exactRuns.length === 0) {
     return {
       testsExecuted: false,
       repository: getTargetRepository(),
       ref: "",
       expectedSha,
-      status: "sha-mismatch",
+      status: validSha && runs.length === 0 ? "no-runs" : "sha-mismatch",
       evidence,
       checks,
+      jobs: verifiedJobs,
       notes: ["No workflow run was found for the exact expected commit SHA; test execution is unverified."],
     };
   }
 
-  const gate = evaluateCiJobs(exactRuns, jobs, requiredNames, requiredStepNames);
+  const gate = evaluateCiJobs(exactRuns, verifiedJobs, requiredNames, requiredStepNames);
   return {
     testsExecuted: gate.status === "passed",
     repository: getTargetRepository(),
@@ -79,6 +86,7 @@ export function evaluateTestExecutionEvidence(
     status: gate.status,
     evidence,
     checks,
+    jobs: verifiedJobs,
     notes: gate.status === "passed"
       ? ["Required CI jobs and steps succeeded for the exact commit SHA."]
       : ["Required CI jobs or steps have not all succeeded for the exact commit SHA."],
@@ -98,15 +106,16 @@ export async function inspectTestExecution(
       evidence: [], checks: [], notes: ["An expected commit SHA is required to verify test execution."],
     };
   }
+  assertCommitSha(expectedSha);
   const github = new GitHubClient({ repository });
   const runs = await github.getWorkflowRuns(ref, expectedSha);
-  const exactRuns = runs.filter((run) => run.head_sha === expectedSha);
+  const exactRuns = filterWorkflowRunsBySha(runs, expectedSha);
   const jobs: CiJob[] = [];
   for (const run of exactRuns) {
-    const result = await github.getWorkflowJobs(run.id);
+    const result = await github.getWorkflowJobs(run.id, run.run_attempt);
     jobs.push(...result.jobs);
   }
-  const evaluated = evaluateTestExecutionEvidence(exactRuns, jobs, expectedSha, requiredNames, requiredStepNames);
+  const evaluated = evaluateTestExecutionEvidence(runs, jobs, expectedSha, requiredNames, requiredStepNames);
   return { ...evaluated, repository, ref };
 }
 

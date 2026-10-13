@@ -24,6 +24,8 @@ test("Agent Factory self-audit includes the real Commander, provider, and reposi
     "github/ciGate.ts",
     "orchestration/pipeline.ts",
     "orchestration/retryLoop.ts",
+    "orchestration/agentRunJournal.ts",
+    "orchestration/agentRunJournal.test.ts",
   ]) {
     assert.ok(AGENT_FACTORY_EXPLORER_FILES.includes(path as never), `missing critical self-audit path: ${path}`);
   }

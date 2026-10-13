@@ -24,6 +24,19 @@ export type WorkflowRun = {
   conclusion: string | null;
   html_url: string;
   head_sha?: string;
+  run_attempt?: number;
+};
+
+export type WorkflowJob = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  html_url: string;
+  run_id?: number;
+  run_attempt?: number;
+  head_sha?: string;
+  steps?: Array<{ name: string; number: number; status: string; conclusion: string | null }>;
 };
 
 export function filterWorkflowRunsBySha<T extends { head_sha?: string }>(runs: T[], headSha?: string): T[] {
@@ -96,16 +109,53 @@ export class GitHubClient {
 
   async getWorkflowRuns(branch = "main", headSha?: string): Promise<WorkflowRun[]> {
     const query = buildWorkflowRunsQuery(branch, headSha);
-    const result = await this.request<{ workflow_runs: WorkflowRun[] }>(
-      `/repos/${this.repository}/actions/runs${query}`,
-    );
-    return result.workflow_runs;
+    const runs: WorkflowRun[] = [];
+    // GitHub limits filtered workflow searches to 1,000 results. Never treat
+    // a truncated response as complete evidence for a green gate.
+    for (let page = 1; page <= 50; page++) {
+      const result = await this.request<{ workflow_runs: WorkflowRun[]; total_count?: number }>(
+        `/repos/${this.repository}/actions/runs${query}${page > 1 ? `&page=${page}` : ""}`,
+      );
+      if (result.total_count !== undefined && result.total_count > 1_000) {
+        throw new Error("Workflow run evidence exceeds GitHub's 1,000-result search limit.");
+      }
+      runs.push(...result.workflow_runs);
+      if (result.total_count !== undefined && runs.length >= result.total_count) return runs;
+      if (!result.workflow_runs.length) {
+        if (result.total_count !== undefined && runs.length < result.total_count) {
+          throw new Error("GitHub returned incomplete workflow run evidence.");
+        }
+        return runs;
+      }
+      if (result.total_count === undefined && result.workflow_runs.length < 20) return runs;
+    }
+    throw new Error("Workflow run pagination did not establish complete CI evidence.");
   }
 
-  async getWorkflowJobs(runId: number) {
-    return this.request<{ jobs: Array<{ id: number; name: string; status: string; conclusion: string | null; html_url: string; steps?: Array<{ name: string; number: number; status: string; conclusion: string | null }> }> }>(
-      `/repos/${this.repository}/actions/runs/${runId}/jobs?per_page=100`,
-    );
+  async getWorkflowJobs(runId: number, runAttempt?: number): Promise<{ jobs: WorkflowJob[] }> {
+    if (!Number.isSafeInteger(runId) || runId <= 0 ||
+        (runAttempt !== undefined && (!Number.isSafeInteger(runAttempt) || runAttempt <= 0))) {
+      throw new Error("A positive workflow run ID and attempt are required.");
+    }
+    const endpoint = runAttempt === undefined
+      ? `/repos/${this.repository}/actions/runs/${runId}/jobs?per_page=100&filter=latest`
+      : `/repos/${this.repository}/actions/runs/${runId}/attempts/${runAttempt}/jobs?per_page=100`;
+    const jobs: WorkflowJob[] = [];
+    for (let page = 1; page <= 100; page++) {
+      const result = await this.request<{ jobs: WorkflowJob[]; total_count?: number }>(
+        `${endpoint}${page > 1 ? `&page=${page}` : ""}`,
+      );
+      jobs.push(...result.jobs);
+      if (result.total_count !== undefined && jobs.length >= result.total_count) return { jobs };
+      if (!result.jobs.length) {
+        if (result.total_count !== undefined && jobs.length < result.total_count) {
+          throw new Error("GitHub returned incomplete workflow job evidence.");
+        }
+        return { jobs };
+      }
+      if (result.total_count === undefined && result.jobs.length < 100) return { jobs };
+    }
+    throw new Error("Workflow job pagination did not establish complete CI evidence.");
   }
 
   async getWorkflowRun(runId: number) {
