@@ -10,6 +10,11 @@ import { selectProviderConfig } from "./providerConfig.js";
 /** Retry only failed HTTP requests inside the provider client, never an entire agent run. */
 export const GEMINI_TRANSIENT_MAX_RETRIES = 4;
 
+/** Quota exhaustion is not transient; retrying cannot restore a daily allowance. */
+export function isGeminiDailyQuotaExhausted(body: string): boolean {
+  return /GenerateRequestsPerDayPerProjectPerModel-FreeTier|GenerateRequestsPerDayPerProjectPerModel/i.test(body);
+}
+
 /** Serialize Gemini HTTP attempts to stay below the observed free-tier RPM cap.
  * Applies to SDK retries too, without replaying agent tools. */
 export function createGeminiRateLimitedFetch(
@@ -24,7 +29,16 @@ export function createGeminiRateLimitedFetch(
       const wait = Math.max(0, nextSlot - now);
       nextSlot = Math.max(now, nextSlot) + intervalMs;
       if (wait > 0) await new Promise<void>(resolve => setTimeout(resolve, wait));
-      return underlyingFetch(input, init);
+      const response = await underlyingFetch(input, init);
+      if (response.status === 429) {
+        const body = await response.clone().text();
+        if (isGeminiDailyQuotaExhausted(body)) {
+          // Prevent the SDK's default retry of HTTP 429 when the daily quota is exhausted.
+          // Preserve the provider error details in a bounded message, never the request or API key.
+          throw new Error("Gemini daily request quota exhausted (HTTP 429). Stop this run and wait for quota reset.");
+        }
+      }
+      return response;
     });
     queue = attempt.then(() => undefined, () => undefined);
     return attempt;
