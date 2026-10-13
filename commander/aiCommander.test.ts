@@ -363,3 +363,46 @@ test("Commander and advisory specialists retain task-selected clients across pro
     { url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: "Bearer third-gemini-test-key", model: "third-gemini-test-model" },
   ]);
 });
+
+
+test("Gemini SDK retries a 503 after an executed Explorer tool without executing Explorer twice", async t => {
+  const calls: string[] = [];
+  let httpCalls = 0;
+  let explorerCalls = 0;
+  t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    assert.match(url, /generativelanguage\\.googleapis\\.com\\/v1beta\\/openai\\/chat\\/completions/);
+    const attempt = ++httpCalls;
+    if (attempt === 2) {
+      return new Response(JSON.stringify({ error: { message: "temporary overload" } }), {
+        status: 503, headers: { "content-type": "application/json", "retry-after-ms": "0" },
+      });
+    }
+    const toolCall = attempt === 1;
+    return new Response(JSON.stringify({
+      id: "retry-test-" + attempt, object: "chat.completion", created: 1, model: "gemini-3.5-flash",
+      choices: [{ index: 0, finish_reason: toolCall ? "tool_calls" : "stop",
+        message: toolCall ? { role: "assistant", content: null, tool_calls: [{
+          id: "call-explore", type: "function", function: { name: "explore_tezjet", arguments: "{}" },
+        }] } : { role: "assistant", content: "Audit incomplete; more actors required." } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  const deps = dependencies(calls);
+  const originalExplore = deps.explore;
+  deps.explore = async sha => {
+    explorerCalls++;
+    return originalExplore(sha);
+  };
+  const result = await runAiCommander("Audit TezJet-Agent-Factory repository without changing files", {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini",
+      GEMINI_API_KEY: "test-key-not-real", GEMINI_MODEL: "gemini-3.5-flash" },
+    dependencies: deps,
+  });
+  assert.equal(httpCalls, 3);
+  assert.equal(explorerCalls, 1);
+  assert.equal(calls.filter(call => call === "read-files").length, 1);
+  assert.equal(result.status, "blocked"); // Missing Tester and Security still block completion.
+  assert.equal(result.evidence.testsExecuted, false);
+  assert.ok(!calls.includes("write-and-open-pr"));
+});
