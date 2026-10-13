@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GEMINI_TRANSIENT_MAX_RETRIES, configureModelProvider } from "./modelProvider.js";
+import { GEMINI_TRANSIENT_MAX_RETRIES, configureModelProvider, createGeminiRateLimitedFetch } from "./modelProvider.js";
 
 test("Gemini provider configures bounded HTTP retries", () => {
   assert.equal(GEMINI_TRANSIENT_MAX_RETRIES, 4);
@@ -73,4 +73,29 @@ test("Gemini-compatible HTTP client does not retry authorization errors", async 
     model: "gemini-3.5-flash", messages: [{ role: "user", content: "test" }],
   }), error => error instanceof OpenAI.APIError && error.status === 401);
   assert.equal(httpCalls, 1);
+});
+
+test("Gemini rate limiter serializes concurrent HTTP attempts", async () => {
+  const starts: number[] = [];
+  const fetchStub: typeof fetch = async () => {
+    starts.push(Date.now());
+    return new Response("ok", { status: 200 });
+  };
+  const limited = createGeminiRateLimitedFetch(fetchStub, 20);
+  await Promise.all([limited("https://example.invalid"), limited("https://example.invalid"), limited("https://example.invalid")]);
+  assert.equal(starts.length, 3);
+  assert.ok(starts[1] - starts[0] >= 15);
+  assert.ok(starts[2] - starts[1] >= 15);
+});
+
+test("Gemini rate limiter preserves fetch failures and continues queue", async () => {
+  let calls = 0;
+  const limited = createGeminiRateLimitedFetch(async () => {
+    if (++calls === 1) throw new Error("temporary network failure");
+    return new Response("ok", { status: 200 });
+  }, 0);
+  await assert.rejects(limited("https://example.invalid"), /temporary network failure/);
+  const response = await limited("https://example.invalid");
+  assert.equal(response.status, 200);
+  assert.equal(calls, 2);
 });
