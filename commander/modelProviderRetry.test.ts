@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GEMINI_TRANSIENT_MAX_RETRIES, configureModelProvider, createGeminiRateLimitedFetch } from "./modelProvider.js";
+import { GEMINI_TRANSIENT_MAX_RETRIES, configureModelProvider, createGeminiRateLimitedFetch, isGeminiDailyQuotaExhausted } from "./modelProvider.js";
 
 test("Gemini provider configures bounded HTTP retries", () => {
   assert.equal(GEMINI_TRANSIENT_MAX_RETRIES, 4);
@@ -98,4 +98,29 @@ test("Gemini rate limiter preserves fetch failures and continues queue", async (
   const response = await limited("https://example.invalid");
   assert.equal(response.status, 200);
   assert.equal(calls, 2);
+});
+
+test("Gemini daily quota error is detected without exposing provider payload", () => {
+  assert.equal(isGeminiDailyQuotaExhausted('{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}'), true);
+  assert.equal(isGeminiDailyQuotaExhausted('{"quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}'), false);
+});
+
+test("Gemini daily quota exhaustion stops without SDK retry", async () => {
+  let attempts = 0;
+  const fetchStub: typeof fetch = async () => {
+    attempts++;
+    return new Response(JSON.stringify({ error: {
+      code: 429, status: "RESOURCE_EXHAUSTED",
+      details: [{ violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] }],
+    } }), { status: 429, headers: { "content-type": "application/json" } });
+  };
+  const client = new OpenAI({
+    apiKey: "test-key-not-real", baseURL: "https://example.invalid/v1beta/openai/",
+    maxRetries: GEMINI_TRANSIENT_MAX_RETRIES,
+    fetch: createGeminiRateLimitedFetch(fetchStub, 0),
+  });
+  await assert.rejects(client.chat.completions.create({
+    model: "gemini-3.5-flash", messages: [{ role: "user", content: "test" }],
+  }), /Gemini daily request quota exhausted/);
+  assert.equal(attempts, 1);
 });
