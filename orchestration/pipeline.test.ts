@@ -111,7 +111,7 @@ test("a successful CI repair returns the final candidate SHA and final CI rather
   assert.equal("headSha" in result && result.headSha, repairedSha);
   assert.equal("pullRequest" in result && result.pullRequest.head_sha, repairedSha);
   assert.equal("ci" in result && result.ci?.status, "passed");
-  assert.equal("initialCi" in result && result.initialCi.status, "failed");
+  assert.deepEqual("initialCi" in result && result.initialCi, { status: "failed", runs: [] });
 });
 
 test("raw jobs must prove both required steps for the exact run, attempt and commit", async t => {

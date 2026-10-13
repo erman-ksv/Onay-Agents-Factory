@@ -101,7 +101,7 @@ async function main() {
       console.log(JSON.stringify({ type: "agent_event", event }));
     });
     console.log(JSON.stringify(result, null, 2));
-    if ("result" in result) process.exitCode = commanderExitCode(result.result.status);
+    if ("result" in result && result.result) process.exitCode = commanderExitCode(result.result.status);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
