@@ -33,9 +33,11 @@ export function createGeminiRateLimitedFetch(
       if (response.status === 429) {
         const body = await response.clone().text();
         if (isGeminiDailyQuotaExhausted(body)) {
-          // Prevent the SDK's default retry of HTTP 429 when the daily quota is exhausted.
-          // Preserve the provider error details in a bounded message, never the request or API key.
-          throw new Error("Gemini daily request quota exhausted (HTTP 429). Stop this run and wait for quota reset.");
+          // The SDK retries thrown fetch errors as connection failures.
+          // Convert daily exhaustion into a non-retryable sanitized HTTP response.
+          return new Response(JSON.stringify({
+            error: { message: "Gemini daily request quota exhausted (HTTP 429). Stop this run and wait for quota reset.", type: "quota_exhausted" },
+          }), { status: 403, headers: { "content-type": "application/json" } });
         }
       }
       return response;
