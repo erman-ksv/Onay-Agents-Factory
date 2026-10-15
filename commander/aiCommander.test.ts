@@ -7,7 +7,7 @@ import { GitHubClient } from "../github/githubClient.js";
 import { AGENT_FACTORY_EXPLORER_FILES } from "../github/tezjetExplorer.js";
 
 setTracingDisabled(true);
-const repository = "erman-ksv/TezJet-Agent-Factory";
+const repository = "erman-ksv/Onay-Agents-Factory";
 const factoryEnv = { AGENT_ALLOWED_REPOSITORIES: repository };
 const baseSha = "a".repeat(40);
 const candidateSha = "b".repeat(40);
@@ -63,10 +63,10 @@ function dependencies(calls: string[]): AiExecutionDependencies {
     scan: () => { calls.push("scan-proposal"); return { agent: "security", status: "clean", findings: [] }; },
     inspectSecurity: async sha => { assert.equal(sha, baseSha); calls.push("scan-repository"); return { agent: "security", repository, ref: sha, status: "clean", findings: [] }; },
     discoverTests: async () => { calls.push("discover-tests"); return { scripts: ["test: tsx --test"] }; },
-    publish: async (files, sha) => { assert.equal(sha, baseSha); assert.match(files[0].content, /fixed = true/); calls.push("write-and-open-pr"); return { head_sha: candidateSha, html_url: "https://github.com/erman-ksv/TezJet-Agent-Factory/pull/123", number: 123 }; },
+    publish: async (files, sha) => { assert.equal(sha, baseSha); assert.match(files[0].content, /fixed = true/); calls.push("write-and-open-pr"); return { head_sha: candidateSha, html_url: "https://github.com/erman-ksv/Onay-Agents-Factory/pull/123", number: 123 }; },
     verify: async (sha, ref) => { assert.equal(sha, candidateSha); assert.equal(ref, branch); calls.push("verify-ci"); return {
       testsExecuted: true, repository, ref, expectedSha: sha, status: "passed",
-      evidence: [{ runId: 123, name: "Agent Factory CI", headSha: sha, conclusion: "success", url: "https://github.com/erman-ksv/TezJet-Agent-Factory/actions/runs/123" }],
+      evidence: [{ runId: 123, name: "Agent Factory CI", headSha: sha, conclusion: "success", url: "https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/123" }],
       checks: [{ jobName: "typecheck", name: "Test", status: "completed", conclusion: "success" }], notes: [],
     }; },
   };
@@ -75,7 +75,7 @@ function dependencies(calls: string[]): AiExecutionDependencies {
 test("SDK model tool calls execute the actual Commander handlers end to end", async () => {
   const calls: string[] = [];
   const model = new ScriptedModel(names);
-  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+  const result = await runAiCommander("Fix Onay-Agents-Factory", {
     model, env: { ...factoryEnv, AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" }, dependencies: dependencies(calls),
     publication: { branch, title: "Fix verification", body: "Test candidate execution." },
   });
@@ -89,7 +89,7 @@ test("SDK model tool calls execute the actual Commander handlers end to end", as
 
 test("SDK final prose without function calls cannot claim successful execution", async () => {
   const calls: string[] = [];
-  const result = await runAiCommander("Fix TezJet-Agent-Factory", { model: new ScriptedModel([]), env: factoryEnv, dependencies: dependencies(calls) });
+  const result = await runAiCommander("Fix Onay-Agents-Factory", { model: new ScriptedModel([]), env: factoryEnv, dependencies: dependencies(calls) });
   assert.equal(result.status, "blocked");
   assert.deepEqual(calls, []);
   assert.deepEqual(result.evidence.changedFiles, []);
@@ -98,7 +98,7 @@ test("SDK final prose without function calls cannot claim successful execution",
 
 test("SDK tool calls cannot enable GitHub writes without the host opt-in", async () => {
   const calls: string[] = [];
-  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+  const result = await runAiCommander("Fix Onay-Agents-Factory", {
     model: new ScriptedModel(names), env: factoryEnv, dependencies: dependencies(calls),
     publication: { branch, title: "Fix verification", body: "Explicit metadata alone does not enable writes." },
   });
@@ -113,7 +113,7 @@ test("branch advancement during the final model turn invalidates completed execu
   const deps = dependencies(calls);
   let checks = 0;
   deps.getCandidateHead = async () => ++checks === 1 ? candidateSha : "d".repeat(40);
-  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+  const result = await runAiCommander("Fix Onay-Agents-Factory", {
     model: new ScriptedModel(names), env: { ...factoryEnv, AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" }, dependencies: deps,
     publication: { branch, title: "Fix verification", body: "Check head again after the final model turn." },
   });
@@ -131,7 +131,7 @@ test("failed final head lookup clears SDK Commander test evidence", async () => 
     if (++checks > 1) throw new Error("Final GitHub head lookup failed");
     return candidateSha;
   };
-  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+  const result = await runAiCommander("Fix Onay-Agents-Factory", {
     model: new ScriptedModel(names), env: { ...factoryEnv, AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" }, dependencies: deps,
     publication: { branch, title: "Fix verification", body: "Require successful final head verification." },
   });
@@ -161,7 +161,7 @@ test("factory exploration keeps the existing default base and includes journal c
     assert.equal(ref, baseSha);
     return { path, sha: "c".repeat(40), content: "export const inspected = true;" };
   });
-  const { session } = createAiCommander("Audit TezJet-Agent-Factory without modifying files", { env: factoryEnv });
+  const { session } = createAiCommander("Audit Onay-Agents-Factory without modifying files", { env: factoryEnv });
   const exploration = await session.explore();
   assert.equal(session.options.ref, "dev/agent-factory-core");
   assert.deepEqual(requestedRefs, ["dev/agent-factory-core"]);
@@ -204,7 +204,7 @@ test("a host-selected pinned base is shared by exploration, security and audit v
       { number: 2, name: "Test", status: "completed", conclusion: "success" },
     ],
   }] }));
-  const { session } = createAiCommander("Audit TezJet-Agent-Factory without modifying files", {
+  const { session } = createAiCommander("Audit Onay-Agents-Factory without modifying files", {
     env: factoryEnv, baseRef, expectedBaseSha: baseSha.toUpperCase(),
   });
   const exploration = await session.explore();
@@ -229,7 +229,7 @@ test("a changed pinned base blocks both exploration and early discovery before r
   t.mock.method(GitHubClient.prototype, "getCommitSha", async () => candidateSha);
   t.mock.method(GitHubClient.prototype, "getFile", async () => { fileReads++; throw new Error("Unexpected file read"); });
   t.mock.method(GitHubClient.prototype, "createBranch", async () => { writes++; });
-  const { session } = createAiCommander("Fix TezJet-Agent-Factory journal IDs", {
+  const { session } = createAiCommander("Fix Onay-Agents-Factory journal IDs", {
     env: { ...factoryEnv, AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" },
     baseRef: "fix/verified-agent-execution", expectedBaseSha: baseSha,
     publication: { branch, title: "Fix journal IDs", body: "Live run." },
@@ -244,7 +244,7 @@ test("a changed pinned base blocks both exploration and early discovery before r
 test("repository allowlist rejection happens before even looking up the base", async t => {
   let lookups = 0;
   t.mock.method(GitHubClient.prototype, "getCommitSha", async () => { lookups++; return baseSha; });
-  const { session } = createAiCommander("Audit TezJet-Agent-Factory without modifying files", {
+  const { session } = createAiCommander("Audit Onay-Agents-Factory without modifying files", {
     env: { AGENT_ALLOWED_REPOSITORIES: "someone/other-repository" },
     baseRef: "fix/verified-agent-execution", expectedBaseSha: baseSha,
   });
@@ -255,16 +255,16 @@ test("repository allowlist rejection happens before even looking up the base", a
 
 test("invalid host base refs and shortened SHAs are rejected before execution", () => {
   for (const baseRef of ["", "refs/heads/main", "main~1", "fix/bad..ref"]) {
-    assert.throws(() => createAiCommander("Fix TezJet-Agent-Factory", { env: factoryEnv, baseRef }), /Invalid repository branch ref/);
+    assert.throws(() => createAiCommander("Fix Onay-Agents-Factory", { env: factoryEnv, baseRef }), /Invalid repository branch ref/);
   }
   for (const expectedBaseSha of ["", "abc123", "x".repeat(40)]) {
-    assert.throws(() => createAiCommander("Fix TezJet-Agent-Factory", { env: factoryEnv, expectedBaseSha }), /full immutable commit SHA/);
+    assert.throws(() => createAiCommander("Fix Onay-Agents-Factory", { env: factoryEnv, expectedBaseSha }), /full immutable commit SHA/);
   }
 });
 
 test("the expected base guard also rejects a mismatching injected source before Coder or publication", async () => {
   const calls: string[] = [];
-  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+  const result = await runAiCommander("Fix Onay-Agents-Factory", {
     model: new ScriptedModel(["explore_tezjet"]), env: factoryEnv, dependencies: dependencies(calls),
     baseRef: "fix/verified-agent-execution", expectedBaseSha: candidateSha,
   });
@@ -276,7 +276,7 @@ test("the expected base guard also rejects a mismatching injected source before 
 });
 
 test("Commander applies the host-selected OpenAI model when both provider keys exist", () => {
-  const configured = createAiCommander("Fix TezJet-Agent-Factory", {
+  const configured = createAiCommander("Fix Onay-Agents-Factory", {
     env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "openai-test-key",
       OPENAI_MODEL: "selected-commander-model", GEMINI_API_KEY: "unused-gemini-key" },
   });
@@ -290,7 +290,7 @@ test("Commander rejects a missing selected key before invoking the model or any 
   const calls: string[] = [];
   let networkCalls = 0;
   t.mock.method(globalThis, "fetch", async () => { networkCalls++; throw new Error("Unexpected network request"); });
-  const result = await runAiCommander("Fix TezJet-Agent-Factory", {
+  const result = await runAiCommander("Fix Onay-Agents-Factory", {
     env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", GEMINI_API_KEY: "unused-gemini-key" },
     dependencies: dependencies(calls),
   });
@@ -308,7 +308,7 @@ test("Commander and advisory specialists retain task-selected clients across pro
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
     const index = requests.push({ url, key: headers.get("authorization") ?? "", model: body.model }) - 1;
     // Configure an unrelated task while the original Commander is still running.
-    if (index === 0 || index === 4) createAiCommander("Audit TezJet-Agent-Factory", {
+    if (index === 0 || index === 4) createAiCommander("Audit Onay-Agents-Factory", {
       env: index === 0 ? { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "unrelated-openai-key" } :
         { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "unrelated-gemini-key" },
     });
@@ -332,7 +332,7 @@ test("Commander and advisory specialists retain task-selected clients across pro
     };
     return new Response(JSON.stringify(response), { status: 200, headers: { "content-type": "application/json" } });
   });
-  const goal = "Audit TezJet-Agent-Factory database without modifying files";
+  const goal = "Audit Onay-Agents-Factory database without modifying files";
   const gemini = await runAiCommander(goal, {
     env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-test-key", GEMINI_MODEL: "gemini-test-model" },
     dependencies: dependencies([]),
@@ -394,7 +394,7 @@ test("Gemini SDK retries a 503 after an executed Explorer tool without executing
     explorerCalls++;
     return originalExplore(sha);
   };
-  const result = await runAiCommander("Audit TezJet-Agent-Factory repository without changing files", {
+  const result = await runAiCommander("Audit Onay-Agents-Factory repository without changing files", {
     env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini",
       GEMINI_API_KEY: "test-key-not-real", GEMINI_MODEL: "gemini-3.5-flash" },
     dependencies: deps,
