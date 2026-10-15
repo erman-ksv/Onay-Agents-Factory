@@ -3,13 +3,13 @@ import test from "node:test";
 import { AiExecutionSession, type AiExecutionDependencies, type AiExecutionOptions } from "./aiExecution.js";
 import type { TestExecutionEvidence } from "../agents/tester/agent.js";
 
-const repository = "erman-ksv/TezJet-Agent-Factory";
+const repository = "erman-ksv/Onay-Agents-Factory";
 const baseSha = "a".repeat(40);
 const candidateSha = "b".repeat(40);
 const branch = "agent-factory/verified-task";
 const files = [{ path: "commander/summary.ts", content: "export const verified = true;\n", message: "Verify task evidence" }];
 const generated = { summary: "Verify task evidence", files };
-const publication = { head_sha: candidateSha, html_url: "https://github.com/erman-ksv/TezJet-Agent-Factory/pull/123", number: 123 };
+const publication = { head_sha: candidateSha, html_url: "https://github.com/erman-ksv/Onay-Agents-Factory/pull/123", number: 123 };
 const review = { agent: "reviewer" as const, ready: true, findings: [] };
 const proposedSecurity = { agent: "security" as const, status: "clean" as const, findings: [] };
 const mutationActors = ["explorer", "coder", "tester", "security", "reviewer"];
@@ -18,7 +18,7 @@ const readyAdvice = { ready: true, findings: [], summary: "The proposed change p
 function passingEvidence(sha = candidateSha, ref = branch): TestExecutionEvidence {
   return {
     testsExecuted: true, repository, ref, expectedSha: sha, status: "passed",
-    evidence: [{ runId: 123, name: "CI", headSha: sha, conclusion: "success", url: "https://github.com/erman-ksv/TezJet-Agent-Factory/actions/runs/123" }],
+    evidence: [{ runId: 123, name: "CI", headSha: sha, conclusion: "success", url: "https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/123" }],
     checks: [{ jobName: "Typecheck and API tests", name: "Run tests", status: "completed", conclusion: "success" }],
     notes: [],
   };
