@@ -38,7 +38,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const runner = new Runner(provider.provider !== "none" ? { modelProvider: provider.modelProvider } : {});
   const modelOptions = options.model ? { model: options.model } : provider.provider !== "none" && provider.model ? { model: provider.model } : {};
   const factory = isAgentFactoryTarget(goal);
-  const repository = factory ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();
+  const repository = factory ? "erman-ksv/Onay-Agents-Factory" : getTargetRepository();
   const ref = options.baseRef ?? (factory ? "dev/agent-factory-core" : "main");
   assertValidBranchRef(ref);
   if (options.expectedBaseSha !== undefined) assertCommitSha(options.expectedBaseSha);
@@ -112,7 +112,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   ];
   const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
   for (const role of advisoryRoles) {
-    const specialist = new Agent({ name: "TezJet " + role + " Specialist", ...modelOptions, instructions: ROLE_SKILLS[role] });
+    const specialist = new Agent({ name: "Onay " + role + " Specialist", ...modelOptions, instructions: ROLE_SKILLS[role] });
     const name = COMMANDER_TOOL_NAMES[role];
     tools.push(tool({
       name, description: "Ask the " + role + " specialist to review actual repository context and proposed changes. Advice does not prove writes or tests.",
@@ -128,7 +128,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     }));
   }
   const commander = new Agent({
-    name: "TezJet Commander", ...modelOptions, modelSettings: { parallelToolCalls: false },
+    name: "Onay Commander", ...modelOptions, modelSettings: { parallelToolCalls: false },
     instructions: [
       "Coordinate specialists through executable tools. Host evidence, not final prose, determines completion.",
       "Explore first. For changes call code_tezjet, every required advisory specialist, security_review and final_review.",
