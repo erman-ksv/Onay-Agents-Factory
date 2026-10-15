@@ -27,20 +27,20 @@ const provider = selectProviderConfig(process.env);
 if (provider.provider === "none" && process.env.AGENT_FACTORY_PROVIDER?.trim() && process.env.AGENT_FACTORY_MODE !== "deterministic") {
   const reasons = [providerRequirementMessage(process.env)];
   journal.record("blocked", "commander", reasons[0]);
-  console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result: { status: "blocked", reasons }, events: journal.snapshot() }, null, 2));
+  console.log(JSON.stringify({ commander: "Onay Commander", mode: "ai", taskId: journal.taskId, result: { status: "blocked", reasons }, events: journal.snapshot() }, null, 2));
   process.exitCode = commanderExitCode("blocked");
 } else if (shouldUseAiCommander(goal, provider.provider !== "none", process.env.AGENT_FACTORY_MODE)) {
   journal.record("agent_started", "commander", "AI Commander started coordinating specialist agents.");
   const { runAiCommander } = await import("./aiCommander.js");
   const result = await runAiCommander(goal, { journal, publication });
-  console.log(JSON.stringify({ commander: "TezJet Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
+  console.log(JSON.stringify({ commander: "Onay Commander", mode: "ai", taskId: journal.taskId, result, events: journal.snapshot() }, null, 2));
   process.exitCode = commanderExitCode(result.status);
 } else {
   if (publication) {
     throw new Error("Publishing through Commander requires an AI provider and AI mode; no files were written.");
   }
   const plan = planTask(goal);
-  const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/TezJet-Agent-Factory" : getTargetRepository();
+  const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/Onay-Agents-Factory" : getTargetRepository();
   const targetRef = isAgentFactoryTarget(goal) ? "dev/agent-factory-core" : "main";
   const explorerPaths = isAgentFactoryTarget(goal) ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
   const securityPaths = isAgentFactoryTarget(goal) ? ["package.json", "commander/commander.ts", "commander/planner.ts", "commander/executor.ts", "commander/providerConfig.ts", "commander/modelProvider.ts", "agents/tester/agent.ts", "agents/security/agent.ts", "agents/reviewer/agent.ts", "github/tezjetRepository.ts", "github/repositoryPolicy.ts", "github/changeWorkflow.ts", "github/ciGate.ts", "orchestration/pipeline.ts", "orchestration/retryLoop.ts", "orchestration/dashboardServer.ts"] : undefined;
@@ -121,7 +121,7 @@ if (provider.provider === "none" && process.env.AGENT_FACTORY_PROVIDER?.trim() &
   const summary = summarizeExecution(execution, { proposalOnly: true });
 
   console.log(JSON.stringify({
-    commander: "TezJet Commander",
+    commander: "Onay Commander",
     mode: "deterministic",
     taskId: journal.taskId,
     events: journal.snapshot(),
