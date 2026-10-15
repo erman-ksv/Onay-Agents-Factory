@@ -36,16 +36,28 @@ Rasul is an AI legal research assistant, not a licensed lawyer. For each legal t
 
 Copy `.env.example` to your runtime environment and provide:
 
-- `AGENT_FACTORY_PROVIDER` — optional explicit `gemini` or `openai` choice. The selected provider requires its own key and never falls back to another provider. When unset, automatic selection gives Gemini precedence.
+- `AGENT_FACTORY_PROVIDER` — optional explicit `gemini`, `openai` or `openrouter` choice. The selected provider requires its own key and never falls back to another provider. When unset, automatic selection prefers Gemini, then OpenAI, then OpenRouter.
 - `GEMINI_API_KEY` — enables Gemini AI orchestration and specialist delegation.
 - `GEMINI_MODEL` — optional model override. The default is `gemini-3.8-flash` when this value is absent or blank; an explicit value takes precedence.
 - `OPENAI_API_KEY` — enables OpenAI AI orchestration when explicitly selected, or when automatic selection finds no Gemini key.
 - `OPENAI_MODEL` — optional OpenAI model override; blank uses the SDK default. Commander and Coder configure the selected provider and model for each invocation.
+- `OPENROUTER_API_KEY` — Codespaces secret for OpenRouter; use only free routes while no paid budget is authorized.
+- `OPENROUTER_MODEL` — defaults to `openrouter/free`. Only the free router or a concrete model ending in `:free` is accepted; paid routes are rejected before any API request.
 - `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
 - `TEZJET_REPOSITORY=erman-ksv/TezJet`
 - `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet,erman-ksv/TezJet-Agent-Factory` — explicitly allow only repositories the agent may inspect or modify.
 
-Never commit tokens or secrets.
+Never commit tokens or secrets. OpenRouter is selected explicitly with `AGENT_FACTORY_PROVIDER=openrouter` when another provider key is also present. OpenRouter calls use the Chat Completions API with tracing disabled and SDK HTTP retries set to zero, to avoid wasting free-tier requests. No automatic mid-run failover is attempted because restarting Commander could replay completed tools. The free model router can route to different models, so tool-call quality and daily request capacity must still be verified in a live read-only task.
+
+Run a limited read-only Commander smoke test (no publication, no changes) from the branch with this feature:
+
+```bash
+AGENT_FACTORY_PROVIDER=openrouter AGENT_FACTORY_ENABLE_GITHUB_WRITES=false \
+AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet-Agent-Factory \
+pnpm exec tsx commander/commander.ts "Audit TezJet-Agent-Factory repository without changing files"
+```
+
+This does not replace the separately validated live-cycle CLI: that CLI's provider selector remains Gemini/OpenAI until extended and tested.
 
 If Gemini returns a model-availability `404` saying `gemini-2.5-flash` is no longer available, set `GEMINI_MODEL=gemini-3.8-flash` or remove the stale model override and retry. Updating the default in code does not replace an existing runtime override. This model-availability error does not require replacing your API key.
 
