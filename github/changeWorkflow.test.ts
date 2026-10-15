@@ -4,7 +4,7 @@ import { prepareTezJetChange } from "./changeWorkflow.js";
 import { checkCiGate, waitForCiGate } from "./ciGate.js";
 import { GitHubClient } from "./githubClient.js";
 
-const repository = "erman-ksv/TezJet-Agent-Factory";
+const repository = "erman-ksv/Onay-Agents-Factory";
 const baseRef = "dev/agent-factory-core";
 const baseSha = "a".repeat(40);
 const candidateSha = "b".repeat(40);
