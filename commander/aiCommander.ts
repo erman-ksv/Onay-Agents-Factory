@@ -29,6 +29,7 @@ export type AiCommanderOptions = {
   expectedBaseSha?: string;
   /** Host-selected file scope; models cannot expand the permitted change set. */
   allowedChangePaths?: readonly string[];
+  specialistContextTransform?: AiExecutionOptions["specialistContextTransform"];
 };
 
 /** Fresh executable tools and evidence state for each task. */
