@@ -47,6 +47,12 @@ const env: NodeJS.ProcessEnv = {
   AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true",
 };
 
+// RepositoryAdapter reads process.env, while Commander accepts the explicit
+// env above. Keep both permission checks identical and limited to this single
+// disposable factory repository; do not allow access to the taxi app.
+process.env.AGENT_ALLOWED_REPOSITORIES = repository;
+
+
 function scrub(value: unknown): string {
   let message = String(value ?? "");
   for (const secret of [env.GEMINI_API_KEY, env.GITHUB_TOKEN]) {
