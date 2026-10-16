@@ -406,3 +406,30 @@ test("Gemini SDK retries a 503 after an executed Explorer tool without executing
   assert.equal(result.evidence.testsExecuted, false);
   assert.ok(!calls.includes("write-and-open-pr"));
 });
+
+test("private-source Commander does not echo generated complete files to Gemini", async () => {
+  const secretMarker = "PRIVATE_GENERATED_UI_ONLY_HOST_CAN_READ";
+  class PrivacyModel implements Model {
+    readonly requests: ModelRequest[] = [];
+    async getResponse(request: ModelRequest): Promise<ModelResponse> {
+      const index = this.requests.push(request) - 1;
+      const name = index === 0 ? "explore_onay" : index === 1 ? "code_onay" : undefined;
+      return {
+        usage: new Usage(),
+        output: name ? [{ type: "function_call", callId: "p-" + index, name, arguments: "{}", status: "completed" }] :
+          [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Stopped before publication." }] }],
+      };
+    }
+    async *getStreamedResponse(): AsyncGenerator<never> { throw new Error("no streaming"); }
+  }
+  const model = new PrivacyModel();
+  const deps = dependencies([]);
+  deps.generate = async () => ({ summary: "Scoped proposal", files: [{ path: "mobile/tezjet-app/app/index.tsx", content: secretMarker, message: "Fix auth" }] });
+  await runAiCommander("Implement Onay passenger mobile registration", {
+    model, env: { AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay" }, dependencies: deps,
+    specialistContextTransform: (context) => context,
+  });
+  const toolResults = JSON.stringify(model.requests.slice(2));
+  assert.doesNotMatch(toolResults, /PRIVATE_GENERATED_UI_ONLY_HOST_CAN_READ/);
+  assert.match(toolResults, /mobile\\/tezjet-app\\/app\\/index.tsx/);
+});
