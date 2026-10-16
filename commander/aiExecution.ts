@@ -2,7 +2,7 @@ import type { CoderResult, ProposedChange } from "../agents/backend/coder.js";
 import type { TestExecutionEvidence } from "../agents/tester/agent.js";
 import type { reviewChangeSet } from "../agents/reviewer/agent.js";
 import type { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
-import type { inspectTezJet } from "../github/tezjetExplorer.js";
+import type { inspectTezJet } from "../github/onayExplorer.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 
 type Review = ReturnType<typeof reviewChangeSet>;
