@@ -14,6 +14,7 @@ import { waitForCiGate } from "../github/ciGate.js";
 import { inspectTestExecution } from "../agents/tester/agent.js";
 import { scanForSecrets } from "../github/secretScanner.js";
 import type { AiExecutionDependencies } from "../commander/aiExecution.js";
+import { AgentRunJournal } from "./agentRunJournal.js";
 import {
   applyUiEdits, assertPrivateSourceConsent, assertRegistrationResult,
   assertRegistrationUiEditScope, validateScopedPlan, ONAY_REPOSITORY,
@@ -209,8 +210,16 @@ async function main() {
   console.log("CONSENT: explicit; source snippet bytes", excerpt.length);
   console.log("GEMINI MODEL:", MODEL);
   console.log("ALLOWED FILES:", ONAY_ALLOWED_CHANGE_PATHS.join(", "));
+  // Show real execution progress in mobile Codespaces without printing model
+  // prompts, private code, tool responses, or secret-bearing error messages.
+  const journal = new AgentRunJournal(goal, undefined, event => {
+    if (event.type === "tool_started" || event.type === "tool_completed" || event.type === "tool_failed") {
+      const toolName = typeof event.details?.tool === "string" ? event.details.tool : event.actor;
+      console.log("AGENT STEP:", event.type, toolName);
+    }
+  });
   const result = await runAiCommander(goal, {
-    env, baseRef, expectedBaseSha: BASE_SHA,
+    env, journal, baseRef, expectedBaseSha: BASE_SHA,
     allowedChangePaths: ONAY_ALLOWED_CHANGE_PATHS, dependencies: deps,
     specialistContextTransform: (context, proposedFiles) => {
       const privateSnippets = proposedFiles.map(file => {
