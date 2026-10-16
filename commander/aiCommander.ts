@@ -161,7 +161,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       "Respect tool errors and pending/failed CI. Never invent edits, tools, commands, PRs, tests, legal verification, merge or deployment.",
       "For legal tasks involve Rasul. Humans review legal commitments, merges and deployments.",
       ...(options.specialistContextTransform ? [
-        "PRIVATE-SOURCE RUN: Follow this exact sequence: explore_onay; product_requirements; ux_accessibility_review; code_onay ONCE; required backend/frontend and other specialists ONCE; rasul_legal_compliance; security_review; final_review; publish_change_set only if every gate is ready; then test_onay.",
+        "PRIVATE-SOURCE RUN: Follow this exact sequence: explore_onay; code_onay ONCE; then product_requirements, ux_accessibility_review, backend/frontend and other required specialists, rasul_legal_compliance, security_review and final_review. Specialist advice before code generation is invalidated. Publish only if every gate is ready; then test_onay.",
         "Do not repeat code_onay or repeat an advisory specialist. Re-running Coder destroys prior approvals. If any tool fails or specialist reports high/blocker, STOP with a clear explanation; do not retry, publish or invent completion.",
         "Publishing a Draft PR is not production deployment; still respect all security, legal and review blockers.",
       ] : []),
