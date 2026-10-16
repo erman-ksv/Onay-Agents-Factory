@@ -17,12 +17,12 @@ already bound to the process. Do not put keys in CLI arguments, PR descriptions,
 chat messages, or committed files.
 
 - `GEMINI_API_KEY` for `--provider gemini` (the CLI default, matching the
-  selected existing TezJet runtime).
+  selected existing Onay runtime).
 - `OPENAI_API_KEY` for an explicit `--provider openai` run.
 - `GITHUB_TOKEN` for reading repository files and CI evidence; publication also
   needs permission to create a feature branch, commits, and a draft PR.
 - `AGENT_ALLOWED_REPOSITORIES` must explicitly contain
-  `erman-ksv/TezJet-Agent-Factory`.
+  `erman-ksv/Onay-Agents-Factory`.
 - Optionally set `OPENAI_MODEL` or `GEMINI_MODEL` to a model available to your
   provider account. When `OPENAI_MODEL` is absent, evidence records
   `model: "sdk-default"`: this describes the SDK selector, not an observed
@@ -50,12 +50,12 @@ are published.
 git fetch origin fix/verified-agent-execution
 FACTORY_BASE_SHA="$(git rev-parse origin/fix/verified-agent-execution)"
 
-AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet-Agent-Factory \
+AGENT_ALLOWED_REPOSITORIES=erman-ksv/Onay-Agents-Factory \
   pnpm run live-cycle -- \
   --provider gemini \
   --base-ref fix/verified-agent-execution \
   --base-sha "$FACTORY_BASE_SHA" \
-  --output-dir /tmp/tezjet-gemini-audit-001
+  --output-dir /tmp/onay-gemini-audit-001
 ```
 
 To compare an OpenAI account later, use `--provider openai` and a different
@@ -90,13 +90,13 @@ scope are rejected before publication. Both permitted files must be present
 in the final result for this live-cycle task to pass.
 
 ```bash
-AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet-Agent-Factory \
+AGENT_ALLOWED_REPOSITORIES=erman-ksv/Onay-Agents-Factory \
 AGENT_FACTORY_ENABLE_GITHUB_WRITES=true \
   pnpm run live-cycle -- \
   --provider gemini \
   --base-ref fix/verified-agent-execution \
   --base-sha "$FACTORY_BASE_SHA" \
-  --output-dir /tmp/tezjet-gemini-change-001 \
+  --output-dir /tmp/onay-gemini-change-001 \
   --publish \
   --branch feat/live-journal-ids-001 \
   --title 'Prevent default journal task ID collisions' \
