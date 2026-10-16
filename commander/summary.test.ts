@@ -8,7 +8,7 @@ function result(agent: string, status: AgentStepResult["status"], output?: unkno
 }
 
 const candidateOptions = {
-  expectedSha: "a".repeat(40), repository: "erman-ksv/TezJet", ref: "fix/candidate",
+  expectedSha: "a".repeat(40), repository: "erman-ksv/Onay", ref: "fix/candidate",
   requiredNames: ["typecheck"], requiredStepNames: ["Test"],
 };
 function trustedEvidence() {

@@ -50,7 +50,7 @@ testCase("CI gate stays pending while a required job is running", () => {
   assert.equal(result.status, "pending");
 });
 
-testCase("TezJet's combined typecheck and API test job satisfies the configured gate", () => {
+testCase("Onay's combined typecheck and API test job satisfies the configured gate", () => {
   const result = evaluateCiJobs(
     runs,
     [job("Typecheck and API tests", "success")],
@@ -59,7 +59,7 @@ testCase("TezJet's combined typecheck and API test job satisfies the configured 
   assert.equal(result.status, "passed");
 });
 
-testCase("TezJet's combined job fails the gate if API tests fail", () => {
+testCase("Onay's combined job fails the gate if API tests fail", () => {
   const result = evaluateCiJobs(
     runs,
     [job("Typecheck and API tests", "failure")],
@@ -179,7 +179,7 @@ testCase("CI does not pass skipped or pending required jobs and steps", () => {
 });
 
 function allowRepository(t: TestContext) {
-  const repository = "erman-ksv/TezJet-Agent-Factory";
+  const repository = "erman-ksv/Onay-Agents-Factory";
   const previous = process.env.AGENT_ALLOWED_REPOSITORIES;
   process.env.AGENT_ALLOWED_REPOSITORIES = repository;
   t.after(() => {
