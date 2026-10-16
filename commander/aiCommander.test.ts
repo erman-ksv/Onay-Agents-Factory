@@ -424,12 +424,19 @@ test("private-source Commander does not echo generated complete files to Gemini"
   }
   const model = new PrivacyModel();
   const deps = dependencies([]);
-  deps.generate = async () => ({ summary: "Scoped proposal", files: [{ path: "mobile/tezjet-app/app/index.tsx", content: secretMarker, message: "Fix auth" }] });
-  await runAiCommander("Implement Onay passenger mobile registration", {
+  let generated = 0;
+  deps.generate = async () => {
+    generated++;
+    return { summary: "Scoped proposal", files: [{ path: "mobile/tezjet-app/app/index.tsx", content: secretMarker, message: "Fix auth" }] };
+  };
+  const result = await runAiCommander("Implement Onay passenger mobile registration", {
     model, env: { AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay" }, dependencies: deps,
     specialistContextTransform: (context) => context,
   });
+  assert.equal(generated, 1, "Coder must actually generate the sensitive fixture");
+  assert.ok(result.events.some(event => event.type === "tool_completed" && event.details?.tool === "code_onay"));
+  assert.deepEqual(result.evidence.proposedFiles, ["mobile/tezjet-app/app/index.tsx"]);
+  assert.ok(model.requests.length >= 3, "Commander must receive a post-Coder tool-result request");
   const toolResults = JSON.stringify(model.requests.slice(2));
   assert.doesNotMatch(toolResults, /PRIVATE_GENERATED_UI_ONLY_HOST_CAN_READ/);
-  assert.ok(toolResults.includes("mobile/tezjet-app/app/index.tsx"));
 });
