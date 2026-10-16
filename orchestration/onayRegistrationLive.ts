@@ -203,6 +203,14 @@ async function main() {
   const result = await runAiCommander(goal, {
     env, baseRef, expectedBaseSha: BASE_SHA,
     allowedChangePaths: ONAY_ALLOWED_CHANGE_PATHS, dependencies: deps,
+    specialistContextTransform: (context, proposedFiles) => {
+      const privateSnippets = proposedFiles.map(file => {
+        const excerpt = file.path === ONAY_UI_PATH ? safeSnippet(file.content) : file.content;
+        if (scanForSecrets(excerpt).length) throw new Error("Proposed specialist snippet contains a potential secret");
+        return "FILE: " + file.path + "\n" + excerpt;
+      });
+      return context + "\n\nSCOPED PROPOSAL:\n" + privateSnippets.join("\n---\n");
+    },
     publication: {
       branch: ONAY_TARGET_BRANCH,
       title: "AI agents: Onay separate registration names and returning-user OTP login",
