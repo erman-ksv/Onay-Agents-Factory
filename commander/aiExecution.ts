@@ -164,6 +164,9 @@ export class AiExecutionSession {
 
   specialistContext() {
     if (!this.context) throw new Error("Specialists require repository exploration first.");
+    if (this.options.specialistContextTransform) {
+      return this.options.specialistContextTransform(this.context, structuredClone(this.files));
+    }
     return this.context + (this.files.length ? "\n\nPROPOSED CHANGES:\n" + JSON.stringify(this.files) : "");
   }
 
