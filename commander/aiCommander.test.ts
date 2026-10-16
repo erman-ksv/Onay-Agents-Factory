@@ -424,6 +424,13 @@ test("private-source Commander does not echo generated complete files to Gemini"
   }
   const model = new PrivacyModel();
   const deps = dependencies([]);
+  // This test targets the app repository, not the factory fixture.
+  // Explorer must report the same repository selected by Commander.
+  deps.explore = async sha => ({
+    repository: "erman-ksv/Onay",
+    ref: sha,
+    files: [{ path: "mobile/tezjet-app/app/index.tsx", sha: "c".repeat(40), content: "fictional private UI context" }],
+  });
   let generated = 0;
   deps.generate = async () => {
     generated++;
