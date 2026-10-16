@@ -100,6 +100,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     allowedChangePaths: options.allowedChangePaths,
     specialistContextTransform: options.specialistContextTransform,
   }, dependencies);
+  let privateCoderCalls = 0;
   const executable = (actor: string, name: string, description: string, execute: () => Promise<unknown> | unknown) => tool({
     name, description, parameters: z.object({}),
     execute: async () => JSON.stringify(await session.invoke(actor, name, execute)),
@@ -107,6 +108,13 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const tools: Tool[] = [
     executable("explorer", "explore_onay", "Read actual repository files at an immutable commit. Required before other agents.", () => session.explore()),
     executable("coder", "code_onay", "Run AI Coder using inspected context and store proposed complete file contents. Does not write yet.", async () => {
+      // Private Onay runs cannot regenerate indefinitely: each regeneration
+      // invalidates independent specialist assessments, review and security.
+      // Fail closed and require a new reviewed run rather than spend model turns
+      // repeatedly re-creating source or bypassing earlier blockers.
+      if (options.specialistContextTransform && ++privateCoderCalls > 1) {
+        throw new Error("Private-source Coder already invoked. Stop, inspect the first proposal and specialist blockers; do not regenerate in this run.");
+      }
       const generated = await session.generate();
       // In private-source mode, retain whole files ONLY in trusted host memory.
       // The Commander tool result must not echo the full patched application UI
@@ -152,6 +160,11 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       "If publishing is disabled, explain the proposal and remaining verification steps; do not claim files were applied.",
       "Respect tool errors and pending/failed CI. Never invent edits, tools, commands, PRs, tests, legal verification, merge or deployment.",
       "For legal tasks involve Rasul. Humans review legal commitments, merges and deployments.",
+      ...(options.specialistContextTransform ? [
+        "PRIVATE-SOURCE RUN: Follow this exact sequence: explore_onay; product_requirements; ux_accessibility_review; code_onay ONCE; required backend/frontend and other specialists ONCE; rasul_legal_compliance; security_review; final_review; publish_change_set only if every gate is ready; then test_onay.",
+        "Do not repeat code_onay or repeat an advisory specialist. Re-running Coder destroys prior approvals. If any tool fails or specialist reports high/blocker, STOP with a clear explanation; do not retry, publish or invent completion.",
+        "Publishing a Draft PR is not production deployment; still respect all security, legal and review blockers.",
+      ] : []),
     ].join("\n"), tools,
   });
   const publishing = options.publication && env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true";
