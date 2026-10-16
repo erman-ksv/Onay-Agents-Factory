@@ -645,3 +645,35 @@ test("returned specialist advice is detached from the current assessment", async
   snapshot.evidence.assessments.backend.ready = false;
   assert.equal(session.finish("Advice unchanged.").evidence.assessments.backend.ready, true);
 });
+
+test("repeated failed Coder invocation preserves the original actionable failure", async () => {
+  let attempts = 0;
+  const { session } = setup({ generate: async () => {
+    attempts++;
+    throw new Error(attempts === 1 ? "UI lacks required registration marker" : "Private-source Coder already invoked");
+  } });
+  await session.invoke("explorer", "explore_onay", () => session.explore());
+  const first = await session.invoke("coder", "code_onay", () => session.generate());
+  const second = await session.invoke("coder", "code_onay", () => session.generate());
+  assert.ok("error" in first);
+  assert.ok("error" in second);
+  const final = session.finish("Coder failed twice.");
+  assert.ok(final.reasons.includes("UI lacks required registration marker"));
+  assert.ok(!final.reasons.includes("Private-source Coder already invoked"));
+  assert.equal(final.evidence.publication, undefined);
+  assert.equal(final.evidence.testsExecuted, false);
+});
+
+test("successful retry clears the original failed-tool reason", async () => {
+  let attempts = 0;
+  const { session } = setup({ generate: async () => {
+    if (++attempts === 1) throw new Error("Temporary Coder failure");
+    return structuredClone(generated);
+  } });
+  await session.invoke("explorer", "explore_onay", () => session.explore());
+  await session.invoke("coder", "code_onay", () => session.generate());
+  await session.invoke("coder", "code_onay", () => session.generate());
+  const final = session.finish("Retry completed but reviews are pending.");
+  assert.ok(!final.reasons.includes("Temporary Coder failure"));
+  assert.deepEqual(final.evidence.proposedFiles, [files[0].path]);
+});

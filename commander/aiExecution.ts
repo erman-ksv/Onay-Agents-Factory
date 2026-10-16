@@ -36,6 +36,7 @@ export type AiExecutionOptions = {
   journal?: AgentRunJournal;
   /** Exact repository paths authorized by the host for this task. */
   allowedChangePaths?: readonly string[];
+  specialistContextTransform?: (context: string, files: readonly ProposedChange[]) => string;
 };
 
 /** Evidence belongs to this run, never to a model's prose or tool arguments. */
@@ -77,6 +78,10 @@ export class AiExecutionSession {
   /** Serialize tools so parallel model calls cannot race review against generation. */
   invoke<T>(actor: string, tool: string, action: () => Promise<T> | T): Promise<T | { error: string }> {
     const operation = this.queue.then(async () => {
+      // Temporarily clear this tool's prior failure so a corrected retry
+      // can pass gates that reject unresolved tool failures. If the retry
+      // fails, restore the FIRST diagnostic, not the secondary failure.
+      const firstFailure = this.failures.get(tool);
       this.failures.delete(tool);
       this.completedActors.delete(actor);
       this.assessments.delete(actor);
@@ -92,7 +97,7 @@ export class AiExecutionSession {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.failures.set(tool, message);
+        this.failures.set(tool, firstFailure ?? message);
         this.journal.record("tool_failed", actor, message, { tool });
         this.journal.record("agent_failed", actor, "Agent tool execution failed.", { tool });
         return { error: message };
@@ -163,6 +168,9 @@ export class AiExecutionSession {
 
   specialistContext() {
     if (!this.context) throw new Error("Specialists require repository exploration first.");
+    if (this.options.specialistContextTransform) {
+      return this.options.specialistContextTransform(this.context, structuredClone(this.files));
+    }
     return this.context + (this.files.length ? "\n\nPROPOSED CHANGES:\n" + JSON.stringify(this.files) : "");
   }
 

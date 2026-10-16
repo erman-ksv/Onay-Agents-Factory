@@ -406,3 +406,44 @@ test("Gemini SDK retries a 503 after an executed Explorer tool without executing
   assert.equal(result.evidence.testsExecuted, false);
   assert.ok(!calls.includes("write-and-open-pr"));
 });
+
+test("private-source Commander does not echo generated complete files to Gemini", async () => {
+  const secretMarker = "PRIVATE_GENERATED_UI_ONLY_HOST_CAN_READ";
+  class PrivacyModel implements Model {
+    readonly requests: ModelRequest[] = [];
+    async getResponse(request: ModelRequest): Promise<ModelResponse> {
+      const index = this.requests.push(request) - 1;
+      const name = index === 0 ? "explore_onay" : index === 1 ? "code_onay" : undefined;
+      return {
+        usage: new Usage(),
+        output: name ? [{ type: "function_call", callId: "p-" + index, name, arguments: "{}", status: "completed" }] :
+          [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Stopped before publication." }] }],
+      };
+    }
+    async *getStreamedResponse(): AsyncGenerator<never> { throw new Error("no streaming"); }
+  }
+  const model = new PrivacyModel();
+  const deps = dependencies([]);
+  // This test targets the app repository, not the factory fixture.
+  // Explorer must report the same repository selected by Commander.
+  deps.explore = async sha => ({
+    repository: "erman-ksv/Onay",
+    ref: sha,
+    files: [{ path: "mobile/tezjet-app/app/index.tsx", sha: "c".repeat(40), content: "fictional private UI context" }],
+  });
+  let generated = 0;
+  deps.generate = async () => {
+    generated++;
+    return { summary: "Scoped proposal", files: [{ path: "mobile/tezjet-app/app/index.tsx", content: secretMarker, message: "Fix auth" }] };
+  };
+  const result = await runAiCommander("Implement Onay passenger mobile registration", {
+    model, env: { AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay" }, dependencies: deps,
+    specialistContextTransform: (context) => context,
+  });
+  assert.equal(generated, 1, "Coder must actually generate the sensitive fixture");
+  assert.ok(result.events.some(event => event.type === "tool_completed" && event.details?.tool === "code_onay"));
+  assert.deepEqual(result.evidence.proposedFiles, ["mobile/tezjet-app/app/index.tsx"]);
+  assert.ok(model.requests.length >= 3, "Commander must receive a post-Coder tool-result request");
+  const toolResults = JSON.stringify(model.requests.slice(2));
+  assert.doesNotMatch(toolResults, /PRIVATE_GENERATED_UI_ONLY_HOST_CAN_READ/);
+});
