@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateAndPrepareTezJetChange, runChangePipeline, type PipelineDependencies, type PipelineGenerationDependencies } from "./pipeline.js";
+import { generateAndPrepareOnayChange, runChangePipeline, type PipelineDependencies, type PipelineGenerationDependencies } from "./pipeline.js";
 import { getTargetRepository } from "../github/repositoryConfig.js";
 import type { TestExecutionEvidence } from "../agents/tester/agent.js";
 
@@ -187,7 +187,7 @@ test("generation, repository security and branch creation share one immutable ba
     assert.equal(proposal.baseSha, baseSha);
     return { html_url: "https://example.test/pull/1", number: 1, head_sha: originalSha, head: { sha: originalSha } };
   };
-  const result = await generateAndPrepareTezJetChange(input, deps);
+  const result = await generateAndPrepareOnayChange(input, deps);
   assert.equal(result.status, "ci-passed");
   assert.equal(mainLookups, 1);
   assert.deepEqual(calls, ["resolve-base", "explore", "generate", "security", "prepare"]);
@@ -200,7 +200,7 @@ test("exploration from another commit blocks generation and branch preparation",
   };
   deps.generate = async () => assert.fail("Mismatched exploration must not generate changes");
   deps.prepare = async () => assert.fail("Mismatched exploration must not create a branch");
-  assert.equal((await generateAndPrepareTezJetChange(input, deps)).status, "blocked");
+  assert.equal((await generateAndPrepareOnayChange(input, deps)).status, "blocked");
 });
 
 test("an exhausted CI repair cannot complete the task", async () => {

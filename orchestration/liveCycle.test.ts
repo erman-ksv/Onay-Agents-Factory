@@ -72,14 +72,14 @@ function simulatedExecutor(calls: string[], mutate?: (result: Result, audit: boo
         checks: [], notes: [],
       }),
     });
-    await session.invoke("explorer", "explore_tezjet", () => session.explore());
+    await session.invoke("explorer", "explore_onay", () => session.explore());
     if (!audit) {
-      await session.invoke("coder", "code_tezjet", () => session.generate());
+      await session.invoke("coder", "code_onay", () => session.generate());
       await session.invoke("reviewer", "final_review", () => session.reviewChanges());
     }
     await session.invoke("security", "security_review", () => session.inspectSecurity());
     if (!audit) await session.invoke("github", "publish_change_set", () => session.publish());
-    await session.invoke("tester", "test_tezjet", () => session.test());
+    await session.invoke("tester", "test_onay", () => session.test());
     if (!audit) await session.verifyFinalCandidate();
     const result = session.finish("Injected test executor completed its simulation.");
     mutate?.(result, audit, options);
@@ -256,7 +256,7 @@ test("host verification rejects missing, stale, unknown and inconsistent success
     ["unexecuted", result => { result.evidence.testsExecuted = false; }, /not executed/],
     ["missing runs", result => { result.evidence.tests!.evidence = []; }, /CI metadata/],
     ["missing final head", result => { result.events = result.events.filter(event => event.details?.tool !== "verify_final_head"); }, /verify_final_head/],
-    ["missing started", result => { result.events = result.events.filter(event => !(event.type === "tool_started" && event.details?.tool === "code_tezjet")); }, /code_tezjet/],
+    ["missing started", result => { result.events = result.events.filter(event => !(event.type === "tool_started" && event.details?.tool === "code_onay")); }, /code_onay/],
     ["missing verified event", result => { result.events = result.events.filter(event => !(event.type === "verification_passed" && event.actor === "tester")); }, /journal does not confirm test/],
   ];
   for (const [name, alter, expected] of alterations) {

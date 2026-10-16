@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { analyzeTezJetTask, generateAndPrepareTezJetChange } from "./pipeline.js";
+import { analyzeOnayTask, generateAndPrepareOnayChange } from "./pipeline.js";
 import type { AgentRunEvent } from "./agentRunJournal.js";
 import { commanderExitCode } from "../commander/exitCode.js";
 
@@ -77,7 +77,7 @@ export async function runPipelineCli(
   }
 
   if (!options.publish) {
-    const analysis = await analyzeTezJetTask(options.goal);
+    const analysis = await analyzeOnayTask(options.goal);
     return { mode: "analysis-only", analysis, note: "No branch or pull request was created. Add --publish and explicitly enable writes to publish a draft PR." };
   }
 
@@ -85,7 +85,7 @@ export async function runPipelineCli(
     throw new Error("Publishing is disabled. Set AGENT_FACTORY_ENABLE_GITHUB_WRITES=true and pass --publish to allow GitHub writes.");
   }
 
-  const result = await generateAndPrepareTezJetChange({
+  const result = await generateAndPrepareOnayChange({
     goal: options.goal,
     branch: options.branch,
     title: options.title,

@@ -1,9 +1,9 @@
-import { inspectTezJet } from "../github/tezjetExplorer.js";
+import { inspectOnay } from "../github/onayExplorer.js";
 import { inspectTestExecution, inspectTests } from "../agents/tester/agent.js";
 import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { generateChanges } from "../agents/backend/coder.js";
-import { prepareTezJetChange } from "../github/changeWorkflow.js";
+import { prepareOnayChange } from "../github/changeWorkflow.js";
 import { evaluateCiJobs, waitForCiGate } from "../github/ciGate.js";
 import { boundedRepairAttempts, retryFailedCi } from "./retryLoop.js";
 import { AgentRunJournal, type AgentRunEvent } from "./agentRunJournal.js";
@@ -12,15 +12,15 @@ import { assertCommitSha, assertValidBranchRef, GitHubClient } from "../github/g
 import type { TestExecutionEvidence } from "../agents/tester/agent.js";
 
 type ChangeFile = { path: string; content: string; message: string };
-const REQUIRED_TEZJET_CI_JOBS = ["Typecheck and API tests"];
-const REQUIRED_TEZJET_CI_STEPS = ["Typecheck", "API integration tests"];
+const REQUIRED_ONAY_CI_JOBS = ["Typecheck and API tests"];
+const REQUIRED_ONAY_CI_STEPS = ["Typecheck", "API integration tests"];
 
 export type PipelineDependencies = {
   generate: typeof generateChanges;
   review: typeof reviewChangeSet;
   scan: typeof inspectProposedChanges;
   security: typeof inspectSecurity;
-  prepare: typeof prepareTezJetChange;
+  prepare: typeof prepareOnayChange;
   wait: typeof waitForCiGate;
   repair: typeof retryFailedCi;
   verify: typeof inspectTestExecution;
@@ -28,7 +28,7 @@ export type PipelineDependencies = {
 };
 
 export type PipelineGenerationDependencies = PipelineDependencies & {
-  explore: typeof inspectTezJet;
+  explore: typeof inspectOnay;
 };
 
 function verifiedTests(evidence: TestExecutionEvidence, headSha: string, branch: string) {
@@ -44,11 +44,11 @@ function verifiedTests(evidence: TestExecutionEvidence, headSha: string, branch:
     id: run.runId, run_attempt: run.runAttempt, name: run.name, head_sha: run.headSha,
     status: "completed", conclusion: run.conclusion, html_url: run.url,
   }));
-  return evaluateCiJobs(runs, evidence.jobs, REQUIRED_TEZJET_CI_JOBS, REQUIRED_TEZJET_CI_STEPS).status === "passed";
+  return evaluateCiJobs(runs, evidence.jobs, REQUIRED_ONAY_CI_JOBS, REQUIRED_ONAY_CI_STEPS).status === "passed";
 }
 
-export async function analyzeTezJetTask(goal: string) {
-  const [exploration, tests, security] = await Promise.all([inspectTezJet(), inspectTests(), inspectSecurity()]);
+export async function analyzeOnayTask(goal: string) {
+  const [exploration, tests, security] = await Promise.all([inspectOnay(), inspectTests(), inspectSecurity()]);
   return { goal, stages: { explorer: exploration, tester: tests, security }, next: "Use Coder to produce an explicit change set, then review, security-check, publish a branch, and wait for CI." };
 }
 
@@ -66,7 +66,7 @@ export async function runChangePipeline(input: {
 }, overrides: Partial<PipelineDependencies> = {}) {
   const dependencies: PipelineDependencies = {
     generate: generateChanges, review: reviewChangeSet, scan: inspectProposedChanges, security: inspectSecurity,
-    prepare: prepareTezJetChange, wait: waitForCiGate, repair: retryFailedCi, verify: inspectTestExecution,
+    prepare: prepareOnayChange, wait: waitForCiGate, repair: retryFailedCi, verify: inspectTestExecution,
     getHead: branch => new GitHubClient({ repository: getTargetRepository() }).getCommitSha(branch),
     ...overrides,
   };
@@ -123,7 +123,7 @@ export async function runChangePipeline(input: {
   }
   journal.record("verification_passed", "security", "Security checks passed.");
 
-  journal.handoff("security", "github", "Review and security gates passed; preparing a draft PR on the TezJet feature branch.");
+  journal.handoff("security", "github", "Review and security gates passed; preparing a draft PR on the Onay feature branch.");
   let pullRequest = await dependencies.prepare({ ...input, files, body: input.body, baseRef, baseSha });
   const headSha = pullRequest.head_sha;
   journal.record("artifact_created", "github", "Draft pull request created for the proposed change.", {
@@ -134,7 +134,7 @@ export async function runChangePipeline(input: {
   });
 
   journal.handoff("github", "ci", "Checking required CI jobs against the proposed commit.", { headSha });
-  const ci = await dependencies.wait({ branch: input.branch, headSha, requiredNames: REQUIRED_TEZJET_CI_JOBS, requiredStepNames: REQUIRED_TEZJET_CI_STEPS });
+  const ci = await dependencies.wait({ branch: input.branch, headSha, requiredNames: REQUIRED_ONAY_CI_JOBS, requiredStepNames: REQUIRED_ONAY_CI_STEPS });
   if (ci.status === "failed") {
     journal.record("agent_started", "coder", "CI failed; attempting an automatic repair.", { headSha });
     const repair = await dependencies.repair({
@@ -155,8 +155,8 @@ export async function runChangePipeline(input: {
       repair.headSha,
       getTargetRepository(),
       input.branch,
-      REQUIRED_TEZJET_CI_JOBS,
-      REQUIRED_TEZJET_CI_STEPS,
+      REQUIRED_ONAY_CI_JOBS,
+      REQUIRED_ONAY_CI_STEPS,
     );
     const finalHead = await dependencies.getHead(input.branch);
     if (!verifiedTests(testEvidence, repair.headSha, input.branch) || finalHead !== repair.headSha) {
@@ -178,8 +178,8 @@ export async function runChangePipeline(input: {
     headSha,
     getTargetRepository(),
     input.branch,
-    REQUIRED_TEZJET_CI_JOBS,
-    REQUIRED_TEZJET_CI_STEPS,
+    REQUIRED_ONAY_CI_JOBS,
+    REQUIRED_ONAY_CI_STEPS,
   );
   const finalHead = await dependencies.getHead(input.branch);
   if (!verifiedTests(testEvidence, headSha, input.branch) || finalHead !== headSha) {
@@ -191,7 +191,7 @@ export async function runChangePipeline(input: {
   return finish({ status: "ci-passed" as const, review, security, pullRequest, ci, testEvidence, headSha });
 }
 
-export async function generateAndPrepareTezJetChange(input: {
+export async function generateAndPrepareOnayChange(input: {
   goal: string;
   branch: string;
   title: string;
@@ -200,12 +200,12 @@ export async function generateAndPrepareTezJetChange(input: {
   baseRef?: string;
 }, overrides: Partial<PipelineGenerationDependencies> = {}) {
   const getHead = overrides.getHead ?? ((ref: string) => new GitHubClient({ repository: getTargetRepository() }).getCommitSha(ref));
-  const explore = overrides.explore ?? inspectTezJet;
+  const explore = overrides.explore ?? inspectOnay;
   const generate = overrides.generate ?? generateChanges;
   const baseRef = input.baseRef ?? "main";
   assertValidBranchRef(baseRef);
   const journal = new AgentRunJournal(input.goal, undefined, input.onEvent);
-  journal.record("agent_started", "explorer", "Reading TezJet repository context before any code generation.");
+  journal.record("agent_started", "explorer", "Reading Onay repository context before any code generation.");
   const baseSha = await getHead(baseRef);
   assertCommitSha(baseSha);
   const exploration = await explore(undefined, baseSha, getTargetRepository());

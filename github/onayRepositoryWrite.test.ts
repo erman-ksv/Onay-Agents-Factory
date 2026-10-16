@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TezJetRepositoryAdapter } from "./tezjetRepository.js";
+import { OnayRepositoryAdapter } from "./onayRepository.js";
 
 type UpsertCall = [string, string, string, string];
 
 function adapterWithFakeGitHub() {
   const calls: UpsertCall[] = [];
-  const adapter = Object.create(TezJetRepositoryAdapter.prototype) as TezJetRepositoryAdapter;
+  const adapter = Object.create(OnayRepositoryAdapter.prototype) as OnayRepositoryAdapter;
   Object.assign(adapter, {
     github: {
       upsertFile: async (path: string, content: string, message: string, branch: string) => {

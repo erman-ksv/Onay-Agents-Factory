@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { prepareTezJetChange } from "./changeWorkflow.js";
+import { prepareOnayChange } from "./changeWorkflow.js";
 import { checkCiGate, waitForCiGate } from "./ciGate.js";
 import { GitHubClient } from "./githubClient.js";
 
@@ -40,7 +40,7 @@ test("publication uses the allow-listed repository, pinned base SHA and requeste
     return { html_url: "https://example.test/pull/1", number: 1, head: { sha: candidateSha } };
   });
 
-  const result = await prepareTezJetChange(input);
+  const result = await prepareOnayChange(input);
   assert.equal(result.head_sha, candidateSha);
   assert.deepEqual(calls[0], ["branch", repository, branch, baseRef, baseSha]);
   assert.deepEqual(calls[1], ["write", repository, "commander/example.ts", "export const verified = true;", "Require execution evidence", branch]);
@@ -56,24 +56,24 @@ test("publication fails closed when the PR head differs from the written candida
   t.mock.method(GitHubClient.prototype, "createPullRequest", async () => ({
     html_url: "https://example.test/pull/1", number: 1, head: { sha: "c".repeat(40) },
   }));
-  await assert.rejects(prepareTezJetChange(input), /head does not match/);
+  await assert.rejects(prepareOnayChange(input), /head does not match/);
 });
 
 test("publication refuses a protected branch before branch creation or writes", async t => {
   allowRepository(t);
   const create = t.mock.method(GitHubClient.prototype, "createBranch", async () => {});
   const write = t.mock.method(GitHubClient.prototype, "upsertFile", async () => candidateSha);
-  await assert.rejects(prepareTezJetChange({ ...input, branch: "main" }), /feature branch is required/);
+  await assert.rejects(prepareOnayChange({ ...input, branch: "main" }), /feature branch is required/);
   assert.equal(create.mock.callCount(), 0);
   assert.equal(write.mock.callCount(), 0);
 });
 
 test("publication refuses invalid branch/base targets and symbolic base SHAs before GitHub access", async t => {
   const read = t.mock.method(GitHubClient.prototype, "getCommitSha", async () => baseSha);
-  await assert.rejects(prepareTezJetChange({ ...input, branch: baseRef }), /must differ/);
-  await assert.rejects(prepareTezJetChange({ ...input, branch: "refs/heads/main" }), /Invalid.*ref/);
-  await assert.rejects(prepareTezJetChange({ ...input, baseRef: "main~1" }), /Invalid.*ref/);
-  await assert.rejects(prepareTezJetChange({ ...input, baseSha: "main" }), /immutable commit SHA/);
+  await assert.rejects(prepareOnayChange({ ...input, branch: baseRef }), /must differ/);
+  await assert.rejects(prepareOnayChange({ ...input, branch: "refs/heads/main" }), /Invalid.*ref/);
+  await assert.rejects(prepareOnayChange({ ...input, baseRef: "main~1" }), /Invalid.*ref/);
+  await assert.rejects(prepareOnayChange({ ...input, baseSha: "main" }), /immutable commit SHA/);
   assert.equal(read.mock.callCount(), 0);
 });
 
