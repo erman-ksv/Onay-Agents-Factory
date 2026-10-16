@@ -2,9 +2,9 @@ import type { AgentName, TaskPlan } from "./taskTypes.js";
 
 const routes: Array<[AgentName, string, RegExp | null]> = [
   ["explorer", "Inspect the repository and identify relevant files, architecture, constraints, and risks.", null],
+  ["coder", "Produce the smallest explicit code change set required by the goal. Return complete contents for changed files only.", null],
   ["product", "Define user problem, scope, non-goals, business rules, and testable acceptance criteria.", /feature|requirement|product|business rule|workflow|booking|fare|pricing|pool|seat|driver|passenger|order|roadmap/i],
   ["ux", "Review user journeys, mobile usability, accessibility, permission requests, and failure states.", /frontend|ui|ux|react|page|screen|component|mobile|android|ios|accessibility|map|location|booking flow/i],
-  ["coder", "Produce the smallest explicit code change set required by the goal. Return complete contents for changed files only.", null],
   ["backend", "Implement backend/API changes with server-side validation, authorization, transactions, and integration tests when relevant.", /backend|api|server|route|controller|queue|fifo|order|driver|auth|socket|endpoint/i],
   ["frontend", "Implement accessible frontend/client changes and cover loading, empty, offline, and error states.", /frontend|ui|react|page|screen|component|mobile|android|ios|map|location/i],
   ["database", "Design or implement schema, persistence, migrations, indexes, transactions, and data-access changes when required.", /database|db|schema|migration|postgres|redis|storage|persist|transaction|order state/i],
