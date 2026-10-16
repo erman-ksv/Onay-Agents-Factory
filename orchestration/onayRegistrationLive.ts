@@ -15,6 +15,7 @@ import { inspectTestExecution } from "../agents/tester/agent.js";
 import { scanForSecrets } from "../github/secretScanner.js";
 import type { AiExecutionDependencies } from "../commander/aiExecution.js";
 import { AgentRunJournal } from "./agentRunJournal.js";
+import { retryGeminiCapacity } from "./geminiCapacityRetry.js";
 import {
   applyUiEdits, assertPrivateSourceConsent, assertRegistrationResult,
   assertRegistrationUiEditScope, validateScopedPlan, ONAY_REPOSITORY,
@@ -127,7 +128,7 @@ async function main() {
       files: [{ path: ONAY_UI_PATH, sha: ui.sha, content: excerpt }],
     }),
     generate: async context => {
-      const response = await api.chat.completions.create({
+      const response = await retryGeminiCapacity(() => api.chat.completions.create({
         model: MODEL,
         temperature: 0.1,
         max_tokens: 6500,
@@ -155,7 +156,7 @@ async function main() {
           ].join("\n") },
           { role: "user", content: "GOAL:\n" + goal + "\n\nSELECTED SOURCE SNIPPETS:\n" + context },
         ],
-      });
+      }), { onRetry: (attempt, total, delayMs) => console.log("GEMINI CAPACITY: 503; retry", attempt, "of", total, "in", delayMs, "ms") });
       const raw = response.choices[0]?.message?.content;
       if (!raw) throw new Error("Gemini Coder returned no candidate edits.");
       const plan = readJson<ScopedPlan>(raw);
