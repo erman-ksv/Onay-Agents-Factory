@@ -1,6 +1,6 @@
 # Onay Agents Factory
 
-AI-assisted engineering factory for the Onay taxi application (currently maintained in the TezJet repository during its separate rename), with role-specific operating skills.
+AI-assisted engineering factory for the Onay taxi application, with role-specific operating skills.
 
 ## Agent workflow
 
@@ -34,7 +34,7 @@ Rasul is an AI legal research assistant, not a licensed lawyer. For each legal t
 
 ## Configuration
 
-During the Onay application migration, `TEZJET_REPOSITORY` continues to identify the application repository. Keep it pointed at `erman-ksv/TezJet` until that repository is renamed, then set `ONAY_REPOSITORY=erman-ksv/Onay`. The new setting takes precedence, while `TEZJET_REPOSITORY` remains supported for compatibility.
+The GitHub repositories are now `erman-ksv/Onay` (taxi app) and `erman-ksv/Onay-Agents-Factory` (agent system). Use `ONAY_REPOSITORY=erman-ksv/Onay`; the legacy `TEZJET_REPOSITORY` remains supported for existing environments but should be cleared or updated. Historical TezJet references to the application in source code are not automatically renamed.
 
 Copy `.env.example` to your runtime environment and provide:
 
@@ -46,9 +46,9 @@ Copy `.env.example` to your runtime environment and provide:
 - `OPENROUTER_API_KEY` — Codespaces secret for OpenRouter; use only free routes while no paid budget is authorized.
 - `OPENROUTER_MODEL` — defaults to `openrouter/free`. Only the free router or a concrete model ending in `:free` is accepted; paid routes are rejected before any API request.
 - `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
-- `ONAY_REPOSITORY` — optional new application repository location, set after the application rename.
-- `TEZJET_REPOSITORY=erman-ksv/TezJet` — legacy app repository setting during the migration.
-- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet,erman-ksv/Onay-Agents-Factory` — explicitly allow only repositories the agent may inspect or modify.
+- `ONAY_REPOSITORY=erman-ksv/Onay` — canonical application repository location.
+- `TEZJET_REPOSITORY` — optional legacy app repository override; leave blank unless needed.
+- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/Onay,erman-ksv/Onay-Agents-Factory` — explicitly allow only repositories the agent may inspect or modify.
 
 Never commit tokens or secrets. OpenRouter is selected explicitly with `AGENT_FACTORY_PROVIDER=openrouter` when another provider key is also present. OpenRouter calls use the Chat Completions API with tracing disabled and SDK HTTP retries set to zero, to avoid wasting free-tier requests. No automatic mid-run failover is attempted because restarting Commander could replay completed tools. The free model router can route to different models, so tool-call quality and daily request capacity must still be verified in a live read-only task.
 
