@@ -106,7 +106,19 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   });
   const tools: Tool[] = [
     executable("explorer", "explore_onay", "Read actual repository files at an immutable commit. Required before other agents.", () => session.explore()),
-    executable("coder", "code_onay", "Run AI Coder using inspected context and store proposed complete file contents. Does not write yet.", () => session.generate()),
+    executable("coder", "code_onay", "Run AI Coder using inspected context and store proposed complete file contents. Does not write yet.", async () => {
+      const generated = await session.generate();
+      // In private-source mode, retain whole files ONLY in trusted host memory.
+      // The Commander tool result must not echo the full patched application UI
+      // to another model request. Specialists use the host's separate redactor.
+      if (!options.specialistContextTransform) return generated;
+      return {
+        summary: generated.summary,
+        files: generated.files.map(file => ({
+          path: file.path, message: file.message, bytes: Buffer.byteLength(file.content, "utf8"),
+        })),
+      };
+    }),
     executable("security", "security_review", "Scan the repository and current proposed files for secrets. Repeat after regenerating files.", () => session.inspectSecurity()),
     executable("reviewer", "final_review", "Apply independent path, workflow and build configuration policy review to current files.", () => session.reviewChanges()),
     executable("github", "publish_change_set", "Write reviewed files on the explicitly authorized feature branch and create a draft PR. Requires all specialists except Tester to have returned.", () => session.publish()),
