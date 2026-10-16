@@ -62,3 +62,47 @@ export function validateScopedPlan(plan: ScopedPlan): void {
     throw new Error("Registration helper must preserve the full_name contract and its length limit.");
   }
 }
+
+/**
+ * Host-side whitelist: model-selected anchors must be within four registration
+ * regions of the pinned app screen (imports, auth state, login, auth form).
+ * Other booking, driver, and route flows are never editable by this task.
+ */
+export function assertRegistrationUiEditScope(source: string, edits: ScopedEdit[]): void {
+  const between = (begin: string, end: string) => {
+    const start = source.indexOf(begin);
+    const stop = source.indexOf(end, start + begin.length);
+    if (start < 0 || stop < 0) throw new Error("Expected registration boundary is missing.");
+    return { start, end: stop };
+  };
+  const imports = between('import AsyncStorage', 'function Button(');
+  const state = between('export default function Home()', '  const [stops,');
+  const login = between('  async function login(', '  async function switchMode(');
+  const form = between('    {sessionLoading ? ', '      {profileError ?');
+  const permitted = [imports, state, login, form];
+
+  for (const edit of edits) {
+    const index = source.indexOf(edit.find);
+    if (index < 0 || !permitted.some(region =>
+      index >= region.start && index + edit.find.length <= region.end)) {
+      throw new Error("Coder tried to edit outside registration-only UI regions.");
+    }
+  }
+}
+
+export function assertRegistrationResult(ui: string, helper: string, tests: string): void {
+  for (const check of [
+    /registrationFullName\s*\(/, /registration-given-name/,
+    /registration-family-name/, /registering/, /auth-signin-mode/,
+    /auth-signup-mode/, /full_name/,
+  ]) {
+    if (!check.test(ui)) throw new Error("UI lacks required registration or returning-user behavior: " + check.source);
+  }
+  if (!/export\s+function\s+registrationFullName\s*\(/.test(helper) ||
+      !/120/.test(helper) || !/return\s+null/.test(helper)) {
+    throw new Error("Name helper must validate both fields against 120-character API limit.");
+  }
+  if (!/registrationFullName/.test(tests) || !/node:test/.test(tests)) {
+    throw new Error("Registration helper must have executable node:test regression coverage.");
+  }
+}
