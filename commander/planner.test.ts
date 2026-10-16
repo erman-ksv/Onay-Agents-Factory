@@ -45,7 +45,7 @@ test("Russian read-only repository audits use inspection-only stages", () => {
 test("Agent Factory target detection is explicit", async () => {
   const { isAgentFactoryTarget } = await import("./planner.js");
   assert.equal(isAgentFactoryTarget("Проверь Onay-Agents-Factory"), true);
-  assert.equal(isAgentFactoryTarget("Проверь Onay-Agent-Factory"), true); // legacy task names stay routable
+  assert.equal(isAgentFactoryTarget("Проверь Onay Agents Factory"), true);
   assert.equal(isAgentFactoryTarget("Review taxi dispatch"), false);
 });
 
