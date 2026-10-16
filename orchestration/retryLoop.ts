@@ -2,14 +2,14 @@ import { generateChanges } from "../agents/backend/coder.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
 import { getCiFailureContext, waitForCiGate } from "../github/ciGate.js";
-import { TezJetRepositoryAdapter } from "../github/tezjetRepository.js";
+import { OnayRepositoryAdapter } from "../github/onayRepository.js";
 import { getTargetRepository } from "../github/repositoryConfig.js";
 import type { CiGateResult } from "../github/ciGate.js";
 import { AgentRunJournal } from "./agentRunJournal.js";
 
 type ChangeFile = { path: string; content: string; message: string };
-const REQUIRED_TEZJET_CI_JOBS = ["Typecheck and API tests"];
-const REQUIRED_TEZJET_CI_STEPS = ["Typecheck", "API integration tests"];
+const REQUIRED_ONAY_CI_JOBS = ["Typecheck and API tests"];
+const REQUIRED_ONAY_CI_STEPS = ["Typecheck", "API integration tests"];
 
 export type RetryLoopDependencies = {
   generate: typeof generateChanges;
@@ -18,7 +18,7 @@ export type RetryLoopDependencies = {
   security: typeof inspectSecurity;
   failure: typeof getCiFailureContext;
   wait: typeof waitForCiGate;
-  write: TezJetRepositoryAdapter["write"];
+  write: OnayRepositoryAdapter["write"];
 };
 
 type RetryAttempt = {
@@ -44,7 +44,7 @@ export async function retryFailedCi(input: {
   const dependencies: RetryLoopDependencies = {
     generate: generateChanges, review: reviewChangeSet, scan: inspectProposedChanges,
     security: inspectSecurity, failure: getCiFailureContext, wait: waitForCiGate,
-    write: (path, content, message, branch) => new TezJetRepositoryAdapter(getTargetRepository()).write(path, content, message, branch),
+    write: (path, content, message, branch) => new OnayRepositoryAdapter(getTargetRepository()).write(path, content, message, branch),
     ...overrides,
   };
   const maxAttempts = boundedRepairAttempts(input.maxAttempts);
@@ -57,7 +57,7 @@ export async function retryFailedCi(input: {
   const journal = input.journal ?? new AgentRunJournal(input.goal);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const failure = await dependencies.failure(input.branch, headSha, REQUIRED_TEZJET_CI_JOBS, { requiredStepNames: REQUIRED_TEZJET_CI_STEPS });
+    const failure = await dependencies.failure(input.branch, headSha, REQUIRED_ONAY_CI_JOBS, { requiredStepNames: REQUIRED_ONAY_CI_STEPS });
     gate = failure.gate;
     if (failure.gate.status === "passed") return { status: "passed" as const, attempts, headSha, ci: failure.gate };
     if (failure.gate.status !== "failed") return { status: "waiting" as const, attempts, gate: failure.gate, headSha };
@@ -71,7 +71,7 @@ export async function retryFailedCi(input: {
       ? "\n\nREJECTED PROPOSAL (not written; revise these files to address the previous repair blockers):\n" + rejectedFiles.map(file => `FILE: ${file.path}\n${file.content}`).join("\n\n")
       : "");
     const generated = await dependencies.generate(
-      `Original task: ${input.goal}\nFix the CI failure for this TezJet task. Attempt ${attempt}. Do not change unrelated behavior. CI diagnostics:\n${diagnostics}\nPrevious repair blockers:\n${rejected}`,
+      `Original task: ${input.goal}\nFix the CI failure for this Onay task. Attempt ${attempt}. Do not change unrelated behavior. CI diagnostics:\n${diagnostics}\nPrevious repair blockers:\n${rejected}`,
       context,
     );
     if (!generated.files.length) {
@@ -110,7 +110,7 @@ export async function retryFailedCi(input: {
     rejected = "";
     rejectedFiles = [];
 
-    const ci = await dependencies.wait({ branch: input.branch, headSha, requiredNames: REQUIRED_TEZJET_CI_JOBS, requiredStepNames: REQUIRED_TEZJET_CI_STEPS });
+    const ci = await dependencies.wait({ branch: input.branch, headSha, requiredNames: REQUIRED_ONAY_CI_JOBS, requiredStepNames: REQUIRED_ONAY_CI_STEPS });
     gate = ci;
     attempts.push({ attempt, files: generated.files.map(file => file.path), headSha, ci });
     if (ci.status === "passed") return { status: "passed" as const, attempts, headSha, ci };

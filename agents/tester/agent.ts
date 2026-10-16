@@ -1,4 +1,4 @@
-import { TezJetRepositoryAdapter } from "../../github/tezjetRepository.js";
+import { OnayRepositoryAdapter } from "../../github/onayRepository.js";
 import { assertCommitSha, filterWorkflowRunsBySha, GitHubClient, type WorkflowRun } from "../../github/githubClient.js";
 import { evaluateCiJobs, filterCiJobsForRuns, type CiJob, type CiGateResult } from "../../github/ciGate.js";
 import { getTargetRepository } from "../../github/repositoryConfig.js";
@@ -148,7 +148,7 @@ export async function inspectRefTestExecution(
 }
 
 export async function inspectTests(repository = getTargetRepository(), ref = "main") {
-  const adapter = new TezJetRepositoryAdapter(repository);
+  const adapter = new OnayRepositoryAdapter(repository);
   const packageJson = await adapter.read("package.json", ref);
   const discovery = discoverTestScripts(packageJson.content);
   if (!discovery.validJson) {

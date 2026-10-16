@@ -2,13 +2,13 @@ import type { CoderResult, ProposedChange } from "../agents/backend/coder.js";
 import type { TestExecutionEvidence } from "../agents/tester/agent.js";
 import type { reviewChangeSet } from "../agents/reviewer/agent.js";
 import type { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
-import type { inspectTezJet } from "../github/tezjetExplorer.js";
+import type { inspectOnay } from "../github/onayExplorer.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 
 type Review = ReturnType<typeof reviewChangeSet>;
 type ProposedSecurity = ReturnType<typeof inspectProposedChanges>;
 type RepositorySecurity = Awaited<ReturnType<typeof inspectSecurity>>;
-type Exploration = Awaited<ReturnType<typeof inspectTezJet>>;
+type Exploration = Awaited<ReturnType<typeof inspectOnay>>;
 export type PublishedChange = { head_sha: string; html_url: string; number: number };
 export type SpecialistAssessment = { ready: boolean; findings: Array<{ severity: "blocker" | "high" | "medium" | "low"; message: string }>; summary?: string };
 

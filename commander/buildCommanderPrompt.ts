@@ -2,8 +2,8 @@ import { planTask } from "./planner.js";
 import type { AgentName } from "./taskTypes.js";
 
 export const COMMANDER_TOOL_NAMES: Record<AgentName, string> = {
-  explorer: "explore_tezjet",
-  coder: "code_tezjet",
+  explorer: "explore_onay",
+  coder: "code_onay",
   backend: "backend_specialist",
   frontend: "frontend_mobile_specialist",
   database: "database_specialist",
@@ -12,7 +12,7 @@ export const COMMANDER_TOOL_NAMES: Record<AgentName, string> = {
   ux: "ux_accessibility_review",
   legal: "rasul_legal_compliance",
   devops: "devops_release_review",
-  tester: "test_tezjet",
+  tester: "test_onay",
   security: "security_review",
   reviewer: "final_review"
 };

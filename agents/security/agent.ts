@@ -1,10 +1,10 @@
-import { TezJetRepositoryAdapter } from "../../github/tezjetRepository.js";
+import { OnayRepositoryAdapter } from "../../github/onayRepository.js";
 import { getTargetRepository } from "../../github/repositoryConfig.js";
 import { scanForSecrets } from "../../github/secretScanner.js";
 
 export type ProposedFile = { path: string; content: string };
 
-// Keep the default scan aligned with files known to exist in the current TezJet
+// Keep the default scan aligned with files known to exist in the current Onay
 // repository. Missing optional files such as a root .env.example must not create
 // a misleading security finding, while real read errors remain fail-closed.
 export const DEFAULT_SECURITY_PATHS = [
@@ -37,7 +37,7 @@ export async function inspectSecurity(
   repository = getTargetRepository(),
   ref = "main",
 ) {
-  const adapter = new TezJetRepositoryAdapter(repository);
+  const adapter = new OnayRepositoryAdapter(repository);
   const findings: Array<{ path: string; findings: string[] }> = [];
   for (const path of paths) {
     try {

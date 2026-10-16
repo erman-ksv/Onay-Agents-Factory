@@ -1,10 +1,10 @@
-import { TezJetRepositoryAdapter } from "./tezjetRepository.js";
+import { OnayRepositoryAdapter } from "./onayRepository.js";
 import { getTargetRepository } from "./repositoryConfig.js";
 import { assertCommitSha, assertValidBranchRef } from "./githubClient.js";
 
 const PROTECTED = new Set(["main", "master"]);
 
-export async function prepareTezJetChange(input: {
+export async function prepareOnayChange(input: {
   branch: string;
   title: string;
   body: string;
@@ -25,7 +25,7 @@ export async function prepareTezJetChange(input: {
   }
 
   const repository = input.repository ?? getTargetRepository();
-  const adapter = new TezJetRepositoryAdapter(repository);
+  const adapter = new OnayRepositoryAdapter(repository);
   await adapter.prepareBranch(input.branch, baseRef, input.baseSha);
 
   let headSha = "";

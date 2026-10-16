@@ -10,9 +10,9 @@ function createCoderExecution(env: NodeJS.ProcessEnv) {
   if (provider.provider === "none") throw new Error(providerRequirementMessage(env));
   const coder = new Agent({
     ...(provider.model ? { model: provider.model } : {}),
-    name: "TezJet Coder",
+    name: "Onay Coder",
     instructions: [
-      "You are a senior TezJet implementation engineer.",
+      "You are a senior Onay implementation engineer.",
       "Use the supplied repository context and requested goal to produce a minimal safe change set.",
       "Preserve existing business rules and public APIs unless the goal requires otherwise.",
       "Return ONLY valid JSON with this shape: {summary:string,files:[{path:string,content:string,message:string}]} .",

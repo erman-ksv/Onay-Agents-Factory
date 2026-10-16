@@ -25,11 +25,14 @@ export function createGeminiRateLimitedFetch(
   let queue = Promise.resolve();
   return (input, init) => {
     const attempt = queue.then(async () => {
-      const now = Date.now();
-      const wait = Math.max(0, nextSlot - now);
-      nextSlot = Math.max(now, nextSlot) + intervalMs;
+      // Use a monotonic clock; Date.now() can jump when the runner syncs its clock.
+      const wait = Math.max(0, nextSlot - performance.now());
       if (wait > 0) await new Promise<void>(resolve => setTimeout(resolve, wait));
-      const response = await underlyingFetch(input, init);
+      // Start the request before scheduling the next slot. A delayed timer must
+      // not cause two requests to be sent back-to-back to "catch up".
+      const request = underlyingFetch(input, init);
+      nextSlot = performance.now() + intervalMs;
+      const response = await request;
       if (response.status === 429) {
         const body = await response.clone().text();
         if (isGeminiDailyQuotaExhausted(body)) {

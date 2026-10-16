@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES } from "./tezjetExplorer.js";
+import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES } from "./onayExplorer.js";
 
-test("TezJet Explorer defaults only to files confirmed to exist in the TezJet repository", () => {
+test("Onay Explorer defaults only to files confirmed to exist in the Onay repository", () => {
   assert.deepEqual(DEFAULT_EXPLORER_FILES, [
     "package.json",
     "artifacts/api-server/src/controllers/orderController.ts",
@@ -18,7 +18,7 @@ test("Agent Factory self-audit includes the real Commander, provider, and reposi
     "commander/executor.ts",
     "commander/providerConfig.ts",
     "commander/modelProvider.ts",
-    "github/tezjetRepository.ts",
+    "github/onayRepository.ts",
     "github/repositoryPolicy.ts",
     "github/changeWorkflow.ts",
     "github/ciGate.ts",

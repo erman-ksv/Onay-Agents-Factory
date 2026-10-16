@@ -173,8 +173,8 @@ export function verifyLiveCycleStage(result: CommanderResult, options: LiveCycle
   if (evidence?.testsExecuted !== true || evidence.tests?.testsExecuted !== true || evidence.tests.status !== "passed") reasons.push("Tests were not executed successfully for this stage.");
   const events = Array.isArray(result?.events) ? result.events : [];
   const requiredTools = stage === "audit"
-    ? ["explore_tezjet", "security_review", "test_tezjet"]
-    : ["explore_tezjet", "code_tezjet", "security_review", "final_review", "publish_change_set", "test_tezjet", "verify_final_head"];
+    ? ["explore_onay", "security_review", "test_onay"]
+    : ["explore_onay", "code_onay", "security_review", "final_review", "publish_change_set", "test_onay", "verify_final_head"];
   for (const tool of requiredTools) {
     if (!hasCompletedTool(events, tool)) reasons.push(`Missing successful executable tool events for ${tool}.`);
   }
@@ -184,7 +184,7 @@ export function verifyLiveCycleStage(result: CommanderResult, options: LiveCycle
     if (evidence?.publicationAttempted !== false || evidence.publication || evidence.publicationBranch !== undefined || evidence.security?.proposed !== null ||
         !Array.isArray(evidence?.changedFiles) || evidence.changedFiles.length ||
         !Array.isArray(evidence?.proposedFiles) || evidence.proposedFiles.length ||
-        events.some(event => event.details?.tool === "code_tezjet" || event.details?.tool === "publish_change_set" || event.details?.tool === "write_candidate")) {
+        events.some(event => event.details?.tool === "code_onay" || event.details?.tool === "publish_change_set" || event.details?.tool === "write_candidate")) {
       reasons.push("Read-only audit contains mutation or publication evidence.");
     }
   } else {

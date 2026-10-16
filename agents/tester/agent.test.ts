@@ -41,7 +41,7 @@ const expectedSha = "a".repeat(40);
 const otherSha = "b".repeat(40);
 const run = (headSha: string, status = "completed", conclusion: string | null = "success"): WorkflowRun => ({
   id: 42,
-  name: "TezJet CI",
+  name: "Onay CI",
   status,
   conclusion,
   head_sha: headSha,

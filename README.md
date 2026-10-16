@@ -34,7 +34,7 @@ Rasul is an AI legal research assistant, not a licensed lawyer. For each legal t
 
 ## Configuration
 
-The GitHub repositories are now `erman-ksv/Onay` (taxi app) and `erman-ksv/Onay-Agents-Factory` (agent system). Use `ONAY_REPOSITORY=erman-ksv/Onay`; the legacy `TEZJET_REPOSITORY` remains supported for existing environments but should be cleared or updated. Historical TezJet references to the application in source code are not automatically renamed.
+The GitHub repositories are now `erman-ksv/Onay` (taxi app) and `erman-ksv/Onay-Agents-Factory` (agent system). Use `ONAY_REPOSITORY=erman-ksv/Onay`.
 
 Copy `.env.example` to your runtime environment and provide:
 
@@ -47,7 +47,6 @@ Copy `.env.example` to your runtime environment and provide:
 - `OPENROUTER_MODEL` — defaults to `openrouter/free`. Only the free router or a concrete model ending in `:free` is accepted; paid routes are rejected before any API request.
 - `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
 - `ONAY_REPOSITORY=erman-ksv/Onay` — canonical application repository location.
-- `TEZJET_REPOSITORY` — optional legacy app repository override; leave blank unless needed.
 - `AGENT_ALLOWED_REPOSITORIES=erman-ksv/Onay,erman-ksv/Onay-Agents-Factory` — explicitly allow only repositories the agent may inspect or modify.
 
 Never commit tokens or secrets. OpenRouter is selected explicitly with `AGENT_FACTORY_PROVIDER=openrouter` when another provider key is also present. OpenRouter calls use the Chat Completions API with tracing disabled and SDK HTTP retries set to zero, to avoid wasting free-tier requests. No automatic mid-run failover is attempted because restarting Commander could replay completed tools. The free model router can route to different models, so tool-call quality and daily request capacity must still be verified in a live read-only task.
@@ -69,7 +68,7 @@ If Gemini returns a model-availability `404` saying `gemini-2.5-flash` is no lon
 ```bash
 pnpm install
 pnpm typecheck
-pnpm dev -- "Review TezJet driver agreement and privacy obligations for the target jurisdiction"
+pnpm dev -- "Review Onay driver agreement and privacy obligations for the target jurisdiction"
 ```
 
 The Onay Commander produces a task plan and specialist routing. A configured Gemini or OpenAI key enables AI orchestration, including tasks explicitly targeting `Onay-Agents-Factory`. Explorer reads actual files at an immutable commit, Coder generates complete proposed files from that context, Security scans the repository and proposal, and Reviewer applies change-policy gates. Advisory specialists receive the actual repository context. Every tool invocation, return, and failure is recorded in the task journal with its actor and tool name.
@@ -79,7 +78,7 @@ The default command proposes changes without publishing. For a change task, `com
 To allow AI Commander to create a feature branch and draft PR, supply publication metadata and the existing runtime write opt-in:
 
 ```bash
-AGENT_FACTORY_ENABLE_GITHUB_WRITES=true pnpm dev -- "Fix a confirmed TezJet bug" \
+AGENT_FACTORY_ENABLE_GITHUB_WRITES=true pnpm dev -- "Fix a confirmed Onay bug" \
   --publish --branch "fix/confirmed-bug" \
   --title "Fix confirmed bug" --body "Problem, intended behavior and validation"
 ```
@@ -96,7 +95,7 @@ See [the live-cycle runbook](docs/LIVE_CYCLE_RUNBOOK.md) for Gemini and OpenAI c
 
 ## Run the Onay application change pipeline
 
-Start with read-only analysis. This inspects the configured TezJet repository and its test/security context but does not create a branch or pull request:
+Start with read-only analysis. This inspects the configured Onay repository and its test/security context but does not create a branch or pull request:
 
 ```bash
 pnpm run pipeline -- --goal "Analyze the driver queue fairness rules"
@@ -113,9 +112,9 @@ AGENT_FACTORY_ENABLE_GITHUB_WRITES=true pnpm run pipeline -- \
   --publish
 ```
 
-Publishing can write to the configured TezJet repository. Use only a feature branch, inspect the resulting draft PR, and never place tokens in command arguments or committed files. The CLI blocks direct `main`/`master` targets and refuses publishing unless the environment write gate is explicitly enabled. To see options, run `pnpm run pipeline -- --help`.
+Publishing can write to the configured Onay repository. Use only a feature branch, inspect the resulting draft PR, and never place tokens in command arguments or committed files. The CLI blocks direct `main`/`master` targets and refuses publishing unless the environment write gate is explicitly enabled. To see options, run `pnpm run pipeline -- --help`.
 
-The pipeline's analysis stage is not proof that generated changes are correct. A successful Agent Factory CI run validates the factory code, not a TezJet change. A TezJet change is considered CI-passed only when the target commit's required TezJet workflow has completed successfully. Review all diffs and CI evidence before any human-authorized merge.
+The pipeline's analysis stage is not proof that generated changes are correct. A successful Agent Factory CI run validates the factory code, not a Onay change. A Onay change is considered CI-passed only when the target commit's required Onay workflow has completed successfully. Review all diffs and CI evidence before any human-authorized merge.
 
 ## Safety and release gates
 

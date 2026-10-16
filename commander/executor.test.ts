@@ -9,7 +9,7 @@ test("agents execute in plan order and receive prior results as handoff context"
     { agent: "reviewer", objective: "review exploration" },
   ];
 
-  const results = await executePlan("Improve TezJet", steps, {
+  const results = await executePlan("Improve Onay", steps, {
     explorer: async ({ goal }) => {
       order.push("explorer");
       return { goal, files: ["package.json"] };
@@ -18,7 +18,7 @@ test("agents execute in plan order and receive prior results as handoff context"
       order.push("reviewer");
       assert.equal(previousResults.length, 1);
       assert.equal(previousResults[0].status, "completed");
-      assert.deepEqual(previousResults[0].output, { goal: "Improve TezJet", files: ["package.json"] });
+      assert.deepEqual(previousResults[0].output, { goal: "Improve Onay", files: ["package.json"] });
       return { reviewed: true };
     },
   });

@@ -1,4 +1,4 @@
-import { TezJetRepositoryAdapter } from "./tezjetRepository.js";
+import { OnayRepositoryAdapter } from "./onayRepository.js";
 import { getTargetRepository } from "./repositoryConfig.js";
 
 export const DEFAULT_EXPLORER_FILES = [
@@ -21,7 +21,7 @@ export const AGENT_FACTORY_EXPLORER_FILES = [
   "agents/tester/agent.ts",
   "agents/security/agent.ts",
   "agents/reviewer/agent.ts",
-  "github/tezjetRepository.ts",
+  "github/onayRepository.ts",
   "github/repositoryPolicy.ts",
   "github/changeWorkflow.ts",
   "github/ciGate.ts",
@@ -33,12 +33,12 @@ export const AGENT_FACTORY_EXPLORER_FILES = [
   "orchestration/dashboardServer.ts",
 ] as const;
 
-export async function inspectTezJet(
+export async function inspectOnay(
   paths: readonly string[] = DEFAULT_EXPLORER_FILES,
   ref = "main",
   repository = getTargetRepository(),
 ) {
-  const adapter = new TezJetRepositoryAdapter(repository);
+  const adapter = new OnayRepositoryAdapter(repository);
   const files = [];
   for (const path of paths) {
     try {

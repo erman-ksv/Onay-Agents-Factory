@@ -4,15 +4,15 @@
 
 - `pnpm dev -- "task"` runs the Commander planner/router. It is not the change-writing pipeline.
 - `pnpm run pipeline -- --goal "task"` performs read-only repository/test/security analysis.
-- Adding `--publish` asks the pipeline to generate a change, pass review/security gates, create a feature branch and Draft PR, and wait for TezJet CI.
+- Adding `--publish` asks the pipeline to generate a change, pass review/security gates, create a feature branch and Draft PR, and wait for Onay CI.
 
 ## 2. Required configuration
 
 Set these in your local runtime environment or secret manager, never in source control:
 
 - `GITHUB_TOKEN`: token authorized to read and create feature branches/PRs in the configured repository.
-- `TEZJET_REPOSITORY=erman-ksv/TezJet`: target repository.
-- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet`: repository allowlist used by the factory.
+- `ONAY_REPOSITORY=erman-ksv/Onay`: target repository.
+- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/Onay`: repository allowlist used by the factory.
 - `OPENAI_API_KEY`: needed for AI-generated changes.
 
 Install dependencies and verify the factory first:
@@ -54,11 +54,11 @@ The write gate requires both `--publish` and `AGENT_FACTORY_ENABLE_GITHUB_WRITES
 - `ci-blocked` / `ci-repair`: do not merge. Resolve the reported issue or wait for CI.
 - `ci-passed`: the required target workflow was reported successful for the generated commit. Still inspect the full diff and test evidence.
 
-Agent Factory's own CI checks the factory's types/tests. It does not prove a proposed TezJet change is correct. Never merge automatically based solely on model output. Keep PRs as drafts until a human reviewer approves them.
+Agent Factory's own CI checks the factory's types/tests. It does not prove a proposed Onay change is correct. Never merge automatically based solely on model output. Keep PRs as drafts until a human reviewer approves them.
 
 ## 6. Current limitations
 
 - Read-only analysis does not run arbitrary test commands locally; it discovers the repository's test scripts.
-- The actual TezJet test result comes from the target repository's GitHub Actions workflow.
+- The actual Onay test result comes from the target repository's GitHub Actions workflow.
 - The CLI's publishing mode can create real GitHub branches and Draft PRs. Keep write credentials scoped to the intended repository.
 - No production deployment, database migration, legal approval, or PR merge is performed by this runbook.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GitHubClient } from "./githubClient.js";
 
-const client = () => new GitHubClient({ repository: "erman-ksv/TezJet", token: "fixture-token" });
+const client = () => new GitHubClient({ repository: "erman-ksv/Onay", token: "fixture-token" });
 const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 
 test("workflow pagination retains failures beyond the first page", async t => {
