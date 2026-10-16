@@ -98,6 +98,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     auditOnly: isReadOnlyRepositoryAudit(goal), publication: options.publication,
     writesEnabled: env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true", journal: options.journal,
     allowedChangePaths: options.allowedChangePaths,
+    specialistContextTransform: options.specialistContextTransform,
   }, dependencies);
   const executable = (actor: string, name: string, description: string, execute: () => Promise<unknown> | unknown) => tool({
     name, description, parameters: z.object({}),
