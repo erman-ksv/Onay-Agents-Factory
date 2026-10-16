@@ -63,7 +63,7 @@ test("mutation plans generate before product, UX and other proposal-dependent re
   const roles = planTask("Implement Onay passenger registration mobile UI auth API").steps.map(step => step.agent);
   assert.equal(roles[0], "explorer");
   assert.equal(roles[1], "coder");
-  for (const role of ["product", "ux", "backend", "frontend", "legal", "security", "reviewer"]) {
+  for (const role of ["product", "ux", "backend", "frontend", "legal", "security", "reviewer"] as const) {
     assert.ok(roles.indexOf(role) > roles.indexOf("coder"), role + " must review the current proposal");
   }
 });
