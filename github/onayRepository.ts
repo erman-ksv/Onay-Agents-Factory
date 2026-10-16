@@ -4,7 +4,7 @@ import { assertRepositoryAllowed, assertWritableBranch, resolveAllowedRepositori
 import { getTargetRepository } from "./repositoryConfig.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
 
-export class TezJetRepositoryAdapter {
+export class OnayRepositoryAdapter {
   private readonly github: GitHubClient;
 
   constructor(repository = getTargetRepository()) {

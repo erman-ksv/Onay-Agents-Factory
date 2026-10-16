@@ -2,7 +2,7 @@ import { generateChanges } from "../agents/backend/coder.js";
 import { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
 import { inspectRefTestExecution, inspectTests } from "../agents/tester/agent.js";
 import { reviewChangeSet } from "../agents/reviewer/agent.js";
-import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES, inspectTezJet } from "../github/tezjetExplorer.js";
+import { AGENT_FACTORY_EXPLORER_FILES, DEFAULT_EXPLORER_FILES, inspectOnay } from "../github/onayExplorer.js";
 import { executePlan } from "./executor.js";
 import { isAgentFactoryTarget, planTask, shouldUseAiCommander } from "./planner.js";
 import { summarizeExecution } from "./summary.js";
@@ -43,10 +43,10 @@ if (provider.provider === "none" && process.env.AGENT_FACTORY_PROVIDER?.trim() &
   const targetRepository = isAgentFactoryTarget(goal) ? "erman-ksv/Onay-Agents-Factory" : getTargetRepository();
   const targetRef = isAgentFactoryTarget(goal) ? "dev/agent-factory-core" : "main";
   const explorerPaths = isAgentFactoryTarget(goal) ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
-  const securityPaths = isAgentFactoryTarget(goal) ? ["package.json", "commander/commander.ts", "commander/planner.ts", "commander/executor.ts", "commander/providerConfig.ts", "commander/modelProvider.ts", "agents/tester/agent.ts", "agents/security/agent.ts", "agents/reviewer/agent.ts", "github/tezjetRepository.ts", "github/repositoryPolicy.ts", "github/changeWorkflow.ts", "github/ciGate.ts", "orchestration/pipeline.ts", "orchestration/retryLoop.ts", "orchestration/dashboardServer.ts"] : undefined;
+  const securityPaths = isAgentFactoryTarget(goal) ? ["package.json", "commander/commander.ts", "commander/planner.ts", "commander/executor.ts", "commander/providerConfig.ts", "commander/modelProvider.ts", "agents/tester/agent.ts", "agents/security/agent.ts", "agents/reviewer/agent.ts", "github/onayRepository.ts", "github/repositoryPolicy.ts", "github/changeWorkflow.ts", "github/ciGate.ts", "orchestration/pipeline.ts", "orchestration/retryLoop.ts", "orchestration/dashboardServer.ts"] : undefined;
   const execution = await executePlan(goal, plan.steps, {
     explorer: async () => {
-      const result = await inspectTezJet(explorerPaths, targetRef, targetRepository);
+      const result = await inspectOnay(explorerPaths, targetRef, targetRepository);
       const available = result.files.filter(
         (file): file is { path: string; sha: string; content: string } => "content" in file,
       );

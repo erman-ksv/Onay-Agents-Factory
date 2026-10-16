@@ -9,7 +9,7 @@ const routes: Array<[AgentName, string, RegExp | null]> = [
   ["frontend", "Implement accessible frontend/client changes and cover loading, empty, offline, and error states.", /frontend|ui|react|page|screen|component|mobile|android|ios|map|location/i],
   ["database", "Design or implement schema, persistence, migrations, indexes, transactions, and data-access changes when required.", /database|db|schema|migration|postgres|redis|storage|persist|transaction|order state/i],
   ["dispatch", "Validate taxi dispatch, driver matching, queue fairness, pickup eligibility, seat capacity, and ride lifecycle invariants.", /dispatch|matching|nearest driver|driver queue|fifo|pickup|drop.?off|seat capacity|shared ride|pooling|ride lifecycle|driver offer|order assignment|taxi availability/i],
-  ["legal", "Rasul: mandatory ongoing compliance gate for relevant TezJet product changes; identify jurisdiction/date, verify official sources, document risks and release blockers, and flag need for human counsel.", /legal|law|contract|compliance|privacy|terms|policy|license|licensing|regulat|tax|insurance|consumer|driver agreement|transport permit|data protection|launch|release|onboard|signup|registration|fare|pricing|payment|refund|cancel|location|gps|personal data|passenger|driver|vehicle|trip|ride|booking|safety|hosting|vendor|cross.border|country|jurisdiction/i],
+  ["legal", "Rasul: mandatory ongoing compliance gate for relevant Onay product changes; identify jurisdiction/date, verify official sources, document risks and release blockers, and flag need for human counsel.", /legal|law|contract|compliance|privacy|terms|policy|license|licensing|regulat|tax|insurance|consumer|driver agreement|transport permit|data protection|launch|release|onboard|signup|registration|fare|pricing|payment|refund|cancel|location|gps|personal data|passenger|driver|vehicle|trip|ride|booking|safety|hosting|vendor|cross.border|country|jurisdiction/i],
   ["devops", "Review CI, environment/secrets, deployment, observability, backup, migration rollout, and rollback safety.", /deploy|deployment|ci|cd|release|production|secret|infrastructure|hosting|monitor|backup|rollback|pipeline/i],
   ["tester", "Design or run tests that validate requested behavior, edge cases, concurrency, and regression safety.", null],
   ["security", "Review the proposed solution for secrets, authentication, permissions, input validation, data exposure, and abuse risks.", null],
@@ -18,7 +18,7 @@ const routes: Array<[AgentName, string, RegExp | null]> = [
 
 const READ_ONLY_AUDIT = /(?:\b(inspect|audit|check|analy[sz]e|report|explain|identify|verify)\b|проверь|проверить|анализ|структуру|структура|определи|сообщи)/i;
 const MUTATION_INTENT = /(?:\b(implement|build|create|add|change|modify|fix|refactor|write|generate|develop|update|remove|delete)\b|создай|измени|исправь|добавь|реализуй|напиши)/i;
-const FACTORY_TARGET = /onay-agents-factory|tezjet-agent-factory|agents? factory/i;
+const FACTORY_TARGET = /onay-agents-factory|agents? factory/i;
 
 export function isReadOnlyRepositoryAudit(goal: string): boolean {
   return READ_ONLY_AUDIT.test(goal) && !MUTATION_INTENT.test(goal);
