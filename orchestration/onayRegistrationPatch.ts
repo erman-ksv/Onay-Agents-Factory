@@ -1,9 +1,9 @@
 /** Real Onay application workflow: fail closed until the owner explicitly opts in. */
 export const ONAY_REPOSITORY = "erman-ksv/Onay";
 export const ONAY_TARGET_BRANCH = "feat/onay-agent-registration-proof-20261016";
-export const ONAY_UI_PATH = "mobile/tezjet-app/app/index.tsx";
-export const ONAY_HELPER_PATH = "mobile/tezjet-app/lib/registration.ts";
-export const ONAY_TEST_PATH = "mobile/tezjet-app/test/registration.test.mjs";
+export const ONAY_UI_PATH = "mobile/onay-app/app/index.tsx";
+export const ONAY_HELPER_PATH = "mobile/onay-app/lib/registration.ts";
+export const ONAY_TEST_PATH = "mobile/onay-app/test/registration.test.mjs";
 export const ONAY_ALLOWED_CHANGE_PATHS = [ONAY_UI_PATH, ONAY_HELPER_PATH, ONAY_TEST_PATH] as const;
 export const PRIVATE_SOURCE_CONSENT = "I_APPROVE_ONAY_REGISTRATION_SOURCE_TO_GEMINI";
 
