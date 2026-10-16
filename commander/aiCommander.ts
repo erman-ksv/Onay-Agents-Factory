@@ -30,6 +30,8 @@ export type AiCommanderOptions = {
   /** Host-selected file scope; models cannot expand the permitted change set. */
   allowedChangePaths?: readonly string[];
   specialistContextTransform?: AiExecutionOptions["specialistContextTransform"];
+  /** Host-only turn budget for an explicitly scoped synthetic multi-agent proof. */
+  maxTurns?: number;
 };
 
 /** Fresh executable tools and evidence state for each task. */
@@ -184,7 +186,11 @@ export async function runAiCommander(goal: string, options: AiCommanderOptions =
     if (provider === "none" && !options.model) {
       throw new Error(providerRequirementMessage(options.env ?? process.env));
     }
-    const result = await runner.run(commander, prompt, { maxTurns: 30 });
+    const turns = options.maxTurns ?? 30;
+    if (!Number.isSafeInteger(turns) || turns < 1 || turns > 48) {
+      throw new Error("Commander turn budget must be an integer from 1 to 48.");
+    }
+    const result = await runner.run(commander, prompt, { maxTurns: turns });
     await session.verifyFinalCandidate();
     return session.finish(result.finalOutput);
   } catch (error) {
