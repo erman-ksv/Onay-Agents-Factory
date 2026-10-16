@@ -64,13 +64,20 @@ async function main() {
   const baseSha = await github.getCommitSha(baseRef);
   console.log("BASE:", repository, baseRef, baseSha);
 
-  // Fail closed if this run may have partially published already.
+  // GitHub /commits/{ref} may answer 422 (No commit found for SHA)
+  // rather than 404 when the candidate branch does not exist.
+  // Reject every other 422 and all authentication/permission failures.
   try {
     await github.getCommitSha(targetBranch);
     console.log("PREFLIGHT: BLOCKED (candidate branch already exists; inspect previous run)");
     return;
   } catch (error) {
-    if (!scrub(error).includes("GitHub API 404")) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    const missingBy404 = message.startsWith("GitHub API 404:");
+    const missingBy422 = message.startsWith("GitHub API 422:") &&
+      message.includes("No commit found for SHA: " + targetBranch);
+    if (!missingBy404 && !missingBy422) throw error;
+    console.log("PREFLIGHT: candidate branch absent, safe to continue");
   }
 
   const deps: AiExecutionDependencies = {
