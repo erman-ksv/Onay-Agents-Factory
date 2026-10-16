@@ -20,10 +20,11 @@ test("CLI exits with 10 when no AI provider key is configured", () => {
   const env: NodeJS.ProcessEnv = { ...process.env, AGENT_FACTORY_MODE: "deterministic" };
   delete env.GEMINI_API_KEY;
   delete env.OPENAI_API_KEY;
+  delete env.OPENROUTER_API_KEY;
 
   const child = spawnSync(
     process.execPath,
-    ["--import", "tsx", "commander/commander.ts", "Fix a bug in TezJet-Agent-Factory"],
+    ["--import", "tsx", "commander/commander.ts", "Fix a bug in Onay-Agents-Factory"],
     {
       cwd: fileURLToPath(new URL("..", import.meta.url)),
       env,
@@ -33,7 +34,7 @@ test("CLI exits with 10 when no AI provider key is configured", () => {
   );
 
   assert.ifError(child.error);
-  const marker = '{\n  "commander": "TezJet Commander"';
+  const marker = '{\n  "commander": "Onay Commander"';
   const start = child.stdout.lastIndexOf(marker);
   assert.notEqual(start, -1, child.stdout + child.stderr);
 
@@ -55,11 +56,11 @@ test("CLI blocks a missing explicitly selected provider without falling back", (
   };
   delete env.OPENAI_API_KEY;
   delete env.AGENT_FACTORY_MODE;
-  const child = spawnSync(process.execPath, ["--import", "tsx", "commander/commander.ts", "Audit TezJet-Agent-Factory"], {
+  const child = spawnSync(process.execPath, ["--import", "tsx", "commander/commander.ts", "Audit Onay-Agents-Factory"], {
     cwd: fileURLToPath(new URL("..", import.meta.url)), env, encoding: "utf8", timeout: 30_000,
   });
   assert.ifError(child.error);
-  const marker = '{\n  "commander": "TezJet Commander"';
+  const marker = '{\n  "commander": "Onay Commander"';
   const start = child.stdout.lastIndexOf(marker);
   assert.notEqual(start, -1, child.stdout + child.stderr);
   const report = JSON.parse(child.stdout.slice(start)) as { mode: string; result: { status: string; reasons: string[] } };

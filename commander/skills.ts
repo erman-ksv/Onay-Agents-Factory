@@ -1,5 +1,5 @@
 /**
- * Role skill profiles for TezJet Agent Factory.
+ * Role skill profiles for Onay Agents Factory.
  *
  * These are operational instructions (not model fine-tuning). Every role must
  * distinguish verified evidence from assumptions and must not claim tool actions

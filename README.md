@@ -1,6 +1,6 @@
-# TezJet Agent Factory
+# Onay Agents Factory
 
-AI-assisted engineering factory for the TezJet project, with role-specific operating skills.
+AI-assisted engineering factory for the Onay taxi application, with role-specific operating skills.
 
 ## Agent workflow
 
@@ -34,6 +34,8 @@ Rasul is an AI legal research assistant, not a licensed lawyer. For each legal t
 
 ## Configuration
 
+The GitHub repositories are now `erman-ksv/Onay` (taxi app) and `erman-ksv/Onay-Agents-Factory` (agent system). Use `ONAY_REPOSITORY=erman-ksv/Onay`; the legacy `TEZJET_REPOSITORY` remains supported for existing environments but should be cleared or updated. Historical TezJet references to the application in source code are not automatically renamed.
+
 Copy `.env.example` to your runtime environment and provide:
 
 - `AGENT_FACTORY_PROVIDER` — optional explicit `gemini`, `openai` or `openrouter` choice. The selected provider requires its own key and never falls back to another provider. When unset, automatic selection prefers Gemini, then OpenAI, then OpenRouter.
@@ -44,8 +46,9 @@ Copy `.env.example` to your runtime environment and provide:
 - `OPENROUTER_API_KEY` — Codespaces secret for OpenRouter; use only free routes while no paid budget is authorized.
 - `OPENROUTER_MODEL` — defaults to `openrouter/free`. Only the free router or a concrete model ending in `:free` is accepted; paid routes are rejected before any API request.
 - `GITHUB_TOKEN` — GitHub token with access to the allowed repository.
-- `TEZJET_REPOSITORY=erman-ksv/TezJet`
-- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet,erman-ksv/TezJet-Agent-Factory` — explicitly allow only repositories the agent may inspect or modify.
+- `ONAY_REPOSITORY=erman-ksv/Onay` — canonical application repository location.
+- `TEZJET_REPOSITORY` — optional legacy app repository override; leave blank unless needed.
+- `AGENT_ALLOWED_REPOSITORIES=erman-ksv/Onay,erman-ksv/Onay-Agents-Factory` — explicitly allow only repositories the agent may inspect or modify.
 
 Never commit tokens or secrets. OpenRouter is selected explicitly with `AGENT_FACTORY_PROVIDER=openrouter` when another provider key is also present. OpenRouter calls use the Chat Completions API with tracing disabled and SDK HTTP retries set to zero, to avoid wasting free-tier requests. No automatic mid-run failover is attempted because restarting Commander could replay completed tools. The free model router can route to different models, so tool-call quality and daily request capacity must still be verified in a live read-only task.
 
@@ -53,8 +56,8 @@ Run a limited read-only Commander smoke test (no publication, no changes) from t
 
 ```bash
 AGENT_FACTORY_PROVIDER=openrouter AGENT_FACTORY_ENABLE_GITHUB_WRITES=false \
-AGENT_ALLOWED_REPOSITORIES=erman-ksv/TezJet-Agent-Factory \
-pnpm exec tsx commander/commander.ts "Audit TezJet-Agent-Factory repository without changing files"
+AGENT_ALLOWED_REPOSITORIES=erman-ksv/Onay-Agents-Factory \
+pnpm exec tsx commander/commander.ts "Audit Onay-Agents-Factory repository without changing files"
 ```
 
 This does not replace the separately validated live-cycle CLI: that CLI's provider selector remains Gemini/OpenAI until extended and tested.
@@ -69,7 +72,7 @@ pnpm typecheck
 pnpm dev -- "Review TezJet driver agreement and privacy obligations for the target jurisdiction"
 ```
 
-The Commander produces a task plan and specialist routing. A configured Gemini or OpenAI key enables AI orchestration, including tasks explicitly targeting `TezJet-Agent-Factory`. Explorer reads actual files at an immutable commit, Coder generates complete proposed files from that context, Security scans the repository and proposal, and Reviewer applies change-policy gates. Advisory specialists receive the actual repository context. Every tool invocation, return, and failure is recorded in the task journal with its actor and tool name.
+The Onay Commander produces a task plan and specialist routing. A configured Gemini or OpenAI key enables AI orchestration, including tasks explicitly targeting `Onay-Agents-Factory`. Explorer reads actual files at an immutable commit, Coder generates complete proposed files from that context, Security scans the repository and proposal, and Reviewer applies change-policy gates. Advisory specialists receive the actual repository context. Every tool invocation, return, and failure is recorded in the task journal with its actor and tool name.
 
 The default command proposes changes without publishing. For a change task, `completed` requires files written to a candidate commit and successful required CI/test evidence for that exact commit, in the correct repository and branch. Model prose, script discovery, and a successful base-branch workflow cannot establish completion. A read-only audit verifies the inspected commit and never publishes changes.
 
@@ -91,7 +94,7 @@ The `live-cycle` command runs the production Commander with the selected provide
 
 See [the live-cycle runbook](docs/LIVE_CYCLE_RUNBOOK.md) for Gemini and OpenAI commands, required runtime configuration, artifacts, and acceptance criteria. The current verification uses Gemini; the CLI also supports explicit OpenAI selection.
 
-## Run the TezJet change pipeline
+## Run the Onay application change pipeline
 
 Start with read-only analysis. This inspects the configured TezJet repository and its test/security context but does not create a branch or pull request:
 

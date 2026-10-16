@@ -38,20 +38,21 @@ test("AI Commander prompt includes dispatch for taxi matching tasks", () => {
 });
 
 test("Russian read-only repository audits use inspection-only stages", () => {
-  const plan = planTask("Проверь структуру проекта TezJet-Agent-Factory. Определи роли Commander, Explorer, Backend, Frontend, Tester, Security и Reviewer. Ничего не изменяй в файлах.");
+  const plan = planTask("Проверь структуру проекта Onay-Agents-Factory. Определи роли Commander, Explorer, Backend, Frontend, Tester, Security и Reviewer. Ничего не изменяй в файлах.");
   assert.deepEqual(plan.steps.map((step) => step.agent), ["explorer", "tester", "security"]);
 });
 
 test("Agent Factory target detection is explicit", async () => {
   const { isAgentFactoryTarget } = await import("./planner.js");
-  assert.equal(isAgentFactoryTarget("Проверь TezJet-Agent-Factory"), true);
+  assert.equal(isAgentFactoryTarget("Проверь Onay-Agents-Factory"), true);
+  assert.equal(isAgentFactoryTarget("Проверь TezJet-Agent-Factory"), true); // legacy task names stay routable
   assert.equal(isAgentFactoryTarget("Review taxi dispatch"), false);
 });
 
 
 test("Agent Factory tasks use executable AI tools when a provider is configured", async () => {
   const { shouldUseAiCommander } = await import("./planner.js");
-  assert.equal(shouldUseAiCommander("Fix TezJet-Agent-Factory executor", true), true);
+  assert.equal(shouldUseAiCommander("Fix Onay-Agents-Factory executor", true), true);
   assert.equal(shouldUseAiCommander("Review TezJet dispatch", true), true);
   assert.equal(shouldUseAiCommander("Review TezJet dispatch", false), false);
   assert.equal(shouldUseAiCommander("Review TezJet dispatch", true, "deterministic"), false);

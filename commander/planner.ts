@@ -18,7 +18,7 @@ const routes: Array<[AgentName, string, RegExp | null]> = [
 
 const READ_ONLY_AUDIT = /(?:\b(inspect|audit|check|analy[sz]e|report|explain|identify|verify)\b|проверь|проверить|анализ|структуру|структура|определи|сообщи)/i;
 const MUTATION_INTENT = /(?:\b(implement|build|create|add|change|modify|fix|refactor|write|generate|develop|update|remove|delete)\b|создай|измени|исправь|добавь|реализуй|напиши)/i;
-const FACTORY_TARGET = /tezjet-agent-factory|agent factory/i;
+const FACTORY_TARGET = /onay-agents-factory|tezjet-agent-factory|agents? factory/i;
 
 export function isReadOnlyRepositoryAudit(goal: string): boolean {
   return READ_ONLY_AUDIT.test(goal) && !MUTATION_INTENT.test(goal);

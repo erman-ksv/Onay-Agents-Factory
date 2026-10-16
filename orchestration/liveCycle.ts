@@ -7,14 +7,14 @@ import { selectProviderConfig } from "../commander/providerConfig.js";
 import { assertCommitSha, assertValidBranchRef } from "../github/githubClient.js";
 import { assertRepositoryAllowed, assertWritableBranch } from "../github/repositoryPolicy.js";
 
-export const LIVE_CYCLE_REPOSITORY = "erman-ksv/TezJet-Agent-Factory";
+export const LIVE_CYCLE_REPOSITORY = "erman-ksv/Onay-Agents-Factory";
 export const LIVE_CYCLE_PATHS = [
   "orchestration/agentRunJournal.ts",
   "orchestration/agentRunJournal.test.ts",
 ] as const;
-export const LIVE_CYCLE_AUDIT_GOAL = "Audit TezJet-Agent-Factory repository at the selected immutable commit. Inspect repository structure and journal task identifiers, security, and trusted test evidence. Report findings. This is a read-only audit.";
+export const LIVE_CYCLE_AUDIT_GOAL = "Audit Onay-Agents-Factory repository at the selected immutable commit. Inspect repository structure and journal task identifiers, security, and trusted test evidence. Report findings. This is a read-only audit.";
 export const LIVE_CYCLE_CHANGE_GOAL = [
-  "Fix TezJet-Agent-Factory default AgentRunJournal task ID collisions.",
+  "Fix Onay-Agents-Factory default AgentRunJournal task ID collisions.",
   "Only modify orchestration/agentRunJournal.ts and orchestration/agentRunJournal.test.ts; return complete contents for those two files and no others.",
   "The default task ID currently uses Date.now(), so two journals constructed in the same millisecond can share a task ID.",
   "Use Node crypto randomUUID() for the default task ID, preserve the task- prefix, explicit caller-supplied IDs, existing constructor API, event ordering, and observer isolation.",
