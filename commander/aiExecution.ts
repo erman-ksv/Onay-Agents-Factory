@@ -78,7 +78,9 @@ export class AiExecutionSession {
   /** Serialize tools so parallel model calls cannot race review against generation. */
   invoke<T>(actor: string, tool: string, action: () => Promise<T> | T): Promise<T | { error: string }> {
     const operation = this.queue.then(async () => {
-      this.failures.delete(tool);
+      // Keep the first failure until a successful retry. A second failed
+      // attempt (including a host no-regeneration guard) must not obscure
+      // the actionable original error in the final REASONS.
       this.completedActors.delete(actor);
       this.assessments.delete(actor);
       this.journal.handoff("commander", actor, "Commander invoked an executable tool.", { tool });
@@ -93,7 +95,7 @@ export class AiExecutionSession {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.failures.set(tool, message);
+        if (!this.failures.has(tool)) this.failures.set(tool, message);
         this.journal.record("tool_failed", actor, message, { tool });
         this.journal.record("agent_failed", actor, "Agent tool execution failed.", { tool });
         return { error: message };
