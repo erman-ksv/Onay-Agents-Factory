@@ -36,6 +36,7 @@ export type AiExecutionOptions = {
   journal?: AgentRunJournal;
   /** Exact repository paths authorized by the host for this task. */
   allowedChangePaths?: readonly string[];
+  specialistContextTransform?: (context: string, files: readonly ProposedChange[]) => string;
 };
 
 /** Evidence belongs to this run, never to a model's prose or tool arguments. */
