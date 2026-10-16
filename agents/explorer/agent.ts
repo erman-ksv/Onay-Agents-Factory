@@ -1,4 +1,4 @@
-import { TezJetRepositoryAdapter } from "../../github/tezjetRepository.js";
+import { OnayRepositoryAdapter } from "../../github/onayRepository.js";
 
 export type ExplorationResult = {
   agent: "explorer";
@@ -10,9 +10,9 @@ export type ExplorationResult = {
 export async function exploreRepository(
   paths: string[],
   ref = "main",
-  repository = process.env.TEZJET_REPOSITORY ?? "erman-ksv/TezJet",
+  repository = process.env.ONAY_REPOSITORY ?? "erman-ksv/Onay",
 ): Promise<ExplorationResult> {
-  const github = new TezJetRepositoryAdapter(repository);
+  const github = new OnayRepositoryAdapter(repository);
   const files = [];
   for (const path of paths) {
     files.push(await github.read(path, ref));

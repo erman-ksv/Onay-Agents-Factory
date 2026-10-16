@@ -4,7 +4,7 @@ import { Usage, setTracingDisabled, type Model, type ModelRequest, type ModelRes
 import { createAiCommander, runAiCommander } from "./aiCommander.js";
 import type { AiExecutionDependencies } from "./aiExecution.js";
 import { GitHubClient } from "../github/githubClient.js";
-import { AGENT_FACTORY_EXPLORER_FILES } from "../github/tezjetExplorer.js";
+import { AGENT_FACTORY_EXPLORER_FILES } from "../github/onayExplorer.js";
 
 setTracingDisabled(true);
 const repository = "erman-ksv/Onay-Agents-Factory";
@@ -12,25 +12,25 @@ const factoryEnv = { AGENT_ALLOWED_REPOSITORIES: repository };
 const baseSha = "a".repeat(40);
 const candidateSha = "b".repeat(40);
 const branch = "fix/sdk-execution-test";
-const names = ["explore_tezjet", "code_tezjet", "security_review", "final_review", "publish_change_set", "test_tezjet"];
+const names = ["explore_onay", "code_onay", "security_review", "final_review", "publish_change_set", "test_onay"];
 
-test("default TezJet handlers reject a green job that skips API integration tests", async t => {
+test("default Onay handlers reject a green job that skips API integration tests", async t => {
   t.mock.method(GitHubClient.prototype, "getCommitSha", async () => baseSha);
   t.mock.method(GitHubClient.prototype, "getFile", async (path: string) => ({
     path, sha: "c".repeat(40), content: path === "package.json" ? '{"scripts":{"test":"run-tests"}}' : "export const inspected = true;",
   }));
   t.mock.method(GitHubClient.prototype, "getWorkflowRuns", async () => [{
     id: 321, run_attempt: 1, name: "CI", status: "completed", conclusion: "success", head_sha: baseSha,
-    html_url: "https://github.com/erman-ksv/TezJet/actions/runs/321",
+    html_url: "https://github.com/erman-ksv/Onay/actions/runs/321",
   }]);
   t.mock.method(GitHubClient.prototype, "getWorkflowJobs", async () => ({ jobs: [{
     id: 1, run_id: 321, run_attempt: 1, head_sha: baseSha, name: "Typecheck and API tests", status: "completed", conclusion: "success",
-    html_url: "https://github.com/erman-ksv/TezJet/actions/runs/321/job/1", steps: [
+    html_url: "https://github.com/erman-ksv/Onay/actions/runs/321/job/1", steps: [
       { number: 1, name: "Typecheck", status: "completed", conclusion: "success" },
       { number: 2, name: "API integration tests", status: "completed", conclusion: "skipped" },
     ],
   }] }));
-  const { session } = createAiCommander("Audit TezJet repository without changing files", { env: {} });
+  const { session } = createAiCommander("Audit Onay repository without changing files", { env: {} });
   await session.explore();
   const result = await session.test();
   assert.equal(result.testsExecuted, false);
@@ -265,7 +265,7 @@ test("invalid host base refs and shortened SHAs are rejected before execution", 
 test("the expected base guard also rejects a mismatching injected source before Coder or publication", async () => {
   const calls: string[] = [];
   const result = await runAiCommander("Fix Onay-Agents-Factory", {
-    model: new ScriptedModel(["explore_tezjet"]), env: factoryEnv, dependencies: dependencies(calls),
+    model: new ScriptedModel(["explore_onay"]), env: factoryEnv, dependencies: dependencies(calls),
     baseRef: "fix/verified-agent-execution", expectedBaseSha: candidateSha,
   });
   assert.equal(result.status, "blocked");
@@ -312,7 +312,7 @@ test("Commander and advisory specialists retain task-selected clients across pro
       env: index === 0 ? { ...factoryEnv, AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "unrelated-openai-key" } :
         { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "unrelated-gemini-key" },
     });
-    const toolName = index === 0 || index === 4 ? "explore_tezjet" : index === 1 || index === 5 ? "database_specialist" : undefined;
+    const toolName = index === 0 || index === 4 ? "explore_onay" : index === 1 || index === 5 ? "database_specialist" : undefined;
     const argumentsJson = toolName === "database_specialist" ? '{"input":"Review repository context."}' : "{}";
     const text = index === 2 || index === 6 ? '{"ready":true,"findings":[],"summary":"Context reviewed."}' : "Provider configuration verified.";
     const response = url.endsWith("/chat/completions") ? {
@@ -383,7 +383,7 @@ test("Gemini SDK retries a 503 after an executed Explorer tool without executing
       id: "retry-test-" + attempt, object: "chat.completion", created: 1, model: "gemini-3.5-flash",
       choices: [{ index: 0, finish_reason: toolCall ? "tool_calls" : "stop",
         message: toolCall ? { role: "assistant", content: null, tool_calls: [{
-          id: "call-explore", type: "function", function: { name: "explore_tezjet", arguments: "{}" },
+          id: "call-explore", type: "function", function: { name: "explore_onay", arguments: "{}" },
         }] } : { role: "assistant", content: "Audit incomplete; more actors required." } }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     }), { status: 200, headers: { "content-type": "application/json" } });

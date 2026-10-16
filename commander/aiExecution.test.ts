@@ -53,8 +53,8 @@ function setup(overrides: Partial<AiExecutionDependencies> = {}, options: Partia
 }
 
 async function prepare(session: AiExecutionSession) {
-  await session.invoke("explorer", "explore_tezjet", () => session.explore());
-  await session.invoke("coder", "code_tezjet", () => session.generate());
+  await session.invoke("explorer", "explore_onay", () => session.explore());
+  await session.invoke("coder", "code_onay", () => session.generate());
   await session.invoke("reviewer", "final_review", () => session.reviewChanges());
   await session.invoke("security", "security_review", () => session.inspectSecurity());
 }
@@ -62,7 +62,7 @@ async function prepare(session: AiExecutionSession) {
 async function execute(session: AiExecutionSession) {
   await prepare(session);
   await session.invoke("github", "publish_changes", () => session.publish());
-  await session.invoke("tester", "test_tezjet", () => session.test());
+  await session.invoke("tester", "test_onay", () => session.test());
   return session.finish("The candidate was written and its CI evidence verified.");
 }
 
@@ -82,8 +82,8 @@ test("AI mutation completes only after actual tools publish and verify the exact
   assert.equal(result.evidence.publication?.head_sha, candidateSha);
   assert.equal(result.evidence.testsExecuted, true);
   assert.deepEqual(result.events.filter(event => event.type === "tool_started").map(event => [event.actor, event.details?.tool]), [
-    ["explorer", "explore_tezjet"], ["coder", "code_tezjet"], ["reviewer", "final_review"],
-    ["security", "security_review"], ["github", "publish_changes"], ["github", "write_candidate"], ["tester", "test_tezjet"],
+    ["explorer", "explore_onay"], ["coder", "code_onay"], ["reviewer", "final_review"],
+    ["security", "security_review"], ["github", "publish_changes"], ["github", "write_candidate"], ["tester", "test_onay"],
   ]);
   const written = result.events.find(event => event.type === "artifact_created" && event.actor === "github");
   assert.deepEqual(written?.details?.files, [files[0].path]);
@@ -95,8 +95,8 @@ test("a generated change outside the host file scope is rejected without storing
   const unexpected = { path: "commander/planner.ts", content: "export const unrelated = true;\n", message: "Unrequested planner change" };
   const { session, calls } = setup({ generate: async () => ({ summary: "Exceeds requested work", files: [...files, unexpected] }) },
     { allowedChangePaths: [files[0].path] });
-  await session.invoke("explorer", "explore_tezjet", () => session.explore());
-  const coding = await session.invoke("coder", "code_tezjet", () => session.generate());
+  await session.invoke("explorer", "explore_onay", () => session.explore());
+  const coding = await session.invoke("coder", "code_onay", () => session.generate());
   assert.ok("error" in coding);
   assert.match(coding.error, /outside the configured task scope: commander\/planner\.ts/);
   const result = session.finish("Coder exceeded the requested scope.");
@@ -117,8 +117,8 @@ test("host file scope matches exact paths and an empty scope does not authorize 
   ];
   for (const { name, allowed } of variants) await t.test(name, async () => {
     const { session, calls } = setup({}, { allowedChangePaths: allowed });
-    await session.invoke("explorer", "explore_tezjet", () => session.explore());
-    const result = await session.invoke("coder", "code_tezjet", () => session.generate());
+    await session.invoke("explorer", "explore_onay", () => session.explore());
+    const result = await session.invoke("coder", "code_onay", () => session.generate());
     assert.ok("error" in result);
     assert.match(result.error, /outside the configured task scope/);
     assert.deepEqual(session.finish("Scope rejected.").evidence.proposedFiles, []);
@@ -159,7 +159,7 @@ test("regeneration outside the host scope invalidates an earlier approved propos
       : [{ ...files[0], path: "commander/planner.ts" }] };
   } }, { allowedChangePaths: [files[0].path] });
   await prepare(session);
-  assert.ok("error" in await session.invoke("coder", "code_tezjet", () => session.generate()));
+  assert.ok("error" in await session.invoke("coder", "code_onay", () => session.generate()));
   const result = session.finish("Coder changed an unapproved file on the second attempt.");
   assert.equal(result.status, "blocked");
   assert.deepEqual(result.evidence.proposedFiles, []);
@@ -203,7 +203,7 @@ test("successful test claims for stale commits or other repositories/refs cannot
 test("test discovery before publication never proves proposed code passed", async () => {
   const { session, calls } = setup();
   await prepare(session);
-  const tested = await session.invoke("tester", "test_tezjet", () => session.test());
+  const tested = await session.invoke("tester", "test_onay", () => session.test());
   assert.equal("testsExecuted" in tested && tested.testsExecuted, false);
   assert.equal(calls.some(call => call.tool === "verify"), false);
   const result = session.finish("Tests were discovered.");
@@ -234,7 +234,7 @@ test("successful CI for the candidate does not complete when its branch has adva
 test("regenerating changes invalidates review and security until both run again", async () => {
   const { session, calls } = setup();
   await prepare(session);
-  await session.invoke("coder", "code_tezjet", () => session.generate());
+  await session.invoke("coder", "code_onay", () => session.generate());
   const gated = await session.invoke("github", "publish_changes", () => session.publish());
   assert.equal("error" in gated, true);
   assert.equal(calls.some(call => call.tool === "publish"), false);
@@ -243,7 +243,7 @@ test("regenerating changes invalidates review and security until both run again"
   await session.invoke("reviewer", "final_review", () => session.reviewChanges());
   await session.invoke("security", "security_review", () => session.inspectSecurity());
   await session.invoke("github", "publish_changes", () => session.publish());
-  await session.invoke("tester", "test_tezjet", () => session.test());
+  await session.invoke("tester", "test_onay", () => session.test());
   assert.equal(session.finish("Updated proposal verified.").status, "completed");
   assert.deepEqual(calls.filter(call => ["generate", "review", "inspectSecurity", "publish"].includes(call.tool)).map(call => call.tool),
     ["generate", "review", "inspectSecurity", "generate", "review", "inspectSecurity", "publish"]);
@@ -256,7 +256,7 @@ test("failed regeneration also invalidates the previous publishable change set",
     return structuredClone(generated);
   } });
   await prepare(session);
-  assert.deepEqual(await session.invoke("coder", "code_tezjet", () => session.generate()), { error: "Coder provider unavailable" });
+  assert.deepEqual(await session.invoke("coder", "code_onay", () => session.generate()), { error: "Coder provider unavailable" });
   const result = session.finish("The earlier proposal was reviewed.");
   assert.equal(result.status, "blocked");
   assert.deepEqual(result.evidence.proposedFiles, []);
@@ -271,7 +271,7 @@ test("required advisory specialists execute against the current proposal before 
   await prepare(session);
   await session.invoke("backend", "backend_specialist", () => session.recordAdvice("backend", readyAdvice));
   await session.invoke("github", "publish_changes", () => session.publish());
-  await session.invoke("tester", "test_tezjet", () => session.test());
+  await session.invoke("tester", "test_onay", () => session.test());
   const result = session.finish("Backend assessment and candidate CI verified.");
   assert.equal(result.status, "completed");
   assert.equal(calls.filter(call => call.tool === "publish").length, 1);
@@ -283,7 +283,7 @@ test("regeneration invalidates specialist advice and requires reassessment befor
   const { session, calls } = setup({}, { requiredActors: [...mutationActors, "backend"] });
   await prepare(session);
   await session.invoke("backend", "backend_specialist", () => session.recordAdvice("backend", readyAdvice));
-  await session.invoke("coder", "code_tezjet", () => session.generate());
+  await session.invoke("coder", "code_onay", () => session.generate());
   await session.invoke("reviewer", "final_review", () => session.reviewChanges());
   await session.invoke("security", "security_review", () => session.inspectSecurity());
   assert.ok(session.finish("Regenerated proposal.").missingActors.includes("backend"));
@@ -291,7 +291,7 @@ test("regeneration invalidates specialist advice and requires reassessment befor
   assert.equal(calls.some(call => call.tool === "publish"), false);
   await session.invoke("backend", "backend_specialist", () => session.recordAdvice("backend", readyAdvice));
   await session.invoke("github", "publish_changes", () => session.publish());
-  await session.invoke("tester", "test_tezjet", () => session.test());
+  await session.invoke("tester", "test_onay", () => session.test());
   assert.equal(session.finish("Regenerated proposal reassessed and verified.").status, "completed");
 });
 
@@ -351,22 +351,22 @@ test("a partial publication failure reports its branch and never automatically r
   assert.equal(attempt?.details?.branch, branch);
   assert.deepEqual(attempt?.details?.files, [files[0].path]);
   assert.equal("error" in await session.invoke("github", "publish_changes", () => session.publish()), true);
-  assert.equal("error" in await session.invoke("coder", "code_tezjet", () => session.generate()), true);
-  await session.invoke("tester", "test_tezjet", () => session.test());
+  assert.equal("error" in await session.invoke("coder", "code_onay", () => session.generate()), true);
+  await session.invoke("tester", "test_onay", () => session.test());
   assert.equal(writes, 1);
   assert.equal(calls.some(call => call.tool === "verify"), false);
 });
 
 test("failed tools record actor, tool and error and block completion", async () => {
   const { session } = setup({ explore: async () => { throw new Error("GitHub unavailable"); } });
-  assert.deepEqual(await session.invoke("explorer", "explore_tezjet", () => session.explore()), { error: "GitHub unavailable" });
+  assert.deepEqual(await session.invoke("explorer", "explore_onay", () => session.explore()), { error: "GitHub unavailable" });
   const result = session.finish("Exploration did not succeed.");
   assert.equal(result.status, "blocked");
   assert.ok(result.missingActors.includes("explorer"));
   assert.ok(result.reasons.includes("GitHub unavailable"));
   const failure = result.events.find(event => event.type === "tool_failed");
   assert.equal(failure?.actor, "explorer");
-  assert.equal(failure?.details?.tool, "explore_tezjet");
+  assert.equal(failure?.details?.tool, "explore_onay");
   assert.equal(failure?.message, "GitHub unavailable");
   assert.equal(result.events.some(event => event.type === "tool_completed" && event.actor === "explorer"), false);
 });
@@ -385,8 +385,8 @@ test("parallel model tool calls serialize generation after exploration and revie
     generate: async () => { order.push("generate"); return structuredClone(generated); },
     review: () => { order.push("review"); return review; },
   });
-  const exploring = session.invoke("explorer", "explore_tezjet", () => session.explore());
-  const coding = session.invoke("coder", "code_tezjet", () => session.generate());
+  const exploring = session.invoke("explorer", "explore_onay", () => session.explore());
+  const coding = session.invoke("coder", "code_onay", () => session.generate());
   const reviewing = session.invoke("reviewer", "final_review", () => session.reviewChanges());
   await explorationStarted;
   assert.deepEqual(order, ["explore:start"]);
@@ -440,8 +440,8 @@ test("incomplete or mismatched exploration cannot seed generation", async t => {
   ];
   for (const variant of variants) await t.test(variant.name, async () => {
     const { session, calls } = setup({ explore: async () => variant.result });
-    assert.equal("error" in await session.invoke("explorer", "explore_tezjet", () => session.explore()), true);
-    assert.equal("error" in await session.invoke("coder", "code_tezjet", () => session.generate()), true);
+    assert.equal("error" in await session.invoke("explorer", "explore_onay", () => session.explore()), true);
+    assert.equal("error" in await session.invoke("coder", "code_onay", () => session.generate()), true);
     assert.equal(calls.some(call => call.tool === "generate"), false);
     const result = session.finish("Claimed completion.");
     assert.equal(result.status, "blocked");
@@ -466,9 +466,9 @@ test("empty final model output or a runner failure cannot complete an otherwise 
 
 test("read-only audits verify the explored base commit without generating or publishing", async () => {
   const { session, calls } = setup({}, { auditOnly: true, requiredActors: ["explorer", "security", "tester"] });
-  await session.invoke("explorer", "explore_tezjet", () => session.explore());
+  await session.invoke("explorer", "explore_onay", () => session.explore());
   await session.invoke("security", "security_review", () => session.inspectSecurity());
-  await session.invoke("tester", "test_tezjet", () => session.test());
+  await session.invoke("tester", "test_onay", () => session.test());
   const result = session.finish("Audit evidence verified.");
   assert.equal(result.status, "completed");
   assert.deepEqual(calls.map(call => call.tool), ["getHead", "explore", "inspectSecurity", "discoverTests", "verify"]);
@@ -476,7 +476,7 @@ test("read-only audits verify the explored base commit without generating or pub
   assert.deepEqual(result.evidence.changedFiles, []);
   assert.equal(result.evidence.publication, undefined);
   assert.equal(result.evidence.testsExecuted, true);
-  assert.equal("error" in await session.invoke("coder", "code_tezjet", () => session.generate()), true);
+  assert.equal("error" in await session.invoke("coder", "code_onay", () => session.generate()), true);
   assert.equal("error" in await session.invoke("github", "publish_changes", () => session.publish()), true);
   assert.equal(calls.some(call => call.tool === "generate" || call.tool === "publish"), false);
 });
@@ -496,7 +496,7 @@ test("failed repository refresh clears the prior context and all proposal gates"
       },
     });
     await prepare(session);
-    assert.ok("error" in await session.invoke("explorer", "explore_tezjet", () => session.explore()));
+    assert.ok("error" in await session.invoke("explorer", "explore_onay", () => session.explore()));
     const result = session.finish("The refresh failed.");
     assert.equal(result.status, "blocked");
     assert.equal(result.evidence.baseSha, undefined);
@@ -504,7 +504,7 @@ test("failed repository refresh clears the prior context and all proposal gates"
     assert.equal(result.evidence.review, undefined);
     assert.equal(result.evidence.security, undefined);
     assert.ok(result.missingActors.includes("explorer"));
-    assert.ok("error" in await session.invoke("coder", "code_tezjet", () => session.generate()));
+    assert.ok("error" in await session.invoke("coder", "code_onay", () => session.generate()));
     assert.equal(calls.filter(call => call.tool === "generate").length, 1);
   });
 });
@@ -530,7 +530,7 @@ test("failed repeated test discovery invalidates previously successful test evid
     return { scripts: ["test: tsx --test"] };
   } });
   assert.equal((await execute(session)).status, "completed");
-  assert.ok("error" in await session.invoke("tester", "test_tezjet", () => session.test()));
+  assert.ok("error" in await session.invoke("tester", "test_onay", () => session.test()));
   const result = session.finish("The earlier CI passed.");
   assert.equal(result.status, "blocked");
   assert.equal(result.evidence.testsExecuted, false);
@@ -556,8 +556,8 @@ test("failed final head verification cannot retain a verified candidate claim", 
 test("mutating returned or dependency-owned rejected reviews cannot authorize publication", async () => {
   const rejected = { ...review, ready: false, findings: [{ severity: "blocker" as const, path: files[0].path, message: "Rejected change" }] };
   const { session, calls } = setup({ review: () => rejected });
-  await session.invoke("explorer", "explore_tezjet", () => session.explore());
-  await session.invoke("coder", "code_tezjet", () => session.generate());
+  await session.invoke("explorer", "explore_onay", () => session.explore());
+  await session.invoke("coder", "code_onay", () => session.generate());
   const returned = await session.invoke("reviewer", "final_review", () => session.reviewChanges());
   assert.ok("ready" in returned);
   returned.ready = true;
@@ -585,8 +585,8 @@ test("review and security inputs cannot mutate the stored proposed files", async
 test("security response mutations cannot turn a failed scan into a publication gate", async () => {
   const rejected = { agent: "security" as const, repository, ref: baseSha, status: "findings" as "clean" | "findings", findings: [] };
   const { session, calls } = setup({ inspectSecurity: async () => rejected });
-  await session.invoke("explorer", "explore_tezjet", () => session.explore());
-  await session.invoke("coder", "code_tezjet", () => session.generate());
+  await session.invoke("explorer", "explore_onay", () => session.explore());
+  await session.invoke("coder", "code_onay", () => session.generate());
   await session.invoke("reviewer", "final_review", () => session.reviewChanges());
   const returned = await session.invoke("security", "security_review", () => session.inspectSecurity());
   assert.ok("repository" in returned);
@@ -607,7 +607,7 @@ test("test and finish responses cannot promote failed CI evidence to completed",
   const { session } = setup({ verify: async () => failed });
   await prepare(session);
   await session.invoke("github", "publish_changes", () => session.publish());
-  const returned = await session.invoke("tester", "test_tezjet", () => session.test());
+  const returned = await session.invoke("tester", "test_onay", () => session.test());
   assert.ok("executionEvidence" in returned && returned.executionEvidence);
   returned.executionEvidence.testsExecuted = true;
   returned.executionEvidence.status = "passed";

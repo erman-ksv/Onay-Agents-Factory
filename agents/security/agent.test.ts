@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DEFAULT_SECURITY_PATHS, inspectProposedChanges } from "./agent.js";
 
-test("default repository scan targets known TezJet source files", () => {
+test("default repository scan targets known Onay source files", () => {
   assert.deepEqual(DEFAULT_SECURITY_PATHS, [
     "package.json",
     "artifacts/api-server/src/routes/order.ts",

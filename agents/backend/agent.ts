@@ -1,7 +1,7 @@
-import { inspectTezJet } from "../../github/tezjetExplorer.js";
+import { inspectOnay } from "../../github/onayExplorer.js";
 
 export async function inspectBackend(paths?: string[], ref = "main") {
-  const result = await inspectTezJet(paths, ref);
+  const result = await inspectOnay(paths, ref);
   return { agent: "backend", ...result };
 }
 
