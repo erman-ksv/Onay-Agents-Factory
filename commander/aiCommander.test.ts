@@ -406,3 +406,125 @@ test("Gemini SDK retries a 503 after an executed Explorer tool without executing
   assert.equal(result.evidence.testsExecuted, false);
   assert.ok(!calls.includes("write-and-open-pr"));
 });
+
+
+/** Synthetic full-cycle probe: real SDK tool dispatch, in-memory repository/CI doubles.
+ * No API credentials, private repository content, or GitHub writes are used here.
+ * The GitHub PR running this test separately supplies real CI evidence for this commit.
+ */
+type SyntheticToolStep = { name?: string; arguments?: string; text?: string };
+class SyntheticCycleModel implements Model {
+  readonly requests: ModelRequest[] = [];
+  constructor(private readonly steps: readonly SyntheticToolStep[]) {}
+  async getResponse(request: ModelRequest): Promise<ModelResponse> {
+    const index = this.requests.push(request) - 1;
+    const step = this.steps[index];
+    assert.ok(step, "Unexpected model turn " + index);
+    return {
+      usage: new Usage(),
+      output: step.name
+        ? [{ type: "function_call", callId: "synthetic-" + index,
+          name: step.name, arguments: step.arguments ?? "{}", status: "completed" }]
+        : [{ type: "message", role: "assistant", status: "completed",
+          content: [{ type: "output_text", text: step.text ?? "Synthetic check finished." }] }],
+    };
+  }
+  async *getStreamedResponse(): AsyncGenerator<never> {
+    throw new Error("Synthetic test must use non-streaming execution.");
+  }
+}
+
+function syntheticSteps(specialistReady: boolean): SyntheticToolStep[] {
+  return [
+    { name: "explore_tezjet" },
+    { name: "code_tezjet" },
+    { name: "backend_specialist", arguments: '{"input":"Review fictional arithmetic helper and proposed correction."}' },
+    { text: JSON.stringify({
+      ready: specialistReady,
+      findings: specialistReady ? [] : [{ severity: "blocker", message: "Synthetic approval withheld." }],
+      summary: "Only fictional arithmetic fixture was inspected.",
+    }) },
+    { name: "security_review" },
+    { name: "final_review" },
+    { name: "publish_change_set" },
+    { name: "test_tezjet" },
+    { text: "Synthetic cycle reached the final SDK response." },
+  ];
+}
+
+function syntheticDependencies(calls: string[]): AiExecutionDependencies {
+  const deps = dependencies(calls);
+  deps.explore = async sha => {
+    assert.equal(sha, baseSha);
+    calls.push("read-synthetic");
+    return { repository, ref: sha, files: [{
+      path: "synthetic/math.ts", sha: "c".repeat(40),
+      content: "export function add(a: number, b: number) { return a - b; }\n",
+    }] };
+  };
+  deps.generate = async context => {
+    assert.match(context, /return a - b/);
+    calls.push("generate-synthetic");
+    return { summary: "Correct synthetic arithmetic", files: [{
+      path: "synthetic/math.ts",
+      content: "export function add(a: number, b: number) { return a + b; }\n",
+      message: "Fix fictional addition",
+    }] };
+  };
+  deps.publish = async (files, sha) => {
+    assert.equal(sha, baseSha);
+    assert.deepEqual(files.map(file => file.path), ["synthetic/math.ts"]);
+    assert.match(files[0].content, /return a \+ b/);
+    calls.push("mock-pr-created");
+    return {
+      head_sha: candidateSha,
+      html_url: "https://github.com/erman-ksv/Onay-Agents-Factory/pull/123",
+      number: 123,
+    };
+  };
+  return deps;
+}
+
+test("synthetic whole-team workflow calls a specialist, gates review, publishes a fake Draft PR and checks exact-SHA CI", async () => {
+  const calls: string[] = [];
+  const model = new SyntheticCycleModel(syntheticSteps(true));
+  const result = await runAiCommander("Fix Onay-Agents-Factory backend synthetic add helper", {
+    model,
+    env: { ...factoryEnv, AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" },
+    dependencies: syntheticDependencies(calls),
+    allowedChangePaths: ["synthetic/math.ts"],
+    publication: { branch, title: "Synthetic math correction", body: "Only test doubles." },
+  });
+  assert.equal(result.status, "completed", JSON.stringify(result.reasons));
+  assert.equal(result.evidence.assessments.backend?.ready, true);
+  assert.deepEqual(result.evidence.changedFiles, ["synthetic/math.ts"]);
+  assert.equal(result.evidence.publication?.head_sha, candidateSha);
+  assert.equal(result.evidence.tests?.expectedSha, candidateSha);
+  assert.equal(result.evidence.testsExecuted, true);
+  assert.ok(calls.includes("mock-pr-created"));
+  assert.deepEqual(result.events.filter(event => event.type === "tool_completed")
+    .map(event => event.details?.tool), [
+      "explore_tezjet", "code_tezjet", "backend_specialist",
+      "security_review", "final_review", "publish_change_set",
+      "test_tezjet", "verify_final_head",
+    ]);
+  assert.equal(model.requests.length, syntheticSteps(true).length);
+});
+
+test("synthetic specialist blocker prevents even mocked PR publication and cannot claim CI success", async () => {
+  const calls: string[] = [];
+  const result = await runAiCommander("Fix Onay-Agents-Factory backend synthetic add helper", {
+    model: new SyntheticCycleModel(syntheticSteps(false)),
+    env: { ...factoryEnv, AGENT_FACTORY_ENABLE_GITHUB_WRITES: "true" },
+    dependencies: syntheticDependencies(calls),
+    allowedChangePaths: ["synthetic/math.ts"],
+    publication: { branch, title: "Must remain blocked", body: "Synthetic negative path." },
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.evidence.assessments.backend?.ready, false);
+  assert.ok(!calls.includes("mock-pr-created"), "Blocked advice must prevent publication");
+  assert.deepEqual(result.evidence.changedFiles, []);
+  assert.equal(result.evidence.testsExecuted, false);
+  assert.ok(result.events.some(event => event.type === "tool_failed" &&
+    event.details?.tool === "publish_change_set"));
+});
