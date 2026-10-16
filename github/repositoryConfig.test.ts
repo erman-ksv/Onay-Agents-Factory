@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DEFAULT_TARGET_REPOSITORY, getTargetRepository } from "./repositoryConfig.js";
 
-test("uses the current application repository while its rename is pending", () => {
+test("uses the Onay application repository after GitHub rename", () => {
   assert.equal(getTargetRepository({}), DEFAULT_TARGET_REPOSITORY);
 });
 
