@@ -35,6 +35,9 @@ const goal = [
   "Registration and sign-in must be distinct selectable modes.",
   "Add focused helper tests. Keep existing taxi ordering/driver/queue behavior unchanged.",
   "Onay passenger registration mobile UI frontend UX backend auth API.",
+  "Target market for this draft-code review: Uzbekistan. This is not a production release;",
+  "unverified regulatory questions and qualified human legal approval remain required before launch.",
+  "Keep driver signup, driver login and taxi dispatch behavior unchanged.",
 ].join(" ");
 
 function scrub(error: unknown): string {
@@ -151,6 +154,12 @@ async function main() {
             "Use a real registering status/state or variable named registering when processing new registrations.",
             "Import and CALL registrationFullName( on signup; pass normalized full_name to existing OTP endpoint ONLY for signup.",
             "Returning users must be able to request/verify phone OTP with no name input or name required.",
+            "An unregistered phone may request OTP without a name, but server verify-otp requires full_name",
+            "for a new account. Provide a clear route to the signup mode after a verified login error,",
+            "without exposing whether a phone belongs to an account before OTP verification.",
+            "Use accessible names for signup and sign-in controls, field labels and failure states.",
+            "Disable submissions during requests; when switching sign-in/signup, clear pending OTP state.",
+            "Preserve driver registration/login wording and behavior; never require passenger surname for drivers.",
             "Leave driver authentication, queue, dispatch, orders and all non-allowlisted UI regions unchanged.",
             "Before returning JSON, check that all five exact markers and registrationFullName( appear in the patched UI.",
             "The host rejects partial edits that omit any marker; do not rely on explanatory text or comments.",
