@@ -431,5 +431,5 @@ test("private-source Commander does not echo generated complete files to Gemini"
   });
   const toolResults = JSON.stringify(model.requests.slice(2));
   assert.doesNotMatch(toolResults, /PRIVATE_GENERATED_UI_ONLY_HOST_CAN_READ/);
-  assert.match(toolResults, /mobile\\/tezjet-app\\/app\\/index.tsx/);
+  assert.match(toolResults, /mobile\\/tezjet-app\\/app\\/index\\.tsx/);
 });
