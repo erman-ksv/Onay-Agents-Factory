@@ -21,9 +21,9 @@ import {
   ONAY_ALLOWED_CHANGE_PATHS, type ScopedPlan,
 } from "./onayRegistrationPatch.js";
 
-const BASE_SHA = "1f3d7e1964c9a1f5eab05bc50840d603db15d407";
+const BASE_SHA = "1d929ede341b1abc1f3cfc5ca0e4f6b50bd04d04";
 const MODEL = "gemini-3.5-flash-lite";
-const baseRef = "main";
+const baseRef = "refactor/onay-project-brand-20261016";
 const goal = [
   "Implement Onay passenger mobile registration and returning-user login in React Native UI.",
   "Registration must require separate given name and surname; normalize whitespace and combine",
@@ -80,7 +80,7 @@ async function main() {
   }
   const client = new GitHubClient({ repository: ONAY_REPOSITORY });
   const actual = await client.getCommitSha(baseRef);
-  if (actual !== BASE_SHA) throw new Error("Onay main moved; stop for review before running.");
+  if (actual !== BASE_SHA) throw new Error("Onay renamed base branch moved; stop for review before running.");
   try {
     await client.getCommitSha(ONAY_TARGET_BRANCH);
     console.log("PREFLIGHT: BLOCKED — target branch already exists, inspect before retry.");
@@ -185,7 +185,7 @@ async function main() {
     scan: inspectProposedChanges,
     inspectSecurity: sha => inspectSecurity(["package.json"], ONAY_REPOSITORY, sha),
     discoverTests: async () => {
-      const pkg = await client.getFile("mobile/tezjet-app/package.json", BASE_SHA);
+      const pkg = await client.getFile("mobile/onay-app/package.json", BASE_SHA);
       return { repository: ONAY_REPOSITORY, ref: BASE_SHA, scripts: JSON.parse(pkg.content).scripts };
     },
     publish: (files, sha) => prepareOnayChange({
@@ -205,7 +205,7 @@ async function main() {
       return inspectTestExecution(sha, ONAY_REPOSITORY, ref, names);
     },
   };
-  console.log("PREFLIGHT: PASS; pin", BASE_SHA);
+  console.log("PREFLIGHT: PASS; renamed Onay base", baseRef, "pin", BASE_SHA);
   console.log("CONSENT: explicit; source snippet bytes", excerpt.length);
   console.log("GEMINI MODEL:", MODEL);
   console.log("ALLOWED FILES:", ONAY_ALLOWED_CHANGE_PATHS.join(", "));
@@ -223,7 +223,7 @@ async function main() {
     publication: {
       branch: ONAY_TARGET_BRANCH,
       title: "AI agents: Onay separate registration names and returning-user OTP login",
-      body: "Owner-approved limited source exposure; Draft PR only.",
+      body: "Owner-approved limited source exposure; based on the renamed Onay app PR #47; Draft PR only.",
     },
   });
   const completed = result.events.filter(e => e.type === "tool_completed").map(e => e.details?.tool);
