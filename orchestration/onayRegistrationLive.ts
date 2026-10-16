@@ -16,6 +16,7 @@ import { scanForSecrets } from "../github/secretScanner.js";
 import type { AiExecutionDependencies } from "../commander/aiExecution.js";
 import { AgentRunJournal } from "./agentRunJournal.js";
 import { retryGeminiCapacity } from "./geminiCapacityRetry.js";
+import { summarizeSpecialistBlockers } from "./onayRegistrationDiagnostics.js";
 import {
   applyUiEdits, assertPrivateSourceConsent, assertRegistrationResult,
   assertRegistrationUiEditScope, validateScopedPlan, ONAY_REPOSITORY,
@@ -240,6 +241,7 @@ async function main() {
   console.log("COMMANDER STATUS:", result.status);
   console.log("COMPLETED TOOLS:", completed.join(", "));
   console.log("SPECIALISTS:", JSON.stringify(Object.fromEntries(Object.entries(result.evidence.assessments).map(([name, value]) => [name, value.ready]))));
+  console.log("SPECIALIST BLOCKERS:", JSON.stringify(summarizeSpecialistBlockers(result.evidence.assessments)));
   console.log("REVIEW:", result.evidence.review?.ready ?? "NOT VERIFIED");
   console.log("SECURITY:", result.evidence.security?.proposed?.status ?? "NOT VERIFIED");
   console.log("DRAFT PR:", result.evidence.publication?.html_url ?? "NONE");
