@@ -68,10 +68,10 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const requiredStepNames = factory ? ["Typecheck", "Test"] : ["Typecheck", "API integration tests"];
   const plan = planTask(goal);
   const auditOnly = isReadOnlyRepositoryAudit(goal);
-  // Cloudflare Free: one bounded audit tool handles exactly the three required
-  // host-verified operations. Do not expose Coder, publication or advisory tools
-  // on a read-only audit, where accidental multi-agent fanout wastes quota.
-  const compactCloudflareAudit = auditOnly && provider.provider === "cloudflare";
+  // Free-tier Groq and Cloudflare share one compact, host-verified audit tool.
+  // Restrict the model to Explorer, Security and Tester evidence only: prevent
+  // unnecessary specialists and publication tools from consuming scarce API quota.
+  const compactFreeAudit = auditOnly && (provider.provider === "cloudflare" || provider.provider === "groq");
   let generationContext = (): string => { throw new Error("Coder requires successful repository exploration first."); };
   const configuredDependencies: AiExecutionDependencies = options.dependencies ?? {
     getHead: getBaseHead,
@@ -151,7 +151,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       });
     },
   })];
-  const tools: Tool[] = compactCloudflareAudit ? compactAuditTools : [
+  const tools: Tool[] = compactFreeAudit ? compactAuditTools : [
     executable("explorer", "explore_onay", "Read actual repository files at an immutable commit. Required before other agents.", () => session.explore()),
     executable("coder", "code_onay", "Run AI Coder using inspected context and store proposed complete file contents. Does not write yet.", async () => {
       // Private Onay runs cannot regenerate indefinitely: each regeneration
@@ -175,7 +175,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   ];
   const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
   for (const role of advisoryRoles) {
-    if (compactCloudflareAudit || (role === "legal" && !legalEnabled)) continue;
+    if (compactFreeAudit || (role === "legal" && !legalEnabled)) continue;
     const specialist = new Agent({ name: "Onay " + role + " Specialist", ...modelOptions, instructions: buildSpecialistInstructions(role) });
     const name = COMMANDER_TOOL_NAMES[role];
     tools.push(tool({
@@ -194,7 +194,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   }
   const commander = new Agent({
     name: "Onay Commander", ...modelOptions, modelSettings: { parallelToolCalls: false },
-    instructions: compactCloudflareAudit ? [
+    instructions: compactFreeAudit ? [
       "Perform a read-only Onay audit using audit_onay_read_only exactly once.",
       "The host tool checks repository exploration, security and exact-commit CI without publishing or invoking advisory specialists.",
       "Summarize its evidence, but never claim success if the tool says blocked or not_verified.",
@@ -218,7 +218,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     ].join("\n"), tools,
   });
   const publishing = options.publication && env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true";
-  const prompt = compactCloudflareAudit ?
+  const prompt = compactFreeAudit ?
     goal + "\n\nThis is a read-only audit. Call audit_onay_read_only once, then report its result. No writes, no extra specialists, no release approval." :
     buildCommanderPrompt(goal, env) + "\n\nPublication enabled for this run: " +
     (publishing ? "yes; publish then verify tests on branch " + options.publication!.branch : "no; return a proposal and do not call publish_change_set.");
