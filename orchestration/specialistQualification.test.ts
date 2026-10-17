@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata } from "./specialistQualification.js";
+import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment } from "./specialistQualification.js";
 
 test("qualification covers every advisory role with faulty and corrected cases", () => {
   const roles = ["backend", "database", "frontend", "dispatch", "product", "ux", "legal", "devops"];
@@ -78,4 +78,24 @@ test("diagnostics distinguish provider errors from malformed model responses wit
     assert.equal(calls, 1);
   }
   assert.deepEqual(safeFailureMetadata({name: secret, message: secret, status: secret}), {kind: "unknown"});
+});
+
+test("qualification honors explicit free OpenRouter and never falls back to Gemini", () => {
+  const env = qualificationEnvironment({
+    AGENT_FACTORY_PROVIDER: "openrouter", GEMINI_API_KEY: "gemini-fixture",
+    OPENROUTER_API_KEY: "router-fixture", OPENROUTER_MODEL: "openrouter/free",
+  });
+  assert.equal(env.AGENT_FACTORY_PROVIDER, "openrouter");
+  assert.equal(env.OPENROUTER_MODEL, "openrouter/free");
+  assert.throws(() => qualificationEnvironment({
+    AGENT_FACTORY_PROVIDER: "openrouter", GEMINI_API_KEY: "gemini-fixture",
+  }), /key is missing/);
+  assert.throws(() => qualificationEnvironment({
+    AGENT_FACTORY_PROVIDER: "openrouter", OPENROUTER_API_KEY: "router-fixture",
+    OPENROUTER_MODEL: "vendor/paid-model",
+  }), /Paid routes are disabled/);
+  assert.throws(() => qualificationEnvironment({
+    AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "fixture",
+  }), /only Gemini or free OpenRouter/);
+  assert.equal(qualificationEnvironment({GEMINI_API_KEY: "fixture"}).AGENT_FACTORY_PROVIDER, "gemini");
 });

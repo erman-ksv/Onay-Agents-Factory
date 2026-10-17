@@ -3,6 +3,7 @@
  * No repository adapter, source read, file write, publication or model tools.
  * This does not qualify Commander/Coder or replace application acceptance tests.
  */
+import { selectProviderConfig } from "../commander/providerConfig.js";
 import type { SpecialistAssessment } from "../commander/aiExecution.js";
 import type { SkillAgentName } from "../commander/skills.js";
 
@@ -146,4 +147,16 @@ export async function runQualification(
     report(row);
   }
   return { passed: results.length === QUALIFICATION_CASES.length && results.every(r => r.passed), results };
+}
+
+/** Explicit provider selection; no fallback to a different key or paid route. */
+export function qualificationEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const selected = source.AGENT_FACTORY_PROVIDER?.trim() || "gemini";
+  if (selected !== "gemini" && selected !== "openrouter") {
+    throw new Error("Qualification supports only Gemini or free OpenRouter.");
+  }
+  const env = { ...source, AGENT_FACTORY_PROVIDER: selected };
+  const config = selectProviderConfig(env);
+  if (config.provider === "none") throw new Error("Selected qualification provider key is missing.");
+  return env;
 }

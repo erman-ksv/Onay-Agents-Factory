@@ -1,17 +1,17 @@
 /**
- * Explicit live Gemini run; never imported by test discovery.
+ * Explicit live provider run; never imported by test discovery.
  * Sends only synthetic text. No GitHub token or write permissions required.
  */
 import { Agent, Runner } from "@openai/agents";
 import { ROLE_SKILLS } from "../commander/skills.js";
 import { configureModelProvider } from "../commander/modelProvider.js";
-import { runQualification, QualificationFailure, safeFailureMetadata } from "./specialistQualification.js";
+import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment } from "./specialistQualification.js";
 
 async function main() {
-  const env: NodeJS.ProcessEnv = { ...process.env, AGENT_FACTORY_PROVIDER: "gemini" };
-  if (!env.GEMINI_API_KEY?.trim()) throw new Error("GEMINI_API_KEY missing.");
+  const env = qualificationEnvironment(process.env);
   const provider = configureModelProvider(env);
-  if (provider.provider !== "gemini") throw new Error("Gemini provider required.");
+  if (provider.provider === "none") throw new Error("Selected provider is unavailable.");
+  console.log("PROVIDER:", provider.provider, "MODEL:", provider.model);
   const runner = new Runner({ modelProvider: provider.modelProvider });
   console.log("SYNTHETIC ROLE QUALIFICATION: 16 cases; 8 advisory profiles; no application source or GitHub writes.");
   const result = await runQualification(async (fixture, prompt) => {

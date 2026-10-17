@@ -41,3 +41,20 @@ investigate the fixture, evaluator and actual specialist explanation first.
 Offline CI tests validate coverage and fail-closed evaluation with fake responses.
 A green CI does not mean Gemini qualification has run. Record the live output,
 implementation commit, provider/model and human review before accepting results.
+
+## Free OpenRouter alternative
+
+Set AGENT_FACTORY_PROVIDER=openrouter and OPENROUTER_MODEL=openrouter/free explicitly.
+OPENROUTER_API_KEY must be set in the local runtime. A remaining Gemini key is
+ignored under explicit OpenRouter selection. Missing keys stop execution; there
+is no automatic fallback. Existing provider configuration rejects paid model
+routes before any network request. A free route can still have availability or
+quota limits, and openrouter/free can select different models across requests;
+results qualify that route's observed responses, not a single fixed model.
+Keep per-case output and review the explanations. Do not bypass blockers.
+
+Example with a previously configured key:
+
+```bash
+AGENT_FACTORY_PROVIDER=openrouter OPENROUTER_MODEL=openrouter/free pnpm exec tsx orchestration/specialistQualificationLive.ts
+```
