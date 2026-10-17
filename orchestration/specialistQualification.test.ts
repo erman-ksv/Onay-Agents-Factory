@@ -3,7 +3,7 @@ import { Agent, Runner, setTracingDisabled } from "@openai/agents";
 import { configureModelProvider } from "../commander/modelProvider.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, QualificationTimeoutError, qualificationModelSettings, qualificationProbeCase } from "./specialistQualification.js";
+import { QUALIFICATION_CASES, selectedQualificationCases, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, QualificationTimeoutError, qualificationModelSettings, qualificationProbeCase } from "./specialistQualification.js";
 
 test("qualification covers every advisory role with faulty and corrected cases", () => {
   const roles = ["backend", "database", "frontend", "dispatch", "product", "ux", "legal", "devops"];
@@ -257,4 +257,20 @@ test("Groq qualification pins endpoint, credentials, payload and does not retry 
   assert.equal(parseAssessment((await runner.run(agent, "Fixture only", {maxTurns:1})).finalOutput).ready, true);
   await assert.rejects(runner.run(agent, "Fixture only", {maxTurns:1}));
   assert.equal(calls, 2); // One successful request and one failed request, no automatic retry.
+});
+
+
+
+test("temporary legal exclusion removes only its cases and never counts them as passed", async () => {
+  assert.equal(selectedQualificationCases({}), QUALIFICATION_CASES);
+  const cases = selectedQualificationCases({AGENT_FACTORY_LEGAL_ENABLED:"false"});
+  assert.equal(cases.length, 14);
+  assert.ok(cases.every(c => c.role !== "legal"));
+  assert.equal(new Set(cases.map(c => c.role)).size, 7);
+  const result = await runQualification(async fixture => JSON.stringify({ready:fixture.expectedReady,
+    findings:fixture.expectedReady ? [] : [{severity:"blocker",message:"Missing owner authorization IDOR; unique concurrency race; permission manual address; next FIFO driver; pickup acceptance conflict; keyboard accessible label; test exit suppression release"}]}), undefined, cases);
+  assert.equal(result.passed, true);
+  assert.equal(result.results.length, 14);
+  assert.ok(result.results.every(row => row.role !== "legal"));
+  assert.equal((await runQualification(async () => "", undefined, [])).passed, false);
 });

@@ -1,3 +1,4 @@
+import { legalAgentEnabled } from "./legalPolicy.js";
 import { planTask } from "./planner.js";
 import type { AgentName } from "./taskTypes.js";
 
@@ -17,9 +18,10 @@ export const COMMANDER_TOOL_NAMES: Record<AgentName, string> = {
   reviewer: "final_review"
 };
 
-export function buildCommanderPrompt(goal: string): string {
+export function buildCommanderPrompt(goal: string, env: NodeJS.ProcessEnv = {}): string {
+  const enabled = legalAgentEnabled(env);
   const plan = planTask(goal);
-  const required = plan.steps.map((step, index) =>
+  const required = plan.steps.filter(step => enabled || step.agent !== "legal").map((step, index) =>
     `${index + 1}. ${step.agent} → ${COMMANDER_TOOL_NAMES[step.agent]}: ${step.objective}`
   );
 
@@ -30,6 +32,7 @@ export function buildCommanderPrompt(goal: string): string {
     "Deterministic routing plan (minimum required delegation):",
     ...required,
     "",
+    ...(!enabled ? ["Legal review: DISABLED by host setting. No legal approval is established."] : []),
     "Execution rules:",
     "- Invoke every listed specialist tool at least once; this plan is the minimum delegation set, not a suggestion.",
     "- You may add other specialists when the task requires them.",
@@ -38,4 +41,5 @@ export function buildCommanderPrompt(goal: string): string {
     "- Keep the main branch untouched; propose changes and verification evidence before any merge."
   ].join("\n");
 }
+
 

@@ -81,7 +81,7 @@ function simulatedExecutor(calls: string[], mutate?: (result: Result, audit: boo
     if (!audit) await session.invoke("github", "publish_change_set", () => session.publish());
     await session.invoke("tester", "test_onay", () => session.test());
     if (!audit) await session.verifyFinalCandidate();
-    const result = session.finish("Injected test executor completed its simulation.");
+    const result = { ...session.finish("Injected test executor completed its simulation."), legalReview: "enabled" as const };
     mutate?.(result, audit, options);
     return result;
   };
@@ -363,3 +363,4 @@ test("executor failure persists blocked evidence without claiming that remote wr
   assert.match(readFileSync(join(directory, "evidence.json"), "utf8"), /Remote request failed: \[REDACTED\]/);
   assert.equal(readFileSync(join(directory, "audit.events.jsonl"), "utf8").trim().split("\n").length, 1);
 });
+

@@ -1,5 +1,6 @@
 import { Agent, Runner, tool, type Tool, type Model } from "@openai/agents";
 import { z } from "zod";
+import { legalAgentEnabled } from "./legalPolicy.js";
 import { buildSpecialistInstructions } from "./skills.js";
 import { buildCommanderPrompt, COMMANDER_TOOL_NAMES } from "./buildCommanderPrompt.js";
 import { configureModelProvider } from "./modelProvider.js";
@@ -37,6 +38,7 @@ export type AiCommanderOptions = {
 /** Fresh executable tools and evidence state for each task. */
 function createAiCommanderExecution(goal: string, options: AiCommanderOptions = {}) {
   const env = options.env ?? process.env;
+  const legalEnabled = legalAgentEnabled(env);
   const provider = configureModelProvider(env);
   const runner = new Runner(provider.provider !== "none" ? { modelProvider: provider.modelProvider } : {});
   const modelOptions = options.model ? { model: options.model } : provider.provider !== "none" && provider.model ? { model: provider.model } : {};
@@ -96,7 +98,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     },
   };
   const session = new AiExecutionSession({
-    goal, repository, ref, requiredActors: plan.steps.map(step => step.agent),
+    goal, repository, ref, requiredActors: plan.steps.filter(step => legalEnabled || step.agent !== "legal").map(step => step.agent),
     auditOnly: isReadOnlyRepositoryAudit(goal), publication: options.publication,
     writesEnabled: env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true", journal: options.journal,
     allowedChangePaths: options.allowedChangePaths,
@@ -136,6 +138,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   ];
   const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
   for (const role of advisoryRoles) {
+    if (role === "legal" && !legalEnabled) continue;
     const specialist = new Agent({ name: "Onay " + role + " Specialist", ...modelOptions, instructions: buildSpecialistInstructions(role) });
     const name = COMMANDER_TOOL_NAMES[role];
     tools.push(tool({
@@ -161,18 +164,20 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       "Regeneration invalidates earlier reviews. Script discovery and base-branch CI do not verify proposals.",
       "If publishing is disabled, explain the proposal and remaining verification steps; do not claim files were applied.",
       "Respect tool errors and pending/failed CI. Never invent edits, tools, commands, PRs, tests, legal verification, merge or deployment.",
-      "For legal tasks involve Rasul. Humans review legal commitments, merges and deployments.",
+      legalEnabled ? "For legal tasks involve Rasul. Humans review legal commitments, merges and deployments." :
+        "Legal specialist is temporarily disabled by the host. Do not invoke or simulate legal review; report it as DISABLED, never approved. Humans review commitments, merges and deployments.",
       ...(options.specialistContextTransform ? [
-        "PRIVATE-SOURCE RUN: Follow this exact sequence: explore_onay; code_onay ONCE; then product_requirements, ux_accessibility_review, backend/frontend and other required specialists, rasul_legal_compliance, security_review and final_review. Specialist advice before code generation is invalidated. Publish only if every gate is ready; then test_onay.",
+        "PRIVATE-SOURCE RUN: Follow this exact sequence: explore_onay; code_onay ONCE; then product_requirements, ux_accessibility_review, backend/frontend and other required specialists, " + (legalEnabled ? "rasul_legal_compliance, " : "") + "security_review and final_review. Specialist advice before code generation is invalidated. Publish only if every gate is ready; then test_onay.",
         "Do not repeat code_onay or repeat an advisory specialist. Re-running Coder destroys prior approvals. If any tool fails or specialist reports high/blocker, STOP with a clear explanation; do not retry, publish or invent completion.",
         "Publishing a Draft PR is not production deployment; still respect all security, legal and review blockers.",
       ] : []),
     ].join("\n"), tools,
   });
   const publishing = options.publication && env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true";
-  const prompt = buildCommanderPrompt(goal) + "\n\nPublication enabled for this run: " +
+  const prompt = buildCommanderPrompt(goal, env) + "\n\nPublication enabled for this run: " +
     (publishing ? "yes; publish then verify tests on branch " + options.publication!.branch : "no; return a proposal and do not call publish_change_set.");
-  return { commander, session, prompt, runner, provider: provider.provider };
+  return { commander, session, prompt, runner, provider: provider.provider,
+    legalReview: legalEnabled ? "enabled" as const : "disabled" as const };
 }
 
 export function createAiCommander(goal: string, options: AiCommanderOptions = {}) {
@@ -181,7 +186,7 @@ export function createAiCommander(goal: string, options: AiCommanderOptions = {}
 }
 
 export async function runAiCommander(goal: string, options: AiCommanderOptions = {}) {
-  const { commander, session, prompt, runner, provider } = createAiCommanderExecution(goal, options);
+  const { commander, session, prompt, runner, provider, legalReview } = createAiCommanderExecution(goal, options);
   try {
     if (provider === "none" && !options.model) {
       throw new Error(providerRequirementMessage(options.env ?? process.env));
@@ -192,9 +197,10 @@ export async function runAiCommander(goal: string, options: AiCommanderOptions =
     }
     const result = await runner.run(commander, prompt, { maxTurns: turns });
     await session.verifyFinalCandidate();
-    return session.finish(result.finalOutput);
+    return { ...session.finish(result.finalOutput), legalReview };
   } catch (error) {
-    return session.finish(undefined, error instanceof Error ? error.message : String(error));
+    return { ...session.finish(undefined, error instanceof Error ? error.message : String(error)), legalReview };
   }
 }
+
 

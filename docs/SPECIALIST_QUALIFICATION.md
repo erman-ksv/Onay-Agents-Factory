@@ -84,3 +84,23 @@ closed; it is never converted to a passing assessment. No provider fallback occu
 
 A user-reported HTTP 200 / OK from a direct one-prompt request confirms access only.
 No complete Groq qualification or Commander/Coder proof has been established yet.
+
+
+
+## Temporarily disable the legal specialist (host choice)
+
+Set `AGENT_FACTORY_LEGAL_ENABLED=false` in the host environment to omit the legal
+tool and required actor from Commander and exclude both legal qualification cases.
+The qualification then evaluates **14 cases / 7 profiles**, with `LEGAL REVIEW:
+DISABLED` and a limited non-legal result. The missing legal pair is never counted as
+passed. An explicit legal probe is rejected while disabled. Default/unset or `true`
+restores the original tool, requirements and all 16 cases. Invalid values stop.
+Commander output exposes `legalReview: "disabled"`; this is not legal approval.
+
+```bash
+AGENT_FACTORY_LEGAL_ENABLED=false AGENT_FACTORY_PROVIDER=groq pnpm exec tsx orchestration/specialistQualificationLive.ts
+```
+
+Historical evidence on head 5101b8d: user screenshots show Groq completed 15/16,
+with legal-b failing; that original result remains FAILED. Do not relabel it 16/16.
+A new non-legal run is a different, explicitly reduced scope.

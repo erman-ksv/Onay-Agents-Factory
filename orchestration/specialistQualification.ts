@@ -3,6 +3,7 @@
  * No repository adapter, source read, file write, publication or model tools.
  * This does not qualify Commander/Coder or replace application acceptance tests.
  */
+import { legalAgentEnabled } from "../commander/legalPolicy.js";
 import { selectProviderConfig } from "../commander/providerConfig.js";
 import type { SpecialistAssessment } from "../commander/aiExecution.js";
 import type { SkillAgentName } from "../commander/skills.js";
@@ -132,12 +133,17 @@ export class QualificationFailure extends Error {
   }
 }
 
+export function selectedQualificationCases(env: NodeJS.ProcessEnv): readonly QualificationCase[] {
+  return legalAgentEnabled(env) ? QUALIFICATION_CASES : QUALIFICATION_CASES.filter(c => c.role !== "legal");
+}
+
 export async function runQualification(
   assess: (fixture: QualificationCase, prompt: string) => Promise<unknown>,
   report: (row: { id: string; role: AdvisoryRole; passed: boolean; reason: string; assessment: SpecialistAssessment }) => void = () => {},
+  cases: readonly QualificationCase[] = QUALIFICATION_CASES,
 ) {
   const results = [];
-  for (const fixture of QUALIFICATION_CASES) {
+  for (const fixture of cases) {
     // Provider, parse and schema errors stop the run. No rerun-to-green loop.
     let raw: unknown;
     try {
@@ -158,7 +164,7 @@ export async function runQualification(
     results.push(row);
     report(row);
   }
-  return { passed: results.length === QUALIFICATION_CASES.length && results.every(r => r.passed), results };
+  return { passed: cases.length > 0 && results.length === cases.length && results.every(r => r.passed), results };
 }
 
 /** Explicit provider selection; no fallback to a different key or paid route. */
@@ -246,4 +252,5 @@ export function qualificationProbeCase(id?: string): QualificationCase | undefin
   if (!fixture) throw new Error("Unknown qualification probe case.");
   return fixture;
 }
+
 

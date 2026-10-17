@@ -2,13 +2,16 @@
  * Explicit live provider run; never imported by test discovery.
  * Sends only synthetic text. No GitHub token or write permissions required.
  */
+import { legalAgentEnabled } from "../commander/legalPolicy.js";
 import { Agent, Runner } from "@openai/agents";
 import { buildSpecialistInstructions } from "../commander/skills.js";
 import { configureModelProvider } from "../commander/modelProvider.js";
-import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, qualificationModelSettings, buildQualificationPrompt, parseAssessment, evaluateAssessment, type QualificationCase, qualificationProbeCase } from "./specialistQualification.js";
+import { runQualification, selectedQualificationCases, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, qualificationModelSettings, buildQualificationPrompt, parseAssessment, evaluateAssessment, type QualificationCase, qualificationProbeCase } from "./specialistQualification.js";
 
 async function main() {
   const env = qualificationEnvironment(process.env);
+  const legalEnabled = legalAgentEnabled(env);
+  const cases = selectedQualificationCases(env);
   const provider = configureModelProvider(env);
   if (provider.provider === "none") throw new Error("Selected provider is unavailable.");
   console.log("PROVIDER:", provider.provider, "MODEL:", provider.model);
@@ -16,9 +19,11 @@ async function main() {
   // Passing a provider model object avoids SDK legacy OpenAI-name cleanup.
   const specialistModel = provider.model ? await provider.modelProvider.getModel(provider.model) : undefined;
   const probeCase = qualificationProbeCase(env.QUALIFICATION_PROBE);
+  if (probeCase?.role === "legal" && !legalEnabled) throw new Error("Legal probe is disabled by host configuration.");
   const probe = probeCase?.id;
+  console.log("LEGAL REVIEW:", legalEnabled ? "ENABLED" : "DISABLED — not evaluated; no legal approval established.");
   console.log(probe ? "SINGLE CASE PROBE ONLY: " + probe + "; not full qualification." :
-    "SYNTHETIC ROLE QUALIFICATION: 16 cases; 8 advisory profiles; no application source or GitHub writes.");
+    `SYNTHETIC ROLE QUALIFICATION: ${cases.length} cases; ${new Set(cases.map(c => c.role)).size} advisory profiles; no application source or GitHub writes.`);
   const modelSettings = qualificationModelSettings(provider.provider, provider.model);
   console.log("QUALIFICATION MODEL SETTINGS:", JSON.stringify(modelSettings));
   const pace = createQualificationPacer(provider.provider === "openrouter" ? 60_000 : provider.provider === "groq" ? 30_000 : 0, undefined,
@@ -69,9 +74,9 @@ async function main() {
     process.exitCode = outcome.passed ? 0 : 1;
     return;
   }
-  const result = await runQualification(assess, print);
-  console.log("CASES PASSED:", result.results.filter(r => r.passed).length + "/16");
-  console.log("QUALIFICATION:", result.passed ? "PASSED — LIMITED SYNTHETIC ROLE CHECK" : "FAILED — HUMAN REVIEW REQUIRED");
+  const result = await runQualification(assess, print, cases);
+  console.log("CASES PASSED:", result.results.filter(r => r.passed).length + "/" + cases.length);
+  console.log("QUALIFICATION:", result.passed ? (legalEnabled ? "PASSED — LIMITED SYNTHETIC ROLE CHECK" : "PASSED — LIMITED NON-LEGAL ROLE CHECK; LEGAL DISABLED") : "FAILED — HUMAN REVIEW REQUIRED");
   console.log("This is not production readiness, a legal approval, or a full security audit.");
   process.exitCode = result.passed ? 0 : 1;
 }
@@ -85,4 +90,5 @@ main().catch(error => {
   console.error("No qualification established. Stop and inspect this diagnostic before another run.");
   process.exitCode = 1;
 });
+
 
