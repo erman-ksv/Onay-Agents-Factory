@@ -35,13 +35,15 @@ export type AiCommanderOptions = {
   specialistSelections?: AiExecutionOptions["specialistSelections"];
   /** Host-only turn budget for an explicitly scoped synthetic multi-agent proof. */
   maxTurns?: number;
+  /** Host-supplied offline test transport. Never read from model messages or prompts. */
+  modelFetch?: typeof fetch;
 };
 
 /** Fresh executable tools and evidence state for each task. */
 function createAiCommanderExecution(goal: string, options: AiCommanderOptions = {}) {
   const env = options.env ?? process.env;
   const legalEnabled = legalAgentEnabled(env);
-  const provider = configureModelProvider(env);
+  const provider = configureModelProvider(env, options.modelFetch ? { fetch: options.modelFetch } : {});
   const contextBudget = provider.provider !== "none" ? provider.contextBudget : undefined;
   const runner = new Runner(provider.provider !== "none" ? { modelProvider: provider.modelProvider } : {});
   const modelOptions = options.model ? { model: options.model } : provider.provider !== "none" && provider.model ? { model: provider.model } : {};
