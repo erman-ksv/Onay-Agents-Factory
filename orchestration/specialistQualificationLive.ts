@@ -13,6 +13,8 @@ async function main() {
   if (provider.provider === "none") throw new Error("Selected provider is unavailable.");
   console.log("PROVIDER:", provider.provider, "MODEL:", provider.model);
   const runner = new Runner({ modelProvider: provider.modelProvider });
+  // Passing a provider model object avoids SDK legacy OpenAI-name cleanup.
+  const specialistModel = provider.model ? await provider.modelProvider.getModel(provider.model) : undefined;
   const probe = env.QUALIFICATION_PROBE;
   if (probe && probe !== "backend-b") throw new Error("Only backend-b is supported as a latency probe.");
   console.log(probe ? "LATENCY PROBE ONLY: backend-b; not full qualification." :
@@ -28,7 +30,7 @@ async function main() {
       name: "Onay " + fixture.role + " Specialist",
       instructions: ROLE_SKILLS[fixture.role],
       modelSettings,
-      ...(provider.model ? { model: provider.model } : {}),
+      ...(specialistModel ? { model: specialistModel } : {}),
     });
     const started = performance.now();
     const response = await withQualificationDeadline(

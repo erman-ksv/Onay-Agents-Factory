@@ -192,7 +192,8 @@ test("qualification tuning reaches the real SDK HTTP payload and stays scoped to
   });
   if (provider.provider !== "openrouter") throw new Error("Unexpected provider");
   const runner = new Runner({modelProvider: provider.modelProvider});
-  const agent = new Agent({name: "Fixture", instructions: "Return JSON.", model,
+  const modelObject = await provider.modelProvider.getModel(model);
+  const agent = new Agent({name: "Fixture", instructions: "Return JSON.", model: modelObject,
     modelSettings: qualificationModelSettings(provider.provider, model)});
   const response = await runner.run(agent, "Fixture only", {maxTurns: 1});
   assert.equal(parseAssessment(response.finalOutput).ready, true);
