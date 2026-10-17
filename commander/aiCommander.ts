@@ -67,6 +67,11 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const requiredNames = factory ? ["typecheck"] : ["Typecheck and API tests"];
   const requiredStepNames = factory ? ["Typecheck", "Test"] : ["Typecheck", "API integration tests"];
   const plan = planTask(goal);
+  const auditOnly = isReadOnlyRepositoryAudit(goal);
+  // Cloudflare Free: one bounded audit tool handles exactly the three required
+  // host-verified operations. Do not expose Coder, publication or advisory tools
+  // on a read-only audit, where accidental multi-agent fanout wastes quota.
+  const compactCloudflareAudit = auditOnly && provider.provider === "cloudflare";
   let generationContext = (): string => { throw new Error("Coder requires successful repository exploration first."); };
   const configuredDependencies: AiExecutionDependencies = options.dependencies ?? {
     getHead: getBaseHead,
@@ -103,7 +108,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   };
   const session = new AiExecutionSession({
     goal, repository, ref, requiredActors: plan.steps.filter(step => legalEnabled || step.agent !== "legal").map(step => step.agent),
-    auditOnly: isReadOnlyRepositoryAudit(goal), publication: options.publication,
+    auditOnly, publication: options.publication,
     writesEnabled: env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true", journal: options.journal,
     allowedChangePaths: options.allowedChangePaths,
     specialistContextTransform: options.specialistContextTransform,
@@ -122,7 +127,31 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       return session.modelToolResult(result);
     },
   });
-  const tools: Tool[] = [
+  const compactAuditTools: Tool[] = [tool({
+    name: "audit_onay_read_only",
+    description: "Run repository Explorer, Security, and exact-commit CI Tester once, in order, using trusted host APIs. No writes or advisory model calls.",
+    parameters: z.object({}),
+    execute: async () => {
+      const exploration = await session.invoke("explorer", "explore_onay", () => session.explore());
+      if ("error" in exploration) return session.modelToolResult({ status: "blocked", stage: "explorer" });
+      const security = await session.invoke("security", "security_review", () => session.inspectSecurity());
+      if ("error" in security) return session.modelToolResult({ status: "blocked", stage: "security" });
+      const scanned = security.repository.status === "clean";
+      // A failed security gate must stop the audit before further delegation.
+      if (!scanned) return session.modelToolResult({ status: "blocked", stage: "security", securityClean: false });
+      const tester = await session.invoke("tester", "test_onay", () => session.test());
+      if ("error" in tester) return session.modelToolResult({ status: "blocked", stage: "tester" });
+      // Full source, CI logs and diagnostics stay with the host session.
+      return session.modelToolResult({
+        status: tester.testsExecuted ? "verified" : "not_verified",
+        repository, baseSha: exploration.ref,
+        filesInspected: exploration.files.length,
+        securityClean: scanned, exactCommitCiVerified: tester.testsExecuted,
+        writesPerformed: false, legalReview: legalEnabled ? "enabled_not_executed" : "disabled",
+      });
+    },
+  })];
+  const tools: Tool[] = compactCloudflareAudit ? compactAuditTools : [
     executable("explorer", "explore_onay", "Read actual repository files at an immutable commit. Required before other agents.", () => session.explore()),
     executable("coder", "code_onay", "Run AI Coder using inspected context and store proposed complete file contents. Does not write yet.", async () => {
       // Private Onay runs cannot regenerate indefinitely: each regeneration
@@ -146,7 +175,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   ];
   const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
   for (const role of advisoryRoles) {
-    if (role === "legal" && !legalEnabled) continue;
+    if (compactCloudflareAudit || (role === "legal" && !legalEnabled)) continue;
     const specialist = new Agent({ name: "Onay " + role + " Specialist", ...modelOptions, instructions: buildSpecialistInstructions(role) });
     const name = COMMANDER_TOOL_NAMES[role];
     tools.push(tool({
@@ -165,7 +194,12 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   }
   const commander = new Agent({
     name: "Onay Commander", ...modelOptions, modelSettings: { parallelToolCalls: false },
-    instructions: [
+    instructions: compactCloudflareAudit ? [
+      "Perform a read-only Onay audit using audit_onay_read_only exactly once.",
+      "The host tool checks repository exploration, security and exact-commit CI without publishing or invoking advisory specialists.",
+      "Summarize its evidence, but never claim success if the tool says blocked or not_verified.",
+      "Do not claim legal approval, release readiness or deployment.",
+    ].join("\n") : [
       "Coordinate specialists through executable tools. Host evidence, not final prose, determines completion.",
       "Explore first. For changes call code_onay, every required advisory specialist, security_review and final_review.",
       "If publishing is explicitly enabled, call publish_change_set after reviews pass, then test_onay for the exact candidate commit.",
@@ -184,7 +218,9 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     ].join("\n"), tools,
   });
   const publishing = options.publication && env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true";
-  const prompt = buildCommanderPrompt(goal, env) + "\n\nPublication enabled for this run: " +
+  const prompt = compactCloudflareAudit ?
+    goal + "\n\nThis is a read-only audit. Call audit_onay_read_only once, then report its result. No writes, no extra specialists, no release approval." :
+    buildCommanderPrompt(goal, env) + "\n\nPublication enabled for this run: " +
     (publishing ? "yes; publish then verify tests on branch " + options.publication!.branch : "no; return a proposal and do not call publish_change_set.");
   return { commander, session, prompt, runner, contextBudget, provider: provider.provider,
     legalReview: legalEnabled ? "enabled" as const : "disabled" as const };
