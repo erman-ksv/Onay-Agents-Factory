@@ -95,6 +95,30 @@ export function evaluateAssessment(fixture: QualificationCase, assessment: Speci
     "Decision or role-specific blocker evidence did not match the fixture; human review required." };
 }
 
+
+/** Safe metadata only: never copy upstream messages, bodies, headers or stacks. */
+export function safeFailureMetadata(error: unknown) {
+  const record = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const status = typeof record.status === "number" && Number.isInteger(record.status) &&
+    record.status >= 400 && record.status <= 599 ? record.status : undefined;
+  const knownNames = ["APIConnectionError", "APIConnectionTimeoutError", "RateLimitError",
+    "AuthenticationError", "PermissionDeniedError", "BadRequestError", "InternalServerError",
+    "MaxTurnsExceededError", "ModelBehaviorError", "UserError"];
+  const kind = typeof record.name === "string" && knownNames.includes(record.name) ? record.name : "unknown";
+  return { kind, ...(status === undefined ? {} : { httpStatus: status }) };
+}
+
+export class QualificationFailure extends Error {
+  constructor(
+    readonly caseId: string,
+    readonly stage: "provider" | "assessment",
+    readonly detail: { kind: string; httpStatus?: number },
+  ) {
+    super("Qualification stopped at " + caseId + " during " + stage + ".");
+    this.name = "QualificationFailure";
+  }
+}
+
 export async function runQualification(
   assess: (fixture: QualificationCase, prompt: string) => Promise<unknown>,
   report: (row: { id: string; role: AdvisoryRole; passed: boolean; reason: string; assessment: SpecialistAssessment }) => void = () => {},
@@ -102,7 +126,20 @@ export async function runQualification(
   const results = [];
   for (const fixture of QUALIFICATION_CASES) {
     // Provider, parse and schema errors stop the run. No rerun-to-green loop.
-    const assessment = parseAssessment(await assess(fixture, buildQualificationPrompt(fixture)));
+    let raw: unknown;
+    try {
+      raw = await assess(fixture, buildQualificationPrompt(fixture));
+    } catch (error) {
+      throw new QualificationFailure(fixture.id, "provider", safeFailureMetadata(error));
+    }
+    let assessment: SpecialistAssessment;
+    try {
+      assessment = parseAssessment(raw);
+    } catch (error) {
+      const kind = error instanceof SyntaxError ? "invalid-json" :
+        typeof raw !== "string" || !raw.trim() ? "missing-text" : "invalid-schema";
+      throw new QualificationFailure(fixture.id, "assessment", { kind });
+    }
     const outcome = evaluateAssessment(fixture, assessment);
     const row = { id: fixture.id, role: fixture.role, ...outcome, assessment };
     results.push(row);

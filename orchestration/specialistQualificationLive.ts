@@ -5,7 +5,7 @@
 import { Agent, Runner } from "@openai/agents";
 import { ROLE_SKILLS } from "../commander/skills.js";
 import { configureModelProvider } from "../commander/modelProvider.js";
-import { runQualification } from "./specialistQualification.js";
+import { runQualification, QualificationFailure, safeFailureMetadata } from "./specialistQualification.js";
 
 async function main() {
   const env: NodeJS.ProcessEnv = { ...process.env, AGENT_FACTORY_PROVIDER: "gemini" };
@@ -37,8 +37,12 @@ async function main() {
   process.exitCode = result.passed ? 0 : 1;
 }
 
-main().catch(() => {
-  // Do not echo provider errors: upstream bodies may contain sensitive data.
-  console.error("QUALIFICATION: BLOCKED — provider, configuration or assessment format error. No qualification established.");
+main().catch(error => {
+  // Safe metadata only; never echo provider messages, bodies, headers or keys.
+  const diagnostic = error instanceof QualificationFailure
+    ? { case: error.caseId, stage: error.stage, ...error.detail }
+    : { stage: "configuration", ...safeFailureMetadata(error) };
+  console.error("QUALIFICATION: BLOCKED", JSON.stringify(diagnostic));
+  console.error("No qualification established. Stop and inspect this diagnostic before another run.");
   process.exitCode = 1;
 });

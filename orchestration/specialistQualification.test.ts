@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification } from "./specialistQualification.js";
+import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata } from "./specialistQualification.js";
 
 test("qualification covers every advisory role with faulty and corrected cases", () => {
   const roles = ["backend", "database", "frontend", "dispatch", "product", "ux", "legal", "devops"];
@@ -52,4 +52,30 @@ test("every fixture must pass; a single false approval fails the overall result"
   assert.equal(result.passed, false);
   assert.equal(result.results.length, 16);
   assert.equal(result.results.filter(r => r.passed).length, 8);
+});
+
+test("diagnostics distinguish provider errors from malformed model responses without leaking secrets", async () => {
+  const secret = "private-value-do-not-print";
+  const upstream = Object.assign(new Error(secret), {
+    name: "RateLimitError", status: 429, body: secret, headers: {authorization: secret},
+  });
+  await assert.rejects(runQualification(async () => { throw upstream; }), (error: unknown) => {
+    assert.ok(error instanceof QualificationFailure);
+    assert.equal(error.caseId, "backend-a");
+    assert.equal(error.stage, "provider");
+    assert.deepEqual(error.detail, {kind: "RateLimitError", httpStatus: 429});
+    assert.ok(!JSON.stringify(error).includes(secret));
+    return true;
+  });
+  for (const [raw, kind] of [["not JSON", "invalid-json"], ["{}", "invalid-schema"], [undefined, "missing-text"]] as const) {
+    let calls = 0;
+    await assert.rejects(runQualification(async () => { calls++; return raw; }), (error: unknown) => {
+      assert.ok(error instanceof QualificationFailure);
+      assert.equal(error.stage, "assessment");
+      assert.equal(error.detail.kind, kind);
+      return true;
+    });
+    assert.equal(calls, 1);
+  }
+  assert.deepEqual(safeFailureMetadata({name: secret, message: secret, status: secret}), {kind: "unknown"});
 });
