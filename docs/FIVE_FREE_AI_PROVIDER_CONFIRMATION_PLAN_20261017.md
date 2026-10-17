@@ -1,6 +1,6 @@
 # Onay Agent Factory — five free AI APIs: confirmation plan (2026-10-17)
 
-Status: ACTIVE PLAN. Cloudflare live read-only Commander verified 2026-10-17 by user Codespaces screenshot. Remaining providers pending.
+Status: ACTIVE PLAN. Cloudflare and Groq live read-only Commanders verified 2026-10-17 by user Codespaces screenshots. Three providers pending.
 
 ## Objective and order
 
@@ -13,7 +13,7 @@ Status: ACTIVE PLAN. Cloudflare live read-only Commander verified 2026-10-17 by 
 | # | Provider | Evidence as of 2026-10-17 | Next gate |
 |---|---|---|---|
 | 1 | Cloudflare Workers AI | **CONFIRMED (1/5)**. User Codespaces screenshot 2026-10-17 20:26 +05:00: live Commander `STATUS: completed`, `SECURITY: clean`, `TESTS: true`, `MISSING: []`, `REASONS: []`. Free Workers AI token and function-call smoke were previously reported PASS. CI on `abe0965fd6d2eb231055257829d4c3f23b78bc08` successful: https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/39044533896 . Proof is a read-only audit, not autonomous coding/release. | Preserve confirmed evidence; no need to repeat this live audit |
-| 2 | Groq | 14/14 synthetic specialist qualification passed with Qwen3; read-only Explorer/Tester/Security handlers 3/3 passed independently; **live Commander not complete**, blocked by local TPM budget | Respect actual free account quota, prove a bounded multi-turn audit without raising limits blindly |
+| 2 | Groq | **CONFIRMED (2/5)**. 2026-10-17 22:28 +05:00 user Codespaces screenshot on `feat/groq-compact-audit-20261017`: live read-only Commander `STATUS: completed`, `SECURITY: clean`, `TESTS: true`, `MISSING: []`, `REASONS: []`, `PROVIDER_FAILURE: NONE`. Groq Qwen3 previous synthetic specialists 14/14 and CI `f6f25cf76f445d29a1f1c1116ce59e0953fec41d` PASS: https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/39053542927 . Read-only audit only, not proven AI Coder or deployment readiness. | Preserve evidence and free-tier quota; no need to repeat Groq live audit |
 | 3 | Gemini | Provider implemented; previous free daily quota exhausted; **full live run not verified** | Resume only after observed free quota reset; no paid fallback |
 | 4 | OpenRouter | Explicit :free routes allowed; earlier HTTP 429; **full live run not verified** | Check actual free allowance and exact :free model; one bounded live validation if within limits |
 | 5 | Mistral AI | Not yet integrated or keyed; **not verified** | Set up Free mode (official docs: no card); add free-only adapter and offline tests; verify function calling and a bounded read-only audit |
@@ -34,7 +34,7 @@ Official Cohere trial details: https://docs.cohere.com/v2/docs/rate-limits
 - **F4 Read-only Commander**: exact immutable Onay commit explored; host records clean security and exact-commit passing Tester evidence, with Commander status `completed`. Unrequested specialists must not consume requests. No writes, no release or legal claims.
 - **F5 Documentation**: preserve CI URL/SHA, source model, bounded request count, host evidence and verdict. Mark `CONFIRMED` ONLY after F0–F4 pass. Otherwise `BLOCKED` or `PENDING`, with reason and next action.
 
-The goal is **5/5 confirmed**, not 5 configured keys. **Confirmed provider tally: 1/5 (Cloudflare).** Evidence is a user-provided terminal screenshot of the live read-only audit (not an independently downloaded full terminal trace). Remaining providers are still NOT confirmed. This proof does not establish 24/7 availability, paid plan eligibility, production release readiness, or AI Coder capability.
+The goal is **5/5 confirmed**, not 5 configured keys. **Confirmed provider tally: 2/5 (Cloudflare, Groq).** Evidence is a user-provided terminal screenshot of the live read-only audit (not an independently downloaded full terminal trace). Remaining providers are still NOT confirmed. This proof does not establish 24/7 availability, paid plan eligibility, production release readiness, or AI Coder capability.
 
 ## Safety constraints
 
@@ -51,7 +51,7 @@ The goal is **5/5 confirmed**, not 5 configured keys. **Confirmed provider tally
 - [x] Cloudflare fix in Draft PR #42; adapter and mocked multi-turn function-call round trip.
 - [x] 2026-10-17 CI on `3ca977a992c3744776667f0afe60dafc7dd0331e`: Typecheck PASS, Test PASS (offline evidence).
 - [x] Controlled Cloudflare LIVE Commander read-only audit: user screenshot at 20:26 +05:00 shows `completed` + `clean` + `true`, no missing actors or reasons. This verifies read-only Explorer/Security/Tester gates, not live source modification.
-- [ ] Complete Groq free-tier full audit or retain BLOCKED with exact local TPM evidence.
+- [x] Complete Groq free-tier live read-only Commander audit: screenshot at 22:28 +05:00 shows completed + clean + exact-commit TESTS true, no missing actors/reasons/provider failure.
 - [ ] Verify Gemini free quota and live audit or retain BLOCKED.
 - [ ] Verify OpenRouter exact :free model quota and live audit or retain BLOCKED.
 - [ ] Add and qualify Mistral Free as the fifth provider (requires user to create API key in Codespaces).
@@ -60,4 +60,6 @@ The goal is **5/5 confirmed**, not 5 configured keys. **Confirmed provider tally
 ## Confirmation ledger (user-visible evidence)
 
 - 2026-10-17 20:26 (+05:00): Cloudflare Workers AI live read-only Commander test after latest green code and secrets configuration: `STATUS=completed; SECURITY=clean; TESTS=true; MISSING=[]; REASONS=[]` (screenshot supplied in chat). Count = **1/5**. Do not claim publication, merge, production release or legal approval.
-- Next: Groq. Known 14/14 synthetic specialist proof and 3/3 independent repository handlers do not substitute for live Commander verification; earlier full Groq Commander hit a local TPM guard. Optimize the read-only route offline first, then at most one bounded live check.
+- Next: Gemini, then OpenRouter, then Mistral Free. Before live Gemini requests verify remaining free daily quota and reuse the bounded single-audit-tool pattern. Existing Groq+Cloudflare confirmations are for read-only audits; full coding collaboration remains a separate test.
+
+- 2026-10-17 22:28 (+05:00): Groq live read-only Commander on compact audit branch, model `qwen/qwen3.8-27b`: `STATUS=completed; SECURITY=clean; TESTS=true; MISSING=[]; REASONS=[]; PROVIDER_FAILURE=NONE`. Screenshot supplied in chat. **2/5** fully verified read-only providers. Corresponding code CI green at `f6f25cf76f445d29a1f1c1116ce59e0953fec41d`. No API-key values or Onay private source included.
