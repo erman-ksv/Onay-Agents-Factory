@@ -58,3 +58,29 @@ Example with a previously configured key:
 ```bash
 AGENT_FACTORY_PROVIDER=openrouter OPENROUTER_MODEL=openrouter/free pnpm exec tsx orchestration/specialistQualificationLive.ts
 ```
+
+
+
+## Groq comparison (explicit opt-in)
+
+Create a Groq key on your own Free-plan account and store it as a Codespaces secret
+`GROQ_API_KEY` accessible to this repository. Restart the Codespace to receive it.
+The key is not committed, printed or sent to another provider. Groq account billing
+and quotas are controlled by Groq; this adapter does not create a free allowance
+or guarantee zero charges on an account upgraded to a paid plan.
+
+First run one existing case (not a full qualification):
+
+```bash
+QUALIFICATION_PROBE=backend-b AGENT_FACTORY_PROVIDER=groq pnpm exec tsx orchestration/specialistQualificationLive.ts
+```
+
+After reviewing that result, omit `QUALIFICATION_PROBE` for the unchanged 16 cases.
+The default model is `openai/gpt-oss-120b`, with 2048 maximum completion tokens,
+low reasoning effort and no returned reasoning text. A 30-second pause between
+cases reduces minute-level token pressure; quota errors still stop with no retries.
+The 120-second response deadline remains in force. Truncated or invalid JSON fails
+closed; it is never converted to a passing assessment. No provider fallback occurs.
+
+A user-reported HTTP 200 / OK from a direct one-prompt request confirms access only.
+No complete Groq qualification or Commander/Coder proof has been established yet.

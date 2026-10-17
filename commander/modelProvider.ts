@@ -60,8 +60,8 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
     ...(config.provider === "gemini" ? { fetch: createGeminiRateLimitedFetch() } : {}),
     // OpenAI SDK retries 408/409/429/5xx with bounded backoff and Retry-After.
     // This is scoped to a failed model HTTP request; do not replay runner.run().
-    // Free OpenRouter requests must not multiply on a quota/rate-limit failure.
-    maxRetries: config.provider === "openrouter" ? 0 : config.provider === "gemini" ? GEMINI_TRANSIENT_MAX_RETRIES : 2,
+    // Free OpenRouter and Groq requests must not multiply on a quota/rate-limit failure.
+    maxRetries: (config.provider === "openrouter" || config.provider === "groq") ? 0 : config.provider === "gemini" ? GEMINI_TRANSIENT_MAX_RETRIES : 2,
     baseURL: config.provider !== "openai" ? config.baseURL : "https://api.openai.com/v1",
   });
   // The SDK's shared runner/provider caches its first client. Each factory run
@@ -74,7 +74,7 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
   setDefaultOpenAIClient(client);
 
   if (config.provider !== "openai") {
-    // Gemini and OpenRouter expose OpenAI-compatible chat completions; don't send traces to OpenAI.
+    // Gemini, OpenRouter and Groq expose OpenAI-compatible chat completions; don't send traces to OpenAI.
     setOpenAIAPI("chat_completions");
     setTracingDisabled(true);
   } else {
@@ -84,3 +84,4 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
 
   return { ...config, modelProvider };
 }
+

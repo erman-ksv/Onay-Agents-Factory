@@ -99,7 +99,7 @@ test("qualification honors explicit free OpenRouter and never falls back to Gemi
   }), /Paid routes are disabled/);
   assert.throws(() => qualificationEnvironment({
     AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "fixture",
-  }), /only Gemini or free OpenRouter/);
+  }), /only Gemini, free OpenRouter or Groq/);
   assert.equal(qualificationEnvironment({GEMINI_API_KEY: "fixture"}).AGENT_FACTORY_PROVIDER, "gemini");
 });
 
@@ -221,4 +221,40 @@ test("single-case probes select existing fixtures without inventing cases or ful
   assert.equal(qualificationProbeCase(), undefined);
   for (const fixture of QUALIFICATION_CASES) assert.equal(qualificationProbeCase(fixture.id), fixture);
   assert.throws(() => qualificationProbeCase("unknown"), /Unknown/);
+});
+
+
+
+test("Groq qualification pins endpoint, credentials, payload and does not retry a 429", async t => {
+  setTracingDisabled(true);
+  const env = qualificationEnvironment({AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "groq-offline",
+    GEMINI_API_KEY: "unused-gemini", OPENAI_API_KEY: "unused-openai"});
+  assert.throws(() => qualificationEnvironment({AGENT_FACTORY_PROVIDER: "groq", GEMINI_API_KEY: "unused"}), /key is missing/);
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+    calls++;
+    assert.equal(String(input), "https://api.groq.com/openai/v1/chat/completions");
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer groq-offline");
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.model, "openai/gpt-oss-120b");
+    assert.equal(body.max_tokens, 2048);
+    assert.equal(body.reasoning_effort, "low");
+    assert.equal(body.include_reasoning, false);
+    assert.equal(body.reasoning, undefined);
+    assert.ok(JSON.stringify(body.messages).includes("Fixture only"));
+    if (calls > 1) return new Response(JSON.stringify({error: {message: "rate limit"}}),
+      {status: 429, headers: {"content-type":"application/json"}});
+    return new Response(JSON.stringify({id:"groq-fixture", object:"chat.completion", created:1,
+      model:body.model, choices:[{index:0, finish_reason:"stop", message:{role:"assistant", content:'{"ready":true,"findings":[]}'}}],
+      usage:{prompt_tokens:10,completion_tokens:10,total_tokens:20}}),
+      {status:200,headers:{"content-type":"application/json"}});
+  });
+  const provider = configureModelProvider(env);
+  if (provider.provider !== "groq") throw new Error("Wrong provider");
+  const runner = new Runner({modelProvider: provider.modelProvider});
+  const agent = new Agent({name:"Groq fixture", model:await provider.modelProvider.getModel(provider.model),
+    modelSettings:qualificationModelSettings("groq", provider.model)});
+  assert.equal(parseAssessment((await runner.run(agent, "Fixture only", {maxTurns:1})).finalOutput).ready, true);
+  await assert.rejects(runner.run(agent, "Fixture only", {maxTurns:1}));
+  assert.equal(calls, 2); // One successful request and one failed request, no automatic retry.
 });

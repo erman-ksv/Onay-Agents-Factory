@@ -164,8 +164,8 @@ export async function runQualification(
 /** Explicit provider selection; no fallback to a different key or paid route. */
 export function qualificationEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const selected = source.AGENT_FACTORY_PROVIDER?.trim() || "gemini";
-  if (selected !== "gemini" && selected !== "openrouter") {
-    throw new Error("Qualification supports only Gemini or free OpenRouter.");
+  if (selected !== "gemini" && selected !== "openrouter" && selected !== "groq") {
+    throw new Error("Qualification supports only Gemini, free OpenRouter or Groq.");
   }
   const env = { ...source, AGENT_FACTORY_PROVIDER: selected };
   const config = selectProviderConfig(env);
@@ -231,8 +231,11 @@ export async function withQualificationDeadline<T>(
   }
 }
 
-/** Qualification tuning only for the model whose optional reasoning was checked. */
+/** Provider-specific settings; never modify fixtures or expected decisions. */
 export function qualificationModelSettings(provider: string, model?: string) {
+  if (provider === "groq" && model === "openai/gpt-oss-120b") {
+    return { maxTokens: 2048, providerData: { reasoning_effort: "low", include_reasoning: false } };
+  }
   if (provider !== "openrouter" || model !== "xingchen-agi/xing4.0-29b-a4b:free") return {};
   return { maxTokens: 1024, providerData: { reasoning: { enabled: false } } };
 }
@@ -243,3 +246,4 @@ export function qualificationProbeCase(id?: string): QualificationCase | undefin
   if (!fixture) throw new Error("Unknown qualification probe case.");
   return fixture;
 }
+

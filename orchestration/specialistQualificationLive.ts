@@ -21,7 +21,7 @@ async function main() {
     "SYNTHETIC ROLE QUALIFICATION: 16 cases; 8 advisory profiles; no application source or GitHub writes.");
   const modelSettings = qualificationModelSettings(provider.provider, provider.model);
   console.log("QUALIFICATION MODEL SETTINGS:", JSON.stringify(modelSettings));
-  const pace = createQualificationPacer(provider.provider === "openrouter" ? 60_000 : 0, undefined,
+  const pace = createQualificationPacer(provider.provider === "openrouter" ? 60_000 : provider.provider === "groq" ? 30_000 : 0, undefined,
     ms => console.log("WAIT:", ms / 1000, "seconds before next case; no request retry."));
   const assess = async (fixture: QualificationCase, prompt: string) => {
     await pace();
@@ -50,7 +50,7 @@ async function main() {
   const print = (value: unknown) => {
     // Preserve findings for human review; redact configured credentials before printing.
     let output = JSON.stringify(value) ?? "null";
-    for (const secret of [env.GEMINI_API_KEY, process.env.GITHUB_TOKEN, process.env.OPENAI_API_KEY, process.env.OPENROUTER_API_KEY]) {
+    for (const secret of [env.GEMINI_API_KEY, process.env.GITHUB_TOKEN, process.env.OPENAI_API_KEY, process.env.OPENROUTER_API_KEY, env.GROQ_API_KEY]) {
       if (secret?.trim()) output = output.split(secret.trim()).join("[REDACTED]");
     }
     console.log(output);
@@ -85,3 +85,4 @@ main().catch(error => {
   console.error("No qualification established. Stop and inspect this diagnostic before another run.");
   process.exitCode = 1;
 });
+

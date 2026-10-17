@@ -68,7 +68,7 @@ test("blank selection retains legacy behavior and blank OpenAI model retains the
 
 test("invalid provider selection is rejected without echoing the supplied value", () => {
   assert.throws(() => selectProviderConfig({ AGENT_FACTORY_PROVIDER: "invalid-secret-value", OPENAI_API_KEY: "openai-secret" }), {
-    message: "AGENT_FACTORY_PROVIDER must be gemini, openai or openrouter.",
+    message: "AGENT_FACTORY_PROVIDER must be gemini, openai, openrouter or groq.",
   });
 });
 
@@ -120,4 +120,18 @@ test("OpenRouter key alone works, but never steals explicit Gemini or OpenAI sel
 test("missing selected OpenRouter key is reported without using another provider", () => {
   const env = { AGENT_FACTORY_PROVIDER: "openrouter", GEMINI_API_KEY: "not-for-openrouter" };
   assert.deepEqual(selectProviderConfig(env), { provider: "none" });
+});
+
+
+
+test("Groq requires explicit selection and never borrows another provider key", () => {
+  assert.deepEqual(selectProviderConfig({ AGENT_FACTORY_PROVIDER: " groq ",
+    GROQ_API_KEY: " groq-fixture ", GEMINI_API_KEY: "unused", OPENAI_API_KEY: "unused" }), {
+    provider: "groq", apiKey: "groq-fixture", model: "openai/gpt-oss-120b",
+    baseURL: "https://api.groq.com/openai/v1",
+  });
+  assert.deepEqual(selectProviderConfig({ GROQ_API_KEY: "fixture" }), {provider: "none"});
+  assert.deepEqual(selectProviderConfig({ AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: " ",
+    GEMINI_API_KEY: "unused", OPENROUTER_API_KEY: "unused" }), {provider: "none"});
+  assert.equal(selectProviderConfig({ GROQ_API_KEY: "unused", GEMINI_API_KEY: "fixture" }).provider, "gemini");
 });
