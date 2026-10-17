@@ -4,6 +4,11 @@ import type { reviewChangeSet } from "../agents/reviewer/agent.js";
 import type { inspectProposedChanges, inspectSecurity } from "../agents/security/agent.js";
 import type { inspectOnay } from "../github/onayExplorer.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
+import { createHash } from "node:crypto";
+import { buildSpecialistContext, createRepositoryManifest, REPOSITORY_CONTEXT_LIMITS,
+  type FrozenRepositoryFile, type RepositoryContextSelection } from "./repositoryContext.js";
+import { extractProviderFailure, type ProviderFailure } from "./providerContextBudget.js";
+import { scanForSecrets } from "../github/secretScanner.js";
 
 type Review = ReturnType<typeof reviewChangeSet>;
 type ProposedSecurity = ReturnType<typeof inspectProposedChanges>;
@@ -37,6 +42,8 @@ export type AiExecutionOptions = {
   /** Exact repository paths authorized by the host for this task. */
   allowedChangePaths?: readonly string[];
   specialistContextTransform?: (context: string, files: readonly ProposedChange[]) => string;
+  /** Trusted host ranges within the already explored snapshot; never model arguments. */
+  specialistSelections?: Readonly<Record<string, readonly RepositoryContextSelection[]>>;
 };
 
 /** Evidence belongs to this run, never to a model's prose or tool arguments. */
@@ -44,6 +51,9 @@ export class AiExecutionSession {
   readonly journal: AgentRunJournal;
   private baseSha?: string;
   private context?: string;
+  private snapshotFiles: FrozenRepositoryFile[] = [];
+  private readonly contextCoverage = new Map<string, unknown>();
+  private terminalProviderFailure?: ProviderFailure;
   private files: ProposedChange[] = [];
   private review?: Review;
   private security?: { repository: RepositorySecurity; proposed: ProposedSecurity | null };
@@ -61,6 +71,7 @@ export class AiExecutionSession {
 
   private invalidateAssessments() {
     this.assessments.clear();
+    this.contextCoverage.clear();
     for (const actor of this.completedActors) {
       if (actor !== "explorer") this.completedActors.delete(actor);
     }
@@ -78,6 +89,9 @@ export class AiExecutionSession {
   /** Serialize tools so parallel model calls cannot race review against generation. */
   invoke<T>(actor: string, tool: string, action: () => Promise<T> | T): Promise<T | { error: string }> {
     const operation = this.queue.then(async () => {
+      if (this.terminalProviderFailure) {
+        return { error: this.terminalProviderFailure.message, providerFailure: { ...this.terminalProviderFailure } };
+      }
       // Temporarily clear this tool's prior failure so a corrected retry
       // can pass gates that reject unresolved tool failures. If the retry
       // fails, restore the FIRST diagnostic, not the secondary failure.
@@ -96,11 +110,12 @@ export class AiExecutionSession {
         this.journal.record("agent_completed", actor, "Agent tool execution returned.", { tool });
         return result;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        this.terminalProviderFailure ??= extractProviderFailure(error);
+        const message = this.terminalProviderFailure?.message ?? this.safeErrorMessage(error);
         this.failures.set(tool, firstFailure ?? message);
         this.journal.record("tool_failed", actor, message, { tool });
         this.journal.record("agent_failed", actor, "Agent tool execution failed.", { tool });
-        return { error: message };
+        return { error: message, ...(this.terminalProviderFailure ? { providerFailure: this.terminalProviderFailure } : {}) };
       }
     });
     this.queue = operation;
@@ -112,6 +127,7 @@ export class AiExecutionSession {
     // A failed refresh must not leave the previous context or its gates usable.
     this.baseSha = undefined;
     this.context = undefined;
+    this.snapshotFiles = [];
     this.files = [];
     this.review = undefined;
     this.security = undefined;
@@ -126,12 +142,17 @@ export class AiExecutionSession {
     if (exploration.repository !== this.options.repository || exploration.ref !== sha || unavailable.length || !available.length) {
       throw new Error("Explorer did not return complete context for the requested repository commit.");
     }
+    const snapshot = structuredClone(available);
+    const manifest = createRepositoryManifest(this.options.repository, sha, snapshot);
     this.baseSha = sha;
-    this.context = available.map(file => `FILE: ${file.path}\n${file.content}`).join("\n\n");
+    this.snapshotFiles = snapshot;
+    this.context = snapshot.map(file => `FILE: ${file.path}\n${file.content}`).join("\n\n");
     this.journal.record("artifact_created", "explorer", "Repository context read from an immutable commit.", {
       repository: this.options.repository, baseSha: sha, files: available.map(file => file.path),
     });
-    return exploration;
+    // Only provenance leaves the host. Complete originals remain available to
+    // trusted generation/scanning/review dependencies, never Commander history.
+    return { ...manifest, ref: sha };
   }
 
   async generate() {
@@ -166,12 +187,77 @@ export class AiExecutionSession {
     return structuredClone(this.review);
   }
 
-  specialistContext() {
-    if (!this.context) throw new Error("Specialists require repository exploration first.");
-    if (this.options.specialistContextTransform) {
-      return this.options.specialistContextTransform(this.context, structuredClone(this.files));
+  specialistContext(role = "backend", request = "") {
+    if (!this.context || !this.baseSha) throw new Error("Specialists require repository exploration first.");
+    const packet = buildSpecialistContext({ repository: this.options.repository, baseSha: this.baseSha,
+      files: this.snapshotFiles, proposals: this.files, goal: this.options.goal, role, request,
+      selection: this.options.specialistSelections?.[role] });
+    const parsed = JSON.parse(packet);
+    this.contextCoverage.set(role, {
+      repository: parsed.repository, baseSha: parsed.baseSha,
+      snippets: parsed.snippets.map(({ text: _text, ...provenance }: Record<string, unknown>) => provenance),
+      proposedCoverage: parsed.proposedCoverage, unverifiedAreas: parsed.unverifiedAreas,
+    });
+    // Existing trusted redactors may further constrain a packet; they no longer
+    // receive the full repository string, and cannot exceed the same hard bound.
+    const transformed = this.options.specialistContextTransform?.(packet, structuredClone(this.files)) ?? packet;
+    if (typeof transformed !== "string" || transformed.length > REPOSITORY_CONTEXT_LIMITS.packetCharacters) {
+      throw new Error("Specialist context exceeds the safe context budget.");
     }
-    return this.context + (this.files.length ? "\n\nPROPOSED CHANGES:\n" + JSON.stringify(this.files) : "");
+    if (scanForSecrets(transformed).length) throw new Error("Selected specialist context contains a potential secret; no context was sent.");
+    if (transformed !== packet) {
+      this.contextCoverage.set(role, { hostTransformApplied: true, repository: this.options.repository,
+        baseSha: this.baseSha, unverifiedAreas: { transformedRanges: true, testsAndRuntimeBehavior: true,
+          outsideExploredSnapshot: true }, note: "The host transformed the packet; original range coverage is not claimed." });
+      const notice = "\nHOST EVIDENCE BOUNDARY: This packet was transformed by the host. Do not assume original selected ranges remain present; verify evidence in the supplied text only. Unshown source remains unverified.";
+      if (transformed.length + notice.length > REPOSITORY_CONTEXT_LIMITS.packetCharacters) {
+        throw new Error("Specialist context exceeds the safe context budget.");
+      }
+      return transformed + notice;
+    }
+    return transformed;
+  }
+
+  proposalMetadata() {
+    return { summary: "Proposed files retained in trusted execution memory; no files written.",
+      repository: this.options.repository, baseSha: this.baseSha,
+      files: this.files.map(file => ({ path: file.path, bytes: Buffer.byteLength(file.content, "utf8"),
+        contentSha256: createHash("sha256").update(file.content).digest("hex"), committed: false })) };
+  }
+
+  adviceMetadata(actor: string, assessment: SpecialistAssessment) {
+    return { actor, ready: assessment.ready, verifiedExecution: false,
+      findingCounts: Object.fromEntries(["blocker", "high", "medium", "low"].map(severity =>
+        [severity, assessment.findings.filter(finding => finding.severity === severity).length])),
+      coverage: this.contextCoverage.get(actor),
+      note: "Detailed specialist advice is retained by the host. Unshown areas remain unverified." };
+  }
+
+  /** A final bounded projection also covers deterministic tool diagnostics. */
+  modelToolResult(value: unknown): string {
+    const encoded = JSON.stringify(value);
+    if (typeof encoded !== "string" || encoded.length > REPOSITORY_CONTEXT_LIMITS.manifestCharacters ||
+      scanForSecrets(encoded).length || this.containsFullSource(encoded)) {
+      throw new Error("Tool result cannot be safely represented within the model context budget.");
+    }
+    return encoded;
+  }
+
+  private containsFullSource(encoded: string) {
+    return [...this.snapshotFiles, ...this.files].some(file => file.content.length >= 24 &&
+      encoded.includes(JSON.stringify(file.content).slice(1, -1)));
+  }
+
+  safeErrorMessage(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const sourceExcerpt = [...this.snapshotFiles, ...this.files].some(file =>
+      file.content.split(/\r?\n/).some(line => line.trim().length >= 24 && message.includes(line.trim())));
+    return message.length > 600 || sourceExcerpt || scanForSecrets(message).length || this.containsFullSource(JSON.stringify(message))
+      ? "Execution failed; source-bearing or oversized diagnostics remain with the trusted host." : message;
+  }
+
+  get providerFailure() {
+    return this.terminalProviderFailure ? { ...this.terminalProviderFailure } : undefined;
   }
 
   recordAdvice(actor: string, assessment: SpecialistAssessment) {
@@ -204,6 +290,7 @@ export class AiExecutionSession {
   }
 
   async publish() {
+    if (this.terminalProviderFailure) throw new Error(this.terminalProviderFailure.message);
     if (this.options.auditOnly) throw new Error("This task is a read-only audit.");
     if (!this.options.publication || !this.options.writesEnabled) {
       throw new Error("Publishing requires --publish, a branch/title/body, and AGENT_FACTORY_ENABLE_GITHUB_WRITES=true.");
@@ -298,6 +385,7 @@ export class AiExecutionSession {
     return {
       status, output, reasons, missingActors, taskId: this.journal.taskId,
       evidence: structuredClone({ repository: this.options.repository, baseSha: this.baseSha, proposedFiles: this.files.map(file => file.path),
+        contextCoverage: Object.fromEntries(this.contextCoverage),
         changedFiles: this.publication ? this.files.map(file => file.path) : [], publication: this.publication,
         publicationAttempted: this.publishAttempted, publicationBranch: this.options.publication?.branch,
         review: this.review, security: this.security, assessments: Object.fromEntries(this.assessments), tests: this.tests, testsExecuted: this.testsVerified() }),

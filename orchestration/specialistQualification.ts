@@ -173,7 +173,8 @@ export function qualificationEnvironment(source: NodeJS.ProcessEnv): NodeJS.Proc
   if (selected !== "gemini" && selected !== "openrouter" && selected !== "groq") {
     throw new Error("Qualification supports only Gemini, free OpenRouter or Groq.");
   }
-  const env = { ...source, AGENT_FACTORY_PROVIDER: selected };
+  const env = { ...source, AGENT_FACTORY_PROVIDER: selected,
+    ...(selected === "groq" ? { AGENT_FACTORY_GROQ_QUALIFICATION: "true" } : {}) };
   const config = selectProviderConfig(env);
   if (config.provider === "none") throw new Error("Selected qualification provider key is missing.");
   return env;

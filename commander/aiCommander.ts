@@ -17,6 +17,7 @@ import { reviewChangeSet } from "../agents/reviewer/agent.js";
 import { prepareOnayChange } from "../github/changeWorkflow.js";
 import { waitForCiGate } from "../github/ciGate.js";
 import { assertRepositoryAllowed, resolveAllowedRepositories } from "../github/repositoryPolicy.js";
+import { extractProviderFailure } from "./providerContextBudget.js";
 
 export type AiCommanderOptions = {
   journal?: AiExecutionOptions["journal"];
@@ -31,6 +32,7 @@ export type AiCommanderOptions = {
   /** Host-selected file scope; models cannot expand the permitted change set. */
   allowedChangePaths?: readonly string[];
   specialistContextTransform?: AiExecutionOptions["specialistContextTransform"];
+  specialistSelections?: AiExecutionOptions["specialistSelections"];
   /** Host-only turn budget for an explicitly scoped synthetic multi-agent proof. */
   maxTurns?: number;
 };
@@ -40,6 +42,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const env = options.env ?? process.env;
   const legalEnabled = legalAgentEnabled(env);
   const provider = configureModelProvider(env);
+  const contextBudget = provider.provider !== "none" ? provider.contextBudget : undefined;
   const runner = new Runner(provider.provider !== "none" ? { modelProvider: provider.modelProvider } : {});
   const modelOptions = options.model ? { model: options.model } : provider.provider !== "none" && provider.model ? { model: provider.model } : {};
   const factory = isAgentFactoryTarget(goal);
@@ -64,6 +67,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const requiredNames = factory ? ["typecheck"] : ["Typecheck and API tests"];
   const requiredStepNames = factory ? ["Typecheck", "Test"] : ["Typecheck", "API integration tests"];
   const plan = planTask(goal);
+  let generationContext = (): string => { throw new Error("Coder requires successful repository exploration first."); };
   const configuredDependencies: AiExecutionDependencies = options.dependencies ?? {
     getHead: getBaseHead,
     getCandidateHead: candidateRef => {
@@ -71,7 +75,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       return new GitHubClient({ repository }).getCommitSha(candidateRef);
     },
     explore: sha => inspectOnay(paths, sha, repository),
-    generate: context => generateChanges(goal, context, env),
+    generate: () => generateChanges(goal, generationContext(), env, { contextBudget }),
     review: files => reviewChangeSet({ goal, files, allowWorkflowChanges: env.AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES === "true" }),
     scan: inspectProposedChanges,
     inspectSecurity: sha => inspectSecurity([...paths], repository, sha),
@@ -103,11 +107,20 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     writesEnabled: env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true", journal: options.journal,
     allowedChangePaths: options.allowedChangePaths,
     specialistContextTransform: options.specialistContextTransform,
+    specialistSelections: options.specialistSelections,
   }, dependencies);
+  generationContext = () => session.specialistContext("coder", "Prepare only the host-authorized change. Unshown source is unverified; refuse incomplete whole-file reconstruction.");
   let privateCoderCalls = 0;
   const executable = (actor: string, name: string, description: string, execute: () => Promise<unknown> | unknown) => tool({
     name, description, parameters: z.object({}),
-    execute: async () => JSON.stringify(await session.invoke(actor, name, execute)),
+    execute: async () => {
+      const result = await session.invoke(actor, name, async () => {
+        const value = await execute();
+        session.modelToolResult(value);
+        return value;
+      });
+      return session.modelToolResult(result);
+    },
   });
   const tools: Tool[] = [
     executable("explorer", "explore_onay", "Read actual repository files at an immutable commit. Required before other agents.", () => session.explore()),
@@ -119,22 +132,17 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       if (options.specialistContextTransform && ++privateCoderCalls > 1) {
         throw new Error("Private-source Coder already invoked. Stop, inspect the first proposal and specialist blockers; do not regenerate in this run.");
       }
-      const generated = await session.generate();
-      // In private-source mode, retain whole files ONLY in trusted host memory.
-      // The Commander tool result must not echo the full patched application UI
-      // to another model request. Specialists use the host's separate redactor.
-      if (!options.specialistContextTransform) return generated;
-      return {
-        summary: generated.summary,
-        files: generated.files.map(file => ({
-          path: file.path, message: file.message, bytes: Buffer.byteLength(file.content, "utf8"),
-        })),
-      };
+      await session.generate();
+      // All runs use the same privacy boundary, not only opt-in private runs.
+      return session.proposalMetadata();
     }),
     executable("security", "security_review", "Scan the repository and current proposed files for secrets. Repeat after regenerating files.", () => session.inspectSecurity()),
     executable("reviewer", "final_review", "Apply independent path, workflow and build configuration policy review to current files.", () => session.reviewChanges()),
     executable("github", "publish_change_set", "Write reviewed files on the explicitly authorized feature branch and create a draft PR. Requires all specialists except Tester to have returned.", () => session.publish()),
-    executable("tester", "test_onay", "Discover scripts and verify required CI jobs/test steps for the exact published commit. Call after publication to verify changes.", () => session.test()),
+    executable("tester", "test_onay", "Discover scripts and verify required CI jobs/test steps for the exact published commit. Call after publication to verify changes.", async () => {
+      const { discovery: _discovery, ...evidence } = await session.test();
+      return { ...evidence, discovery: { detailsRetainedByHost: true } };
+    }),
   ];
   const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
   for (const role of advisoryRoles) {
@@ -143,14 +151,15 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     const name = COMMANDER_TOOL_NAMES[role];
     tools.push(tool({
       name, description: "Ask the " + role + " specialist to review actual repository context and proposed changes. Advice does not prove writes or tests.",
-      parameters: z.object({ input: z.string() }),
-      execute: async ({ input }) => JSON.stringify(await session.invoke(role, name, async () => {
-        const context = session.specialistContext();
+      parameters: z.object({ input: z.string().max(600) }),
+      execute: async ({ input }) => session.modelToolResult(await session.invoke(role, name, async () => {
+        const context = session.specialistContext(role, input);
         const result = await runner.run(specialist, "TASK:\n" + goal + "\n\nREQUEST:\n" + input + "\n\nREPOSITORY CONTEXT:\n" + context +
           '\n\nReturn ONLY JSON: {"ready":boolean,"findings":[{"severity":"blocker"|"high"|"medium"|"low","message":string}],"summary":string}. Set ready=false for unresolved blockers. Advice is not execution evidence.');
         if (typeof result.finalOutput !== "string" || !result.finalOutput.trim()) throw new Error(role + " specialist returned no result.");
         const raw = result.finalOutput.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-        return session.recordAdvice(role, JSON.parse(raw));
+        const assessment = session.recordAdvice(role, JSON.parse(raw));
+        return session.adviceMetadata(role, assessment);
       })),
     }));
   }
@@ -164,6 +173,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       "Regeneration invalidates earlier reviews. Script discovery and base-branch CI do not verify proposals.",
       "If publishing is disabled, explain the proposal and remaining verification steps; do not claim files were applied.",
       "Respect tool errors and pending/failed CI. Never invent edits, tools, commands, PRs, tests, legal verification, merge or deployment.",
+      "Explorer and Coder return metadata only. Full files stay in trusted host memory. Specialists see selected ranges only; unread files, omitted ranges and unexecuted tests remain unverified.",
       legalEnabled ? "For legal tasks involve Rasul. Humans review legal commitments, merges and deployments." :
         "Legal specialist is temporarily disabled by the host. Do not invoke or simulate legal review; report it as DISABLED, never approved. Humans review commitments, merges and deployments.",
       ...(options.specialistContextTransform ? [
@@ -176,7 +186,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const publishing = options.publication && env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true";
   const prompt = buildCommanderPrompt(goal, env) + "\n\nPublication enabled for this run: " +
     (publishing ? "yes; publish then verify tests on branch " + options.publication!.branch : "no; return a proposal and do not call publish_change_set.");
-  return { commander, session, prompt, runner, provider: provider.provider,
+  return { commander, session, prompt, runner, contextBudget, provider: provider.provider,
     legalReview: legalEnabled ? "enabled" as const : "disabled" as const };
 }
 
@@ -186,7 +196,7 @@ export function createAiCommander(goal: string, options: AiCommanderOptions = {}
 }
 
 export async function runAiCommander(goal: string, options: AiCommanderOptions = {}) {
-  const { commander, session, prompt, runner, provider, legalReview } = createAiCommanderExecution(goal, options);
+  const { commander, session, prompt, runner, contextBudget, provider, legalReview } = createAiCommanderExecution(goal, options);
   try {
     if (provider === "none" && !options.model) {
       throw new Error(providerRequirementMessage(options.env ?? process.env));
@@ -196,10 +206,14 @@ export async function runAiCommander(goal: string, options: AiCommanderOptions =
       throw new Error("Commander turn budget must be an integer from 1 to 48.");
     }
     const result = await runner.run(commander, prompt, { maxTurns: turns });
+    const failure = contextBudget?.failure ?? session.providerFailure;
+    if (failure) return { ...session.finish(undefined, failure.message), providerFailure: failure, legalReview };
     await session.verifyFinalCandidate();
     return { ...session.finish(result.finalOutput), legalReview };
   } catch (error) {
-    return { ...session.finish(undefined, error instanceof Error ? error.message : String(error)), legalReview };
+    const failure = contextBudget?.failure ?? session.providerFailure ?? extractProviderFailure(error);
+    return { ...session.finish(undefined, failure?.message ?? session.safeErrorMessage(error)),
+      ...(failure ? { providerFailure: failure } : {}), legalReview };
   }
 }
 
