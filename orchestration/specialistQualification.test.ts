@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer } from "./specialistQualification.js";
+import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, QualificationTimeoutError } from "./specialistQualification.js";
 
 test("qualification covers every advisory role with faulty and corrected cases", () => {
   const roles = ["backend", "database", "frontend", "dispatch", "product", "ux", "legal", "devops"];
@@ -129,4 +129,44 @@ test("rate limit metadata remains safe and does not mistake unknown 429 for a da
   assert.ok(!JSON.stringify([daily, upstream]).includes("secret-value"));
   assert.equal(safeFailureMetadata({headers: new Headers({"retry-after":"60"})}).retryAfterSeconds, 60);
   assert.equal(safeFailureMetadata({headers: new Headers({"retry-after":"secret-value"})}).retryAfterSeconds, undefined);
+});
+
+test("deadline aborts a stalled request and prevents later qualification cases", async () => {
+  let calls = 0;
+  let aborted = false;
+  let heartbeats = 0;
+  await assert.rejects(runQualification(async () => {
+    calls++;
+    return withQualificationDeadline(signal => new Promise<string>((_resolve, reject) => {
+      signal.addEventListener("abort", () => {
+        aborted = true;
+        reject(signal.reason);
+      }, {once: true});
+    }), {timeoutMs: 50, heartbeatMs: 5, onProgress: () => { heartbeats++; }});
+  }), (error: unknown) => {
+    assert.ok(error instanceof QualificationFailure);
+    assert.equal(error.caseId, "backend-a");
+    assert.equal(error.detail.kind, "QualificationTimeoutError");
+    return true;
+  });
+  assert.equal(calls, 1);
+  assert.equal(aborted, true);
+  assert.ok(heartbeats > 0);
+});
+test("deadline returns successful responses and preserves immediate errors", async () => {
+  assert.equal(await withQualificationDeadline(async signal => {
+    assert.equal(signal.aborted, false);
+    return "response";
+  }, {timeoutMs: 50}), "response");
+  const original = new Error("fixture failure");
+  await assert.rejects(withQualificationDeadline(async () => { throw original; }), error => error === original);
+  await assert.rejects(withQualificationDeadline(async () => "", {timeoutMs: 0}));
+});
+test("deadline stops a transport that ignores cancellation without starting another attempt", async () => {
+  let calls = 0;
+  await assert.rejects(withQualificationDeadline(async () => {
+    calls++;
+    return new Promise<string>(() => {});
+  }, {timeoutMs: 10}), QualificationTimeoutError);
+  assert.equal(calls, 1);
 });

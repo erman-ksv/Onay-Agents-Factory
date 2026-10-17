@@ -104,7 +104,7 @@ export function safeFailureMetadata(error: unknown) {
     record.status >= 400 && record.status <= 599 ? record.status : undefined;
   const knownNames = ["APIConnectionError", "APIConnectionTimeoutError", "RateLimitError",
     "AuthenticationError", "PermissionDeniedError", "BadRequestError", "InternalServerError",
-    "MaxTurnsExceededError", "ModelBehaviorError", "UserError"];
+    "MaxTurnsExceededError", "ModelBehaviorError", "UserError", "QualificationTimeoutError"];
   const kind = typeof record.name === "string" && knownNames.includes(record.name) ? record.name : "unknown";
   const apiError = record.error && typeof record.error === "object" ? record.error as Record<string, unknown> : {};
   const metadata = apiError.metadata && typeof apiError.metadata === "object" ? apiError.metadata as Record<string, unknown> : {};
@@ -187,4 +187,46 @@ export function createQualificationPacer(
     if (first) { first = false; return; }
     if (intervalMs) { report(intervalMs); await sleep(intervalMs); }
   };
+}
+
+export class QualificationTimeoutError extends Error {
+  constructor() {
+    super("Qualification model response exceeded the configured deadline.");
+    this.name = "QualificationTimeoutError";
+  }
+}
+
+/** One attempt only. Abort the SDK/HTTP request and stop even if a transport stalls. */
+export async function withQualificationDeadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  options: { timeoutMs?: number; heartbeatMs?: number; onProgress?: (elapsedSeconds: number) => void } = {},
+): Promise<T> {
+  const timeoutMs = options.timeoutMs ?? 120_000;
+  const heartbeatMs = options.heartbeatMs ?? 15_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 ||
+    !Number.isSafeInteger(heartbeatMs) || heartbeatMs < 1) {
+    throw new Error("Deadline and heartbeat must be positive integer milliseconds.");
+  }
+  const controller = new AbortController();
+  const started = performance.now();
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const heartbeat = options.onProgress ? setInterval(() => {
+    options.onProgress!(Math.floor((performance.now() - started) / 1000));
+  }, heartbeatMs) : undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    deadline = setTimeout(() => {
+      const error = new QualificationTimeoutError();
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => operation(controller.signal)),
+      expired,
+    ]);
+  } finally {
+    clearTimeout(deadline);
+    clearInterval(heartbeat);
+  }
 }

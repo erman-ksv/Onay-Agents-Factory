@@ -5,7 +5,7 @@
 import { Agent, Runner } from "@openai/agents";
 import { ROLE_SKILLS } from "../commander/skills.js";
 import { configureModelProvider } from "../commander/modelProvider.js";
-import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer } from "./specialistQualification.js";
+import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline } from "./specialistQualification.js";
 
 async function main() {
   const env = qualificationEnvironment(process.env);
@@ -24,7 +24,10 @@ async function main() {
       instructions: ROLE_SKILLS[fixture.role],
       ...(provider.model ? { model: provider.model } : {}),
     });
-    const response = await runner.run(agent, prompt, { maxTurns: 1 });
+    const response = await withQualificationDeadline(
+      signal => runner.run(agent, prompt, { maxTurns: 1, signal }),
+      { onProgress: seconds => console.log("WAITING:", fixture.id, seconds, "seconds; deadline 120 seconds.") },
+    );
     return response.finalOutput;
   }, row => {
     // Preserve findings for human review; redact configured credentials before printing.
