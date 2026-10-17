@@ -1,5 +1,6 @@
 import { Agent, Runner, tool, type Tool, type Model } from "@openai/agents";
 import { z } from "zod";
+import { searchSkillCatalog } from "./skillDiscovery.js";
 import { legalAgentEnabled } from "./legalPolicy.js";
 import { buildSpecialistInstructions } from "./skills.js";
 import { buildCommanderPrompt, COMMANDER_TOOL_NAMES } from "./buildCommanderPrompt.js";
@@ -173,6 +174,17 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       return { ...evidence, discovery: { detailsRetainedByHost: true } };
     }),
   ];
+  // Public metadata lookup only. No installation or code execution.
+  if (!compactCloudflareAudit) {
+    tools.push(tool({
+      name: "find_skills",
+      description: "Optional read-only public skills.sh catalog search. Use generic keywords only, no secrets/private source. Results are unreviewed. Never install or execute found skills.",
+      parameters: z.object({ query: z.string().min(2).max(100) }),
+      execute: async ({ query }) => session.modelToolResult(
+        await session.invoke("skill-discovery", "find_skills", () => searchSkillCatalog(query))
+      ),
+    }));
+  }
   const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
   for (const role of advisoryRoles) {
     if (compactCloudflareAudit || (role === "legal" && !legalEnabled)) continue;
@@ -201,6 +213,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
       "Do not claim legal approval, release readiness or deployment.",
     ].join("\n") : [
       "Coordinate specialists through executable tools. Host evidence, not final prose, determines completion.",
+      "Optional find_skills only looks up unreviewed public metadata. Never install/execute skills or include confidential data in search queries.",
       "Explore first. For changes call code_onay, every required advisory specialist, security_review and final_review.",
       "If publishing is explicitly enabled, call publish_change_set after reviews pass, then test_onay for the exact candidate commit.",
       "For read-only audits use exploration, security_review and test_onay. Do not generate or publish.",
