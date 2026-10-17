@@ -68,10 +68,11 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const requiredStepNames = factory ? ["Typecheck", "Test"] : ["Typecheck", "API integration tests"];
   const plan = planTask(goal);
   const auditOnly = isReadOnlyRepositoryAudit(goal);
-  // Free-tier Groq and Cloudflare share one compact, host-verified audit tool.
-  // Restrict the model to Explorer, Security and Tester evidence only: prevent
-  // unnecessary specialists and publication tools from consuming scarce API quota.
-  const compactFreeAudit = auditOnly && (provider.provider === "cloudflare" || provider.provider === "groq");
+  // Free-tier providers use a single compact, host-verified read-only audit tool.
+  // No optional specialist fanout, Coder or publication routes; this bounds
+  // consumption and preserves the three independent Explorer/Security/Tester gates.
+  const compactFreeAudit = auditOnly && (provider.provider === "cloudflare" ||
+    provider.provider === "groq" || provider.provider === "openrouter");
   let generationContext = (): string => { throw new Error("Coder requires successful repository exploration first."); };
   const configuredDependencies: AiExecutionDependencies = options.dependencies ?? {
     getHead: getBaseHead,
