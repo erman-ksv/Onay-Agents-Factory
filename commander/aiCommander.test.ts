@@ -522,3 +522,32 @@ test("Groq change requests retain normal specialist tools and cannot use compact
   assert.ok(!names.includes("audit_onay_read_only"));
   assert.ok(!names.includes("rasul_legal_compliance"));
 });
+
+
+test("OpenRouter free read-only Commander offers only the verified compact host audit", () => {
+  const e = createAiCommander("Audit Onay repository main. Read-only audit.", {
+    env: { AGENT_FACTORY_PROVIDER: "openrouter", OPENROUTER_API_KEY: "offline-key",
+      OPENROUTER_MODEL: "openrouter/free", AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false", AGENT_FACTORY_LEGAL_ENABLED: "false" },
+  });
+  assert.equal(e.provider, "openrouter");
+  assert.deepEqual(e.commander.tools.map(item => item.name), ["audit_onay_read_only"]);
+  assert.deepEqual(e.session.options.requiredActors, ["explorer", "tester", "security"]);
+  assert.equal(e.session.options.auditOnly, true);
+});
+
+test("OpenRouter development requests cannot bypass advisory and review gates using audit shortcut", () => {
+  const e = createAiCommander("Implement Onay passenger booking", {
+    env: { AGENT_FACTORY_PROVIDER: "openrouter", OPENROUTER_API_KEY: "offline-key",
+      OPENROUTER_MODEL: "openrouter/free", AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false", AGENT_FACTORY_LEGAL_ENABLED: "false" },
+  });
+  const tools = e.commander.tools.map(item => item.name);
+  assert.ok(tools.includes("explore_onay"));
+  assert.ok(tools.includes("code_onay"));
+  assert.ok(tools.includes("security_review"));
+  assert.ok(tools.includes("final_review"));
+  assert.ok(tools.includes("test_onay"));
+  assert.ok(!tools.includes("audit_onay_read_only"));
+  assert.ok(!tools.includes("rasul_legal_compliance"));
+});
