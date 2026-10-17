@@ -76,8 +76,12 @@ test("Mistral concurrent calls are serialized, safely paced and never retried",a
 
 test("Mistral cumulative request-size budget stops before network",async()=>{
  let calls=0;
- const bytes=Buffer.byteLength(JSON.stringify(body));
- const fn=createMistralFreeFetch(async()=>{calls++;return Response.json({choices:[]});},{maxTotalBytes:bytes+250,maxCalls:4,minIntervalMs:0});
+ const diagnostics: Array<{bytes:number}>=[];
+ const probe=createMistralFreeFetch(async()=>Response.json({choices:[]}),{minIntervalMs:0,onDiagnostic:d=>diagnostics.push(d)});
+ assert.equal((await send(probe)).status,200);
+ const bytes=diagnostics[0].bytes;
+ assert.ok(bytes>0);
+ const fn=createMistralFreeFetch(async()=>{calls++;return Response.json({choices:[]});},{maxTotalBytes:bytes,maxCalls:4,minIntervalMs:0});
  assert.equal((await send(fn)).status,200);
  assert.equal((await send(fn)).status,400);
  assert.equal(calls,1);
