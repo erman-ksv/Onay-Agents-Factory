@@ -7,6 +7,7 @@ import {
 } from "@openai/agents";
 import { selectProviderConfig } from "./providerConfig.js";
 import { createCloudflareCompatibleFetch } from "./cloudflareCompatibility.js";
+import { createMistralFreeFetch } from "./mistralFree.js";
 import {
   createGroqBudgetedFetch,
   createProviderContextBudget,
@@ -77,12 +78,13 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env, opt
     apiKey: config.apiKey,
     ...(config.provider === "gemini" ? { fetch: createGeminiRateLimitedFetch(options.fetch) } :
       config.provider === "cloudflare" ? { fetch: createCloudflareCompatibleFetch(options.fetch) } :
+      config.provider === "mistral" ? { fetch: createMistralFreeFetch(options.fetch) } :
       contextBudget ? { fetch: createGroqBudgetedFetch(contextBudget, options.fetch) } :
       options.fetch ? { fetch: options.fetch } : {}),
     // OpenAI SDK retries 408/409/429/5xx with bounded backoff and Retry-After.
     // This is scoped to a failed model HTTP request; do not replay runner.run().
     // Free OpenRouter and Groq requests must not multiply on a quota/rate-limit failure.
-    maxRetries: (config.provider === "openrouter" || config.provider === "groq" || config.provider === "cloudflare") ? 0 : config.provider === "gemini" ? GEMINI_TRANSIENT_MAX_RETRIES : 2,
+    maxRetries: (config.provider === "openrouter" || config.provider === "groq" || config.provider === "cloudflare" || config.provider === "mistral") ? 0 : config.provider === "gemini" ? GEMINI_TRANSIENT_MAX_RETRIES : 2,
     baseURL: config.provider !== "openai" ? config.baseURL : "https://api.openai.com/v1",
   });
   // The SDK's shared runner/provider caches its first client. Each factory run

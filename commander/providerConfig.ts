@@ -11,6 +11,8 @@ export type ProviderEnvironment = {
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_MODEL?: string;
+  MISTRAL_API_KEY?: string;
+  MISTRAL_MODEL?: string;
 };
 
 export type ProviderConfig =
@@ -19,6 +21,7 @@ export type ProviderConfig =
   | { provider: "openrouter"; apiKey: string; model: string; baseURL: string }
   | { provider: "groq"; apiKey: string; model: string; baseURL: string }
   | { provider: "cloudflare"; apiKey: string; model: string; baseURL: string }
+  | { provider: "mistral"; apiKey: string; model: string; baseURL: string }
   | { provider: "none" };
 
 /** Allow only no-cost OpenRouter routes. Paid slugs must never reach the API. */
@@ -38,8 +41,17 @@ function openRouterConfig(env: ProviderEnvironment, key: string): ProviderConfig
 /** Explicit provider selection never falls back or resumes an interrupted agent run. */
 export function selectProviderConfig(env: ProviderEnvironment): ProviderConfig {
   const selected = env.AGENT_FACTORY_PROVIDER?.trim();
-  if (selected && selected !== "gemini" && selected !== "openai" && selected !== "openrouter" && selected !== "groq" && selected !== "cloudflare") {
-    throw new Error("AGENT_FACTORY_PROVIDER must be gemini, openai, openrouter, groq or cloudflare.");
+  if (selected && selected !== "gemini" && selected !== "openai" && selected !== "openrouter" && selected !== "groq" && selected !== "cloudflare" && selected !== "mistral") {
+    throw new Error("AGENT_FACTORY_PROVIDER must be gemini, openai, openrouter, groq, cloudflare or mistral.");
+  }
+
+  // Mistral is opt-in; Free-mode eligibility must be verified in the Mistral account.
+  if (selected === "mistral") {
+    const apiKey = env.MISTRAL_API_KEY?.trim();
+    if (!apiKey) return { provider: "none" };
+    const model = env.MISTRAL_MODEL?.trim() || "mistral-small-latest";
+    if (model !== "mistral-small-latest") throw new Error("MISTRAL_MODEL must be the reviewed small model. Arbitrary routes are disabled.");
+    return { provider: "mistral", apiKey, model, baseURL: "https://api.mistral.ai/v1" };
   }
 
   // Explicit-only Cloudflare selection prevents its key changing legacy routing.
@@ -64,7 +76,7 @@ export function selectProviderConfig(env: ProviderEnvironment): ProviderConfig {
   }
 
   const geminiApiKey = env.GEMINI_API_KEY?.trim();
-  if (geminiApiKey && selected !== "openai" && selected !== "openrouter" && selected !== "groq" && selected !== "cloudflare") {
+  if (geminiApiKey && selected !== "openai" && selected !== "openrouter" && selected !== "groq" && selected !== "cloudflare" && selected !== "mistral") {
     return {
       provider: "gemini",
       apiKey: geminiApiKey,
@@ -74,7 +86,7 @@ export function selectProviderConfig(env: ProviderEnvironment): ProviderConfig {
   }
 
   const openAiApiKey = env.OPENAI_API_KEY?.trim();
-  if (openAiApiKey && selected !== "gemini" && selected !== "openrouter" && selected !== "groq" && selected !== "cloudflare") {
+  if (openAiApiKey && selected !== "gemini" && selected !== "openrouter" && selected !== "groq" && selected !== "cloudflare" && selected !== "mistral") {
     const model = env.OPENAI_MODEL?.trim();
     return { provider: "openai", apiKey: openAiApiKey, ...(model ? { model } : {}) };
   }
@@ -89,6 +101,7 @@ export function selectProviderConfig(env: ProviderEnvironment): ProviderConfig {
 
 export function providerRequirementMessage(env: ProviderEnvironment): string {
   const selected = env.AGENT_FACTORY_PROVIDER?.trim();
+  if (selected === "mistral") return "The selected Mistral provider requires MISTRAL_API_KEY in the Agent Factory runtime.";
   if (selected === "cloudflare") return "The selected Cloudflare provider requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the Agent Factory runtime.";
   if (selected === "groq") return "The selected Groq provider requires GROQ_API_KEY in the Agent Factory runtime.";
   if (selected === "openai") return "The selected OpenAI provider requires OPENAI_API_KEY in the Agent Factory runtime.";

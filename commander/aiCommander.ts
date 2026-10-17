@@ -35,13 +35,15 @@ export type AiCommanderOptions = {
   specialistSelections?: AiExecutionOptions["specialistSelections"];
   /** Host-only turn budget for an explicitly scoped synthetic multi-agent proof. */
   maxTurns?: number;
+  /** Host-supplied offline test transport. Never read from model messages or prompts. */
+  modelFetch?: typeof fetch;
 };
 
 /** Fresh executable tools and evidence state for each task. */
 function createAiCommanderExecution(goal: string, options: AiCommanderOptions = {}) {
   const env = options.env ?? process.env;
   const legalEnabled = legalAgentEnabled(env);
-  const provider = configureModelProvider(env);
+  const provider = configureModelProvider(env, options.modelFetch ? { fetch: options.modelFetch } : {});
   const contextBudget = provider.provider !== "none" ? provider.contextBudget : undefined;
   const runner = new Runner(provider.provider !== "none" ? { modelProvider: provider.modelProvider } : {});
   const modelOptions = options.model ? { model: options.model } : provider.provider !== "none" && provider.model ? { model: provider.model } : {};
@@ -72,7 +74,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   // No optional specialist fanout, Coder or publication routes; this bounds
   // consumption and preserves the three independent Explorer/Security/Tester gates.
   const compactFreeAudit = auditOnly && (provider.provider === "cloudflare" ||
-    provider.provider === "groq" || provider.provider === "openrouter");
+    provider.provider === "groq" || provider.provider === "openrouter" || provider.provider === "mistral");
   let generationContext = (): string => { throw new Error("Coder requires successful repository exploration first."); };
   const configuredDependencies: AiExecutionDependencies = options.dependencies ?? {
     getHead: getBaseHead,
