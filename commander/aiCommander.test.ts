@@ -465,3 +465,22 @@ test("temporary legal switch removes the tool and required actor while exposing 
   assert.match(enabled.prompt, /rasul_legal_compliance/);
   assert.throws(() => createAiCommander(goal, {env:{AGENT_FACTORY_LEGAL_ENABLED:"invalid"}}), /must be true or false/);
 });
+
+
+test("Cloudflare read-only audit exposes one host tool instead of costly specialists", () => {
+  const execution = createAiCommander("Audit Onay repository main. Read-only audit.", {
+    env: {
+      AGENT_FACTORY_PROVIDER: "cloudflare",
+      CLOUDFLARE_API_TOKEN: "offline-fixture",
+      CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
+      AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false",
+      AGENT_FACTORY_LEGAL_ENABLED: "false",
+    },
+  });
+  assert.equal(execution.provider, "cloudflare");
+  const names = execution.commander.tools.map(item => item.name);
+  assert.deepEqual(names, ["audit_onay_read_only"]);
+  assert.deepEqual(execution.session.options.requiredActors, ["explorer", "tester", "security"]);
+  assert.equal(execution.session.options.auditOnly, true);
+});
