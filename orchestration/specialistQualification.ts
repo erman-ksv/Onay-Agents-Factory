@@ -106,14 +106,26 @@ export function safeFailureMetadata(error: unknown) {
     "AuthenticationError", "PermissionDeniedError", "BadRequestError", "InternalServerError",
     "MaxTurnsExceededError", "ModelBehaviorError", "UserError"];
   const kind = typeof record.name === "string" && knownNames.includes(record.name) ? record.name : "unknown";
-  return { kind, ...(status === undefined ? {} : { httpStatus: status }) };
+  const apiError = record.error && typeof record.error === "object" ? record.error as Record<string, unknown> : {};
+  const metadata = apiError.metadata && typeof apiError.metadata === "object" ? apiError.metadata as Record<string, unknown> : {};
+  const diagnosticText = [record.message, apiError.message, metadata.raw, metadata.limit_source]
+    .filter((x): x is string => typeof x === "string").map(x => x.slice(0, 16000)).join("\n");
+  const limitKind = /per[-_ ]?day|daily|RequestsPerDay/i.test(diagnosticText) ? "daily-quota" :
+    /per[-_ ]?min|requests.per.minute|rate.limit.*minute/i.test(diagnosticText) ? "per-minute" :
+    /upstream|temporarily rate.limited|provider.shared.pool/i.test(diagnosticText) ? "upstream-capacity" : undefined;
+  const headers = record.headers;
+  const retryValue = headers && typeof headers === "object" && "get" in headers && typeof headers.get === "function"
+    ? headers.get("retry-after") : undefined;
+  const retrySeconds = typeof retryValue === "string" && /^\d{1,6}$/.test(retryValue) ? Number(retryValue) : undefined;
+  return { kind, ...(status === undefined ? {} : { httpStatus: status }),
+    ...(limitKind ? { limitKind } : {}), ...(retrySeconds === undefined ? {} : { retryAfterSeconds: retrySeconds }) };
 }
 
 export class QualificationFailure extends Error {
   constructor(
     readonly caseId: string,
     readonly stage: "provider" | "assessment",
-    readonly detail: { kind: string; httpStatus?: number },
+    readonly detail: ReturnType<typeof safeFailureMetadata>,
   ) {
     super("Qualification stopped at " + caseId + " during " + stage + ".");
     this.name = "QualificationFailure";
@@ -159,4 +171,20 @@ export function qualificationEnvironment(source: NodeJS.ProcessEnv): NodeJS.Proc
   const config = selectProviderConfig(env);
   if (config.provider === "none") throw new Error("Selected qualification provider key is missing.");
   return env;
+}
+
+/** Space successful case attempts; never retry a rejected model request. */
+export function createQualificationPacer(
+  intervalMs: number,
+  sleep: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  report: (ms: number) => void = () => {},
+) {
+  if (!Number.isSafeInteger(intervalMs) || intervalMs < 0 || intervalMs > 60_000) {
+    throw new Error("Qualification interval must be 0..60000 milliseconds.");
+  }
+  let first = true;
+  return async () => {
+    if (first) { first = false; return; }
+    if (intervalMs) { report(intervalMs); await sleep(intervalMs); }
+  };
 }

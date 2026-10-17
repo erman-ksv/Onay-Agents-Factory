@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment } from "./specialistQualification.js";
+import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer } from "./specialistQualification.js";
 
 test("qualification covers every advisory role with faulty and corrected cases", () => {
   const roles = ["backend", "database", "frontend", "dispatch", "product", "ux", "legal", "devops"];
@@ -98,4 +98,35 @@ test("qualification honors explicit free OpenRouter and never falls back to Gemi
     AGENT_FACTORY_PROVIDER: "openai", OPENAI_API_KEY: "fixture",
   }), /only Gemini or free OpenRouter/);
   assert.equal(qualificationEnvironment({GEMINI_API_KEY: "fixture"}).AGENT_FACTORY_PROVIDER, "gemini");
+});
+
+test("pacing waits between cases without duplicating provider calls", async () => {
+  const waits: number[] = [];
+  const notices: number[] = [];
+  const pace = createQualificationPacer(60000, async ms => { waits.push(ms); }, ms => notices.push(ms));
+  let calls = 0;
+  const result = await runQualification(async () => {
+    await pace();
+    calls++;
+    return '{"ready":true,"findings":[]}';
+  });
+  assert.equal(calls, 16);
+  assert.equal(waits.length, 15);
+  assert.deepEqual(waits, Array(15).fill(60000));
+  assert.deepEqual(notices, waits);
+  assert.equal(result.passed, false); // Pacing cannot turn wrong answers green.
+  assert.throws(() => createQualificationPacer(-1));
+  assert.throws(() => createQualificationPacer(60001));
+});
+test("rate limit metadata remains safe and does not mistake unknown 429 for a daily cap", () => {
+  const daily = safeFailureMetadata({status: 429, error: {metadata: {raw: "limit free-models-per-day; secret-value"}}});
+  assert.equal(daily.limitKind, "daily-quota");
+  const minute = safeFailureMetadata({status: 429, message: "limit free-models-per-min"});
+  assert.equal(minute.limitKind, "per-minute");
+  const upstream = safeFailureMetadata({status: 429, error: {metadata: {raw: "temporarily rate-limited upstream; secret-value"}}});
+  assert.equal(upstream.limitKind, "upstream-capacity");
+  assert.equal(safeFailureMetadata({status: 429}).limitKind, undefined);
+  assert.ok(!JSON.stringify([daily, upstream]).includes("secret-value"));
+  assert.equal(safeFailureMetadata({headers: new Headers({"retry-after":"60"})}).retryAfterSeconds, 60);
+  assert.equal(safeFailureMetadata({headers: new Headers({"retry-after":"secret-value"})}).retryAfterSeconds, undefined);
 });

@@ -5,7 +5,7 @@
 import { Agent, Runner } from "@openai/agents";
 import { ROLE_SKILLS } from "../commander/skills.js";
 import { configureModelProvider } from "../commander/modelProvider.js";
-import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment } from "./specialistQualification.js";
+import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer } from "./specialistQualification.js";
 
 async function main() {
   const env = qualificationEnvironment(process.env);
@@ -14,7 +14,10 @@ async function main() {
   console.log("PROVIDER:", provider.provider, "MODEL:", provider.model);
   const runner = new Runner({ modelProvider: provider.modelProvider });
   console.log("SYNTHETIC ROLE QUALIFICATION: 16 cases; 8 advisory profiles; no application source or GitHub writes.");
+  const pace = createQualificationPacer(provider.provider === "openrouter" ? 60_000 : 0, undefined,
+    ms => console.log("WAIT:", ms / 1000, "seconds before next case; no request retry."));
   const result = await runQualification(async (fixture, prompt) => {
+    await pace();
     console.log("START:", fixture.id, fixture.role);
     const agent = new Agent({
       name: "Onay " + fixture.role + " Specialist",
