@@ -484,3 +484,41 @@ test("Cloudflare read-only audit exposes one host tool instead of costly special
   assert.deepEqual(execution.session.options.requiredActors, ["explorer", "tester", "security"]);
   assert.equal(execution.session.options.auditOnly, true);
 });
+
+
+test("Groq free audit exposes only the bounded host audit tool, with budget enabled", () => {
+  const execution = createAiCommander("Audit Onay repository main. Read-only audit.", {
+    env: {
+      AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "offline-fixture",
+      GROQ_MODEL: "qwen/qwen3-8b",
+      AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false",
+      AGENT_FACTORY_LEGAL_ENABLED: "false",
+    },
+  });
+  assert.equal(execution.provider, "groq");
+  assert.deepEqual(execution.commander.tools.map(item => item.name), ["audit_onay_read_only"]);
+  assert.deepEqual(execution.session.options.requiredActors, ["explorer", "tester", "security"]);
+  assert.equal(execution.session.options.auditOnly, true);
+  assert.ok(execution.contextBudget, "Groq shared conservative TPM/context limit stays active");
+});
+
+test("Groq change requests retain normal specialist tools and cannot use compact audit shortcut", () => {
+  const execution = createAiCommander("Implement Onay passenger registration", {
+    env: {
+      AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "offline-fixture",
+      GROQ_MODEL: "qwen/qwen3-8b",
+      AGENT_ALLOWED_REPOSITORIES: "erman-ksv/Onay",
+      AGENT_FACTORY_LEGAL_ENABLED: "false",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false",
+    },
+  });
+  const names = execution.commander.tools.map(item => item.name);
+  assert.ok(names.includes("explore_onay"));
+  assert.ok(names.includes("code_onay"));
+  assert.ok(names.includes("backend_specialist"));
+  assert.ok(names.includes("security_review"));
+  assert.ok(names.includes("test_onay"));
+  assert.ok(!names.includes("audit_onay_read_only"));
+  assert.ok(!names.includes("rasul_legal_compliance"));
+});
