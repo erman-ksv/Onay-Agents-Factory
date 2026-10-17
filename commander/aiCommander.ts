@@ -72,7 +72,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   // No optional specialist fanout, Coder or publication routes; this bounds
   // consumption and preserves the three independent Explorer/Security/Tester gates.
   const compactFreeAudit = auditOnly && (provider.provider === "cloudflare" ||
-    provider.provider === "groq" || provider.provider === "openrouter");
+    provider.provider === "groq" || provider.provider === "openrouter" || provider.provider === "mistral");
   let generationContext = (): string => { throw new Error("Coder requires successful repository exploration first."); };
   const configuredDependencies: AiExecutionDependencies = options.dependencies ?? {
     getHead: getBaseHead,
