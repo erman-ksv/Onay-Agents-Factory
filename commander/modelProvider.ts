@@ -6,6 +6,12 @@ import {
   setTracingDisabled,
 } from "@openai/agents";
 import { selectProviderConfig } from "./providerConfig.js";
+import {
+  createGroqBudgetedFetch,
+  createProviderContextBudget,
+  providerContextBudgetOptionsFromEnv,
+  type ProviderContextBudget,
+} from "./providerContextBudget.js";
 
 /** Retry only failed HTTP requests inside the provider client, never an entire agent run. */
 export const GEMINI_TRANSIENT_MAX_RETRIES = 4;
@@ -51,17 +57,30 @@ export function createGeminiRateLimitedFetch(
 }
 
 /** Configure the SDK for the current invocation, including provider switches. */
-export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
+export type ModelProviderOptions = {
+  /** One run-owned ledger shared by every Groq commander, Coder and specialist. */
+  contextBudget?: ProviderContextBudget;
+  /** Offline/in-process transport injection. Never changes the fixed provider endpoint. */
+  fetch?: typeof fetch;
+};
+
+export function configureModelProvider(env: NodeJS.ProcessEnv = process.env, options: ModelProviderOptions = {}) {
   const config = selectProviderConfig(env);
   if (config.provider === "none") return config;
 
+  const qualificationPayload = env.AGENT_FACTORY_GROQ_QUALIFICATION === "true";
+  const contextBudget = config.provider === "groq" ? (options.contextBudget ??
+    (qualificationPayload ? undefined : createProviderContextBudget(providerContextBudgetOptionsFromEnv(env)))) : undefined;
+
   const client = new OpenAI({
     apiKey: config.apiKey,
-    ...(config.provider === "gemini" ? { fetch: createGeminiRateLimitedFetch() } : {}),
+    ...(config.provider === "gemini" ? { fetch: createGeminiRateLimitedFetch(options.fetch) } :
+      contextBudget ? { fetch: createGroqBudgetedFetch(contextBudget, options.fetch) } :
+      options.fetch ? { fetch: options.fetch } : {}),
     // OpenAI SDK retries 408/409/429/5xx with bounded backoff and Retry-After.
     // This is scoped to a failed model HTTP request; do not replay runner.run().
-    // Free OpenRouter requests must not multiply on a quota/rate-limit failure.
-    maxRetries: config.provider === "openrouter" ? 0 : config.provider === "gemini" ? GEMINI_TRANSIENT_MAX_RETRIES : 2,
+    // Free OpenRouter and Groq requests must not multiply on a quota/rate-limit failure.
+    maxRetries: (config.provider === "openrouter" || config.provider === "groq") ? 0 : config.provider === "gemini" ? GEMINI_TRANSIENT_MAX_RETRIES : 2,
     baseURL: config.provider !== "openai" ? config.baseURL : "https://api.openai.com/v1",
   });
   // The SDK's shared runner/provider caches its first client. Each factory run
@@ -74,7 +93,7 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
   setDefaultOpenAIClient(client);
 
   if (config.provider !== "openai") {
-    // Gemini and OpenRouter expose OpenAI-compatible chat completions; don't send traces to OpenAI.
+    // Gemini, OpenRouter and Groq expose OpenAI-compatible chat completions; don't send traces to OpenAI.
     setOpenAIAPI("chat_completions");
     setTracingDisabled(true);
   } else {
@@ -82,5 +101,6 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env) {
     setOpenAIAPI("responses");
   }
 
-  return { ...config, modelProvider };
+  return { ...config, modelProvider, ...(contextBudget ? { contextBudget } : {}) };
 }
+

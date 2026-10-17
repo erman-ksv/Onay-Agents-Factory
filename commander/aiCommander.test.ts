@@ -447,3 +447,21 @@ test("private-source Commander does not echo generated complete files to Gemini"
   const toolResults = JSON.stringify(model.requests.slice(2));
   assert.doesNotMatch(toolResults, /PRIVATE_GENERATED_UI_ONLY_HOST_CAN_READ/);
 });
+
+
+
+test("temporary legal switch removes the tool and required actor while exposing disabled status", () => {
+  const goal = "Review Onay taxi legal compliance and privacy";
+  const disabled = createAiCommander(goal, {env:{AGENT_FACTORY_LEGAL_ENABLED:"false"},
+    specialistContextTransform:context => context});
+  assert.equal(disabled.legalReview, "disabled");
+  assert.ok(!disabled.commander.tools.some(tool => tool.name === "rasul_legal_compliance"));
+  assert.doesNotMatch(disabled.prompt, /rasul_legal_compliance/);
+  assert.match(disabled.prompt, /Legal review: DISABLED/);
+  assert.doesNotMatch(disabled.session.finish(undefined).reasons.join(" "), /\blegal\b/);
+  const enabled = createAiCommander(goal, {env:{}});
+  assert.equal(enabled.legalReview, "enabled");
+  assert.ok(enabled.commander.tools.some(tool => tool.name === "rasul_legal_compliance"));
+  assert.match(enabled.prompt, /rasul_legal_compliance/);
+  assert.throws(() => createAiCommander(goal, {env:{AGENT_FACTORY_LEGAL_ENABLED:"invalid"}}), /must be true or false/);
+});

@@ -1,12 +1,12 @@
 import { Agent, Runner } from "@openai/agents";
-import { configureModelProvider } from "../../commander/modelProvider.js";
+import { configureModelProvider, type ModelProviderOptions } from "../../commander/modelProvider.js";
 import { providerRequirementMessage } from "../../commander/providerConfig.js";
 
 export type ProposedChange = { path: string; content: string; message: string };
 export type CoderResult = { summary: string; files: ProposedChange[] };
 
-function createCoderExecution(env: NodeJS.ProcessEnv) {
-  const provider = configureModelProvider(env);
+function createCoderExecution(env: NodeJS.ProcessEnv, options: ModelProviderOptions = {}) {
+  const provider = configureModelProvider(env, options);
   if (provider.provider === "none") throw new Error(providerRequirementMessage(env));
   const coder = new Agent({
     ...(provider.model ? { model: provider.model } : {}),
@@ -28,8 +28,9 @@ export function createCoderAgent(env: NodeJS.ProcessEnv = process.env) {
   return createCoderExecution(env).coder;
 }
 
-export async function generateChanges(goal: string, repositoryContext: string, env: NodeJS.ProcessEnv = process.env): Promise<CoderResult> {
-  const { coder, runner } = createCoderExecution(env);
+export async function generateChanges(goal: string, repositoryContext: string, env: NodeJS.ProcessEnv = process.env,
+  options: ModelProviderOptions = {}): Promise<CoderResult> {
+  const { coder, runner } = createCoderExecution(env, options);
   const result = await runner.run(coder, `GOAL:\n${goal}\n\nREPOSITORY CONTEXT:\n${repositoryContext}`);
   const raw = String(result.finalOutput ?? "").trim();
   const cleaned = raw.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
