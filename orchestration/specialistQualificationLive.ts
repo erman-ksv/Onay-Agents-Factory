@@ -8,7 +8,7 @@ import { configureModelProvider } from "../commander/modelProvider.js";
 import { runQualification } from "./specialistQualification.js";
 
 async function main() {
-  const env = { ...process.env, AGENT_FACTORY_PROVIDER: "gemini" };
+  const env: NodeJS.ProcessEnv = { ...process.env, AGENT_FACTORY_PROVIDER: "gemini" };
   if (!env.GEMINI_API_KEY?.trim()) throw new Error("GEMINI_API_KEY missing.");
   const provider = configureModelProvider(env);
   if (provider.provider !== "gemini") throw new Error("Gemini provider required.");
