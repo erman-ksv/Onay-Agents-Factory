@@ -1,6 +1,8 @@
+import { Agent, Runner, setTracingDisabled } from "@openai/agents";
+import { configureModelProvider } from "../commander/modelProvider.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, QualificationTimeoutError } from "./specialistQualification.js";
+import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, QualificationTimeoutError, qualificationModelSettings } from "./specialistQualification.js";
 
 test("qualification covers every advisory role with faulty and corrected cases", () => {
   const roles = ["backend", "database", "frontend", "dispatch", "product", "ux", "legal", "devops"];
@@ -169,4 +171,35 @@ test("deadline stops a transport that ignores cancellation without starting anot
     return new Promise<string>(() => {});
   }, {timeoutMs: 10}), QualificationTimeoutError);
   assert.equal(calls, 1);
+});
+
+test("qualification tuning reaches the real SDK HTTP payload and stays scoped to Xing", async t => {
+  setTracingDisabled(true);
+  const bodies: Array<Record<string, unknown>> = [];
+  t.mock.method(globalThis, "fetch", async (_input: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    bodies.push(body);
+    return new Response(JSON.stringify({
+      id: "qualification-fixture", object: "chat.completion", created: 1, model: body.model,
+      choices: [{index: 0, message: {role: "assistant", content: '{"ready":true,"findings":[]}'}, finish_reason: "stop"}],
+      usage: {prompt_tokens: 10, completion_tokens: 10, total_tokens: 20},
+    }), {status: 200, headers: {"content-type":"application/json"}});
+  });
+  const model = "xingchen-agi/xing4.0-29b-a4b:free";
+  const provider = configureModelProvider({
+    AGENT_FACTORY_PROVIDER: "openrouter", OPENROUTER_API_KEY: "offline-fixture",
+    OPENROUTER_MODEL: model,
+  });
+  if (provider.provider !== "openrouter") throw new Error("Unexpected provider");
+  const runner = new Runner({modelProvider: provider.modelProvider});
+  const agent = new Agent({name: "Fixture", instructions: "Return JSON.", model,
+    modelSettings: qualificationModelSettings(provider.provider, model)});
+  const response = await runner.run(agent, "Fixture only", {maxTurns: 1});
+  assert.equal(parseAssessment(response.finalOutput).ready, true);
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0].max_tokens, 1024);
+  assert.deepEqual(bodies[0].reasoning, {enabled: false});
+  assert.equal(bodies[0].model, model);
+  assert.deepEqual(qualificationModelSettings("gemini", model), {});
+  assert.deepEqual(qualificationModelSettings("openrouter", "vendor/other:free"), {});
 });

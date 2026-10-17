@@ -230,3 +230,9 @@ export async function withQualificationDeadline<T>(
     clearInterval(heartbeat);
   }
 }
+
+/** Qualification tuning only for the model whose optional reasoning was checked. */
+export function qualificationModelSettings(provider: string, model?: string) {
+  if (provider !== "openrouter" || model !== "xingchen-agi/xing4.0-29b-a4b:free") return {};
+  return { maxTokens: 1024, providerData: { reasoning: { enabled: false } } };
+}
