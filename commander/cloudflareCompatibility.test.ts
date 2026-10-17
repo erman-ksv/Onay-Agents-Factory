@@ -57,7 +57,6 @@ test("normalizes SDK text arrays and developer instructions without changing too
 
 test("rejects non-text multimodal parts and unsafe completion counts without network access", async () => {
   let calls = 0;
-  const wrapped = createCloudflareCompatibleFetch(async () => { calls++; return new Response("unused"); });
   for (const payload of [
     { messages: [msg([{ type: "image_url", image_url: { url: "private" } }])] },
     { messages: [msg({ type: "text", text: "unsupported" })] },
@@ -65,7 +64,10 @@ test("rejects non-text multimodal parts and unsafe completion counts without net
     { messages: [] },
     { messages: [msg("ok")], max_tokens: -1 },
   ]) {
+    // Each invalid payload is a separate run; one unsafe payload permanently blocks its run.
+    const wrapped = createCloudflareCompatibleFetch(async () => { calls++; return new Response("unused"); });
     assert.equal((await req(wrapped, payload)).status, 400);
+    assert.equal((await req(wrapped, { messages: [msg("safe")] })).status, 429);
   }
   assert.equal(calls, 0);
 });
