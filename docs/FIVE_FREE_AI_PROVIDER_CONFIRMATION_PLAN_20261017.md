@@ -16,7 +16,7 @@ Status: ACTIVE PLAN. Cloudflare and Groq VERIFIED (2/5). OpenRouter latest live 
 | 2 | Groq | **CONFIRMED (2/5)**. 2026-10-17 22:28 +05:00 user Codespaces screenshot on `feat/groq-compact-audit-20261017`: live read-only Commander `STATUS: completed`, `SECURITY: clean`, `TESTS: true`, `MISSING: []`, `REASONS: []`, `PROVIDER_FAILURE: NONE`. Groq Qwen3 previous synthetic specialists 14/14 and CI `f6f25cf76f445d29a1f1c1116ce59e0953fec41d` PASS: https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/39053542927 . Read-only audit only, not proven AI Coder or deployment readiness. | Preserve evidence and free-tier quota; no need to repeat Groq live audit |
 | 3 | Gemini | Provider implemented; previous free daily quota exhausted; **full live run not verified** | Resume only after observed free quota reset; no paid fallback |
 | 4 | OpenRouter | **BLOCKED — HTTP 429 again**. 2026-10-17 ~22:34 +05:00 live `openrouter/free` read-only audit screenshot: `STATUS: blocked`, `TESTS: false`, `MISSING: [explorer,tester,security]`, `REASONS` includes `429 Provider returned error` and no final explanation, `PROVIDER_FAILURE: NONE`. The exact cause of 429 (per-minute, daily quota, upstream limit) has NOT been verified; CI on `71768916d3dcb07102cc847f3ca55f440abec1fc` PASS. **Do not count as confirmed.** | Do not retry blindly; retain blocker and review precise free quota/settings when it changes |
-| 5 | Mistral AI | Not yet integrated or keyed; **not verified** | Set up Free mode (official docs: no card); add free-only adapter and offline tests; verify function calling and a bounded read-only audit |
+| 5 | Mistral AI | Key created by user, Codespaces secret `MISTRAL_API_KEY` reported added, Draft PR #47 has pinned small-model adapter, 4-call request cap, no retries, and compact audit. **Live audit NOT VERIFIED**; free plan/billing setting still requires user confirmation. | Check PR #47 exact-head CI; then one bounded live read-only Commander audit only under Free plan |
 
 Alternative candidate if a proposed provider cannot be used at no cost: Cohere free trial key, subject to account availability and trial usage restrictions. Do not quietly substitute or falsely mark the failed provider as qualified.
 
@@ -54,7 +54,8 @@ The goal is **5/5 confirmed**, not 5 configured keys. **Confirmed provider tally
 - [x] Complete Groq free-tier live read-only Commander audit: screenshot at 22:28 +05:00 shows completed + clean + exact-commit TESTS true, no missing actors/reasons/provider failure.
 - [ ] Verify Gemini free quota and live audit or retain BLOCKED.
 - [x] Verify OpenRouter current free API behaviour: one live read-only audit at ~22:34 +05:00 BLOCKED with HTTP 429 before Explorer/Tester/Security. Leave unconfirmed until quotas become available, no blind retries.
-- [ ] Add and qualify Mistral Free as the fifth provider (requires user to create API key in Codespaces).
+- [x] User created Mistral key and added `MISTRAL_API_KEY` Codespaces secret; adapter and tests in Draft PR #47.
+- [ ] Confirm Mistral Studio remains on Free with no pay-as-you-go, obtain CI PASS, then one bounded live audit. Until then Mistral is not qualified.
 - [ ] Publish final provider scorecard, including 5/5 or explicit remaining blockers with supporting run links.
 
 ## Confirmation ledger (user-visible evidence)
