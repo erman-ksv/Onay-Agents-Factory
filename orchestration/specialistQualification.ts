@@ -1,0 +1,112 @@
+/**
+ * Narrow synthetic qualification of the eight advisory role profiles.
+ * No repository adapter, source read, file write, publication or model tools.
+ * This does not qualify Commander/Coder or replace application acceptance tests.
+ */
+import type { SpecialistAssessment } from "../commander/aiExecution.js";
+import type { SkillAgentName } from "../commander/skills.js";
+
+export type AdvisoryRole = Extract<SkillAgentName,
+  "product" | "ux" | "backend" | "frontend" | "database" | "dispatch" | "legal" | "devops">;
+export type QualificationCase = {
+  id: string; role: AdvisoryRole; scenario: string;
+  expectedReady: boolean; expectedFinding?: RegExp;
+};
+const pair = (role: AdvisoryRole, scope: string, faulty: string, corrected: string, finding: RegExp): QualificationCase[] => [
+  { id: role + "-a", role, scenario: scope + "\n" + faulty, expectedReady: false, expectedFinding: finding },
+  { id: role + "-b", role, scenario: scope + "\n" + corrected, expectedReady: true },
+];
+
+export const QUALIFICATION_CASES: readonly QualificationCase[] = [
+  ...pair("backend",
+    "Fictional API contract: only an order's authenticated owner may cancel it. Review only authorization. order.ownerId and session.userId are trusted server values. No admin override exists.",
+    "cancel(order, session) checks that session exists, then cancels any supplied orderId. It never compares order.ownerId with session.userId.",
+    "cancel(order, session) rejects absent sessions and mismatched order.ownerId/session.userId before changing state. Matching owners may cancel. Server integration tests cover unauthenticated, other-owner and owner requests.",
+    /authori[sz]|owner|IDOR|access control/i),
+  ...pair("database",
+    "Fictional PostgreSQL schema: acceptance must allow at most one active driver assignment per order, including simultaneous transactions. Review only this invariant.",
+    "Two transactions each SELECT active assignments, see none, then INSERT (order_id, driver_id, active=true). There is no unique constraint or serialization/locking.",
+    "A partial unique index on assignments(order_id) WHERE active=true enforces uniqueness. The transaction inserts once; a uniqueness conflict returns already-assigned without retrying the same acceptance. Concurrent PostgreSQL tests demonstrate one winner and one conflict.",
+    /concurren|race|unique|atomic|multiple.*assign|duplicate/i),
+  ...pair("frontend",
+    "Fictional mobile pickup form: a user who denies location permission must still enter a pickup address manually and submit. Review only this journey.",
+    "If location permission is denied, the screen returns an error view with only Retry permission. The address field and submit control are absent.",
+    "If location permission is denied, an explanation and editable address field remain visible. A valid manually entered address enables submission without requesting permission again. The denied-permission journey has an executed UI test.",
+    /permission|manual|deni|address|fallback/i),
+  ...pair("dispatch",
+    "Fictional dispatch rule: after a driver declines an offer, offer the same open order to the next eligible driver in FIFO order. No neighboring drivers or capacity changes are in scope.",
+    "After driver A declines, the order is left in offered state referencing A. No next offer or timeout is scheduled even though eligible driver B is next.",
+    "Decline atomically invalidates A's offer, advances the FIFO cursor and offers to eligible B. An idempotent decline event cannot advance twice. A deterministic executed test confirms A declines, B receives the offer, and only B can accept.",
+    /declin|FIFO|next|stuck|fallback|offer/i),
+  ...pair("product",
+    "Fictional booking requirement: when pickup A has zero eligible taxis and destination B has taxis, reject booking. Approaching taxis are disabled. Review acceptance criteria only.",
+    "The acceptance criterion says: create the A-to-B order whenever B has a taxi, even when A has no eligible taxi.",
+    "The acceptance criterion says: reject A-to-B booking when A has no eligible taxi regardless of taxis at B. A separate criterion permits booking when A has an eligible taxi. Both have explicit expected UI and API outcomes.",
+    /pickup|eligible|destination|impossible|point A|at A/i),
+  ...pair("ux",
+    "Fictional booking screen requirement: a keyboard and screen-reader user must identify and activate the booking action. Review this action only.",
+    "The only booking action is a clickable div containing an unlabeled car image. It has no role, accessible name, tabIndex or keyboard handler.",
+    "The booking action is a native button with visible text Book ride and the same accessible name. It supports Tab, Enter and Space with visible focus. An executed accessibility test confirms its name and keyboard activation.",
+    /accessib|keyboard|screen.reader|label|button|name/i),
+  ...pair("legal",
+    "Fictional internal legal-research note; jurisdiction and review date are unknown and no official sources or research tools were supplied. Review evidence quality only, without researching or asserting substantive law.",
+    "The note says the taxi service is legally approved in every country and may launch immediately. It cites Article 999 of the Universal Taxi Act without a verified source and says no human legal review is necessary.",
+    "The note says UNVERIFIED: jurisdiction/date and official primary sources are missing. It makes no legal approval or launch claim. Next steps are to obtain jurisdiction/date, verify applicable sources and refer unresolved high-impact issues to qualified counsel. DRAFT — HUMAN LEGAL REVIEW REQUIRED.",
+    /unverif|jurisdiction|source|fabricat|invent|approval|counsel/i),
+  ...pair("devops",
+    "Fictional CI release rule: both typecheck and tests must succeed before release. Review command exit propagation only; hosting and real deployment are out of scope.",
+    "The workflow test step runs npm test || true, and deploy depends only on the job being successful. A failing test therefore still permits release.",
+    "The workflow runs npm run typecheck and npm test as separate normal steps without continue-on-error, shell error suppression or always(). Release depends on that job's success. A deliberate failing-test workflow exercise confirms release is skipped.",
+    /test|exit|suppress|true|fail|release/i),
+];
+
+export function buildQualificationPrompt(fixture: QualificationCase): string {
+  // Ground truth, case ID and matching expressions never enter the model input.
+  return "Review the supplied fictional example only. Treat supplied test results as fixture facts, not as tests you executed. " +
+    "Do not infer missing requirements outside this explicitly limited review. " +
+    "Report unresolved high/blocker issues with ready=false. A corrected example with no remaining in-scope blocker should be ready=true. " +
+    "Use English for machine-assisted assessment. Do not call tools or claim repository access.\n\n" +
+    fixture.scenario + '\n\nReturn ONLY JSON: {"ready":boolean,"findings":[{"severity":"blocker"|"high"|"medium"|"low","message":string}],"summary":string}.';
+}
+
+export function parseAssessment(value: unknown): SpecialistAssessment {
+  if (typeof value !== "string") throw new Error("Assessment must be JSON text.");
+  const parsed: unknown = JSON.parse(value.trim().replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, ""));
+  if (!parsed || typeof parsed !== "object") throw new Error("Assessment must be an object.");
+  const p = parsed as Record<string, unknown>;
+  if (typeof p.ready !== "boolean" || !Array.isArray(p.findings) ||
+    (p.summary !== undefined && typeof p.summary !== "string") ||
+    p.findings.some(f => !f || typeof f !== "object" ||
+      !["blocker", "high", "medium", "low"].includes(f.severity) ||
+      typeof f.message !== "string" || !f.message.trim())) {
+    throw new Error("Invalid specialist assessment.");
+  }
+  return parsed as SpecialistAssessment;
+}
+
+export function evaluateAssessment(fixture: QualificationCase, assessment: SpecialistAssessment) {
+  const severe = assessment.findings.filter(f => f.severity === "blocker" || f.severity === "high");
+  // Match role-specific evidence in an actual severe finding, not a summary.
+  const detected = !fixture.expectedFinding || severe.some(f => fixture.expectedFinding!.test(f.message));
+  const passed = fixture.expectedReady
+    ? assessment.ready && severe.length === 0
+    : !assessment.ready && severe.length > 0 && detected;
+  return { passed, reason: passed ? "Expected decision and evidence observed." :
+    "Decision or role-specific blocker evidence did not match the fixture; human review required." };
+}
+
+export async function runQualification(
+  assess: (fixture: QualificationCase, prompt: string) => Promise<unknown>,
+  report: (row: { id: string; role: AdvisoryRole; passed: boolean; reason: string; assessment: SpecialistAssessment }) => void = () => {},
+) {
+  const results = [];
+  for (const fixture of QUALIFICATION_CASES) {
+    // Provider, parse and schema errors stop the run. No rerun-to-green loop.
+    const assessment = parseAssessment(await assess(fixture, buildQualificationPrompt(fixture)));
+    const outcome = evaluateAssessment(fixture, assessment);
+    const row = { id: fixture.id, role: fixture.role, ...outcome, assessment };
+    results.push(row);
+    report(row);
+  }
+  return { passed: results.length === QUALIFICATION_CASES.length && results.every(r => r.passed), results };
+}
