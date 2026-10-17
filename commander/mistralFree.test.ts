@@ -60,3 +60,36 @@ test("Mistral SDK client uses selected provider",()=>{
  assert.equal(e.provider,"mistral");
  if(e.provider==="mistral")assert.equal(e.model,"mistral-small-latest");
 });
+
+
+test("Mistral concurrent calls are serialized, safely paced and never retried",async()=>{
+ let active=0,maxActive=0,calls=0;
+ const observed: Array<{requestNumber:number;bytes:number;status:number;waitedMs:number}>=[];
+ const fn=createMistralFreeFetch(async()=>{active++;maxActive=Math.max(maxActive,active);calls++;await new Promise<void>(resolve=>setTimeout(resolve,5));active--;return Response.json({choices:[]});},
+   {maxCalls:2,minIntervalMs:20,onDiagnostic:v=>observed.push(v)});
+ const [a,b]=await Promise.all([send(fn),send(fn)]);
+ assert.equal(a.status,200);assert.equal(b.status,200);
+ assert.equal(maxActive,1);assert.equal(calls,2);
+ assert.deepEqual(observed.map(v=>v.requestNumber),[1,2]);
+ assert.ok(observed[1].waitedMs>0);
+});
+
+test("Mistral cumulative request-size budget stops before network",async()=>{
+ let calls=0;
+ const bytes=Buffer.byteLength(JSON.stringify(body));
+ const fn=createMistralFreeFetch(async()=>{calls++;return Response.json({choices:[]});},{maxTotalBytes:bytes+250,maxCalls:4,minIntervalMs:0});
+ assert.equal((await send(fn)).status,200);
+ assert.equal((await send(fn)).status,400);
+ assert.equal(calls,1);
+});
+
+test("Mistral request diagnostics contain metadata only, never keys or private source",async()=>{
+ const recorded: unknown[]=[];
+ const fn=createMistralFreeFetch(async()=>new Response("restricted", {status:429}),
+   {minIntervalMs:0,onDiagnostic:info=>recorded.push(info)});
+ await send(fn,{...body,messages:[{role:"user",content:"private Onay data SECRET"}]});
+ assert.equal(recorded.length,1);
+ assert.deepEqual(Object.keys(recorded[0] as object).sort(),["bytes","requestNumber","status","waitedMs"]);
+ assert.equal((recorded[0] as {status:number}).status,429);
+ assert.doesNotMatch(JSON.stringify(recorded),/SECRET|private Onay/);
+});
