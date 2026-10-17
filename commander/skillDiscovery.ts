@@ -64,7 +64,11 @@ export async function searchSkillCatalog(
     if (!entry || typeof entry !== "object") continue;
     const skill = entry as Record<string, unknown>;
     const source = typeof skill.source === "string" ? skill.source : "";
-    const slug = typeof skill.id === "string" ? skill.id : "";
+    const id = typeof skill.id === "string" ? skill.id : "";
+    // The live skills.sh API uses a full "{owner}/{repo}/{skill}" ID.
+    // Also accept a short slug to stay compatible with older catalog payloads.
+    // Never trust an ID that points to a different source.
+    const slug = id.startsWith(source + "/") ? id.slice(source.length + 1) : id;
     if (!SOURCE.test(source) || !SLUG.test(slug) || seen.has(source + "/" + slug)) continue;
     const name = cleanLabel(skill.name) || slug;
     const installs = typeof skill.installs === "number" && Number.isSafeInteger(skill.installs) &&
@@ -72,6 +76,9 @@ export async function searchSkillCatalog(
     results.push({ name, source, slug, installs, url: "https://skills.sh/" + source + "/" + slug });
     seen.add(source + "/" + slug);
     if (results.length >= MAX_RESULTS) break;
+  }
+  if (payload.skills.length > 0 && results.length === 0) {
+    throw new Error("skills.sh returned entries but none matched the verified GitHub ID format.");
   }
   return { query, registry: "skills.sh", installationEnabled: false, contentReviewed: false, skills: results };
 }
