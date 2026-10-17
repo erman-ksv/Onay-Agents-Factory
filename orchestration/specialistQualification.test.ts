@@ -1,8 +1,9 @@
+import { buildSpecialistInstructions, SPECIALIST_REVIEW_CONTRACT, ROLE_SKILLS } from "../commander/skills.js";
 import { Agent, Runner, setTracingDisabled } from "@openai/agents";
 import { configureModelProvider } from "../commander/modelProvider.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, QualificationTimeoutError, qualificationModelSettings } from "./specialistQualification.js";
+import { QUALIFICATION_CASES, buildQualificationPrompt, evaluateAssessment, parseAssessment, runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, QualificationTimeoutError, qualificationModelSettings, qualificationProbeCase } from "./specialistQualification.js";
 
 test("qualification covers every advisory role with faulty and corrected cases", () => {
   const roles = ["backend", "database", "frontend", "dispatch", "product", "ux", "legal", "devops"];
@@ -193,7 +194,7 @@ test("qualification tuning reaches the real SDK HTTP payload and stays scoped to
   if (provider.provider !== "openrouter") throw new Error("Unexpected provider");
   const runner = new Runner({modelProvider: provider.modelProvider});
   const modelObject = await provider.modelProvider.getModel(model);
-  const agent = new Agent({name: "Fixture", instructions: "Return JSON.", model: modelObject,
+  const agent = new Agent({name: "Fixture", instructions: buildSpecialistInstructions("backend"), model: modelObject,
     modelSettings: qualificationModelSettings(provider.provider, model)});
   const response = await runner.run(agent, "Fixture only", {maxTurns: 1});
   assert.equal(parseAssessment(response.finalOutput).ready, true);
@@ -201,6 +202,23 @@ test("qualification tuning reaches the real SDK HTTP payload and stays scoped to
   assert.equal(bodies[0].max_tokens, 1024);
   assert.deepEqual(bodies[0].reasoning, {enabled: false});
   assert.equal(bodies[0].model, model);
+  assert.ok((bodies[0].messages as Array<{content: unknown}>).some(message =>
+    typeof message.content === "string" && message.content.includes(SPECIALIST_REVIEW_CONTRACT.trim())));
   assert.deepEqual(qualificationModelSettings("gemini", model), {});
   assert.deepEqual(qualificationModelSettings("openrouter", "vendor/other:free"), {});
+});
+
+test("shared specialist contract preserves domain skills and requires demonstrated blocker evidence", () => {
+  for (const role of ["backend","database","frontend","dispatch","product","ux","legal","devops"] as const) {
+    const instructions = buildSpecialistInstructions(role);
+    assert.ok(instructions.startsWith(ROLE_SKILLS[role]));
+    assert.ok(instructions.includes(SPECIALIST_REVIEW_CONTRACT));
+    assert.ok(!instructions.includes("backend-b"));
+    assert.ok(!instructions.includes("expectedReady"));
+  }
+});
+test("single-case probes select existing fixtures without inventing cases or full qualification", () => {
+  assert.equal(qualificationProbeCase(), undefined);
+  for (const fixture of QUALIFICATION_CASES) assert.equal(qualificationProbeCase(fixture.id), fixture);
+  assert.throws(() => qualificationProbeCase("unknown"), /Unknown/);
 });

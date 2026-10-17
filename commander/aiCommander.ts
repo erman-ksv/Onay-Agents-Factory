@@ -1,6 +1,6 @@
 import { Agent, Runner, tool, type Tool, type Model } from "@openai/agents";
 import { z } from "zod";
-import { ROLE_SKILLS } from "./skills.js";
+import { buildSpecialistInstructions } from "./skills.js";
 import { buildCommanderPrompt, COMMANDER_TOOL_NAMES } from "./buildCommanderPrompt.js";
 import { configureModelProvider } from "./modelProvider.js";
 import { providerRequirementMessage } from "./providerConfig.js";
@@ -136,7 +136,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   ];
   const advisoryRoles = ["backend", "frontend", "database", "dispatch", "legal", "devops", "product", "ux"] as const;
   for (const role of advisoryRoles) {
-    const specialist = new Agent({ name: "Onay " + role + " Specialist", ...modelOptions, instructions: ROLE_SKILLS[role] });
+    const specialist = new Agent({ name: "Onay " + role + " Specialist", ...modelOptions, instructions: buildSpecialistInstructions(role) });
     const name = COMMANDER_TOOL_NAMES[role];
     tools.push(tool({
       name, description: "Ask the " + role + " specialist to review actual repository context and proposed changes. Advice does not prove writes or tests.",

@@ -3,9 +3,9 @@
  * Sends only synthetic text. No GitHub token or write permissions required.
  */
 import { Agent, Runner } from "@openai/agents";
-import { ROLE_SKILLS } from "../commander/skills.js";
+import { buildSpecialistInstructions } from "../commander/skills.js";
 import { configureModelProvider } from "../commander/modelProvider.js";
-import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, qualificationModelSettings, QUALIFICATION_CASES, buildQualificationPrompt, parseAssessment, evaluateAssessment, type QualificationCase } from "./specialistQualification.js";
+import { runQualification, QualificationFailure, safeFailureMetadata, qualificationEnvironment, createQualificationPacer, withQualificationDeadline, qualificationModelSettings, buildQualificationPrompt, parseAssessment, evaluateAssessment, type QualificationCase, qualificationProbeCase } from "./specialistQualification.js";
 
 async function main() {
   const env = qualificationEnvironment(process.env);
@@ -15,9 +15,9 @@ async function main() {
   const runner = new Runner({ modelProvider: provider.modelProvider });
   // Passing a provider model object avoids SDK legacy OpenAI-name cleanup.
   const specialistModel = provider.model ? await provider.modelProvider.getModel(provider.model) : undefined;
-  const probe = env.QUALIFICATION_PROBE;
-  if (probe && probe !== "backend-b") throw new Error("Only backend-b is supported as a latency probe.");
-  console.log(probe ? "LATENCY PROBE ONLY: backend-b; not full qualification." :
+  const probeCase = qualificationProbeCase(env.QUALIFICATION_PROBE);
+  const probe = probeCase?.id;
+  console.log(probe ? "SINGLE CASE PROBE ONLY: " + probe + "; not full qualification." :
     "SYNTHETIC ROLE QUALIFICATION: 16 cases; 8 advisory profiles; no application source or GitHub writes.");
   const modelSettings = qualificationModelSettings(provider.provider, provider.model);
   console.log("QUALIFICATION MODEL SETTINGS:", JSON.stringify(modelSettings));
@@ -28,7 +28,7 @@ async function main() {
     console.log("START:", fixture.id, fixture.role);
     const agent = new Agent({
       name: "Onay " + fixture.role + " Specialist",
-      instructions: ROLE_SKILLS[fixture.role],
+      instructions: buildSpecialistInstructions(fixture.role),
       modelSettings,
       ...(specialistModel ? { model: specialistModel } : {}),
     });
@@ -38,6 +38,13 @@ async function main() {
       { onProgress: seconds => console.log("WAITING:", fixture.id, seconds, "seconds; deadline 120 seconds.") },
     );
     console.log("RESPONSE_SECONDS:", fixture.id, Math.round((performance.now() - started) / 1000));
+    const last = response.rawResponses.at(-1);
+    const raw = last?.providerData as {usage?: {completion_tokens_details?: {reasoning_tokens?: number}}} | undefined;
+    console.log("USAGE:", JSON.stringify({
+      inputTokens: last?.usage.inputTokens ?? null,
+      outputTokens: last?.usage.outputTokens ?? null,
+      reasoningTokensReported: raw?.usage?.completion_tokens_details?.reasoning_tokens ?? null,
+    }));
     return response.finalOutput;
   };
   const print = (value: unknown) => {
@@ -49,7 +56,7 @@ async function main() {
     console.log(output);
   };
   if (probe) {
-    const fixture = QUALIFICATION_CASES.find(c => c.id === probe)!;
+    const fixture = probeCase!;
     let raw: unknown;
     try { raw = await assess(fixture, buildQualificationPrompt(fixture)); }
     catch (error) { throw new QualificationFailure(fixture.id, "provider", safeFailureMetadata(error)); }

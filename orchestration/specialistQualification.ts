@@ -236,3 +236,10 @@ export function qualificationModelSettings(provider: string, model?: string) {
   if (provider !== "openrouter" || model !== "xingchen-agi/xing4.0-29b-a4b:free") return {};
   return { maxTokens: 1024, providerData: { reasoning: { enabled: false } } };
 }
+
+export function qualificationProbeCase(id?: string): QualificationCase | undefined {
+  if (!id) return undefined;
+  const fixture = QUALIFICATION_CASES.find(c => c.id === id);
+  if (!fixture) throw new Error("Unknown qualification probe case.");
+  return fixture;
+}
