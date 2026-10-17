@@ -131,3 +131,55 @@ test("Cloudflare provider uses OpenAI-compatible Chat Completions, without retri
   if (configured.provider !== "cloudflare") return;
   assert.equal(configured.model, "@cf/zai-org/glm-4.7-flash");
 });
+
+
+test("real Agents SDK executes a Cloudflare tool call and retains the tool result across turns (offline)", async () => {
+  const { Agent, Runner, tool, setTracingDisabled } = await import("@openai/agents");
+  const { z } = await import("zod");
+  setTracingDisabled(true);
+  let requests = 0;
+  let executed = 0;
+  const fake: typeof fetch = async (input) => {
+    requests++;
+    const request = new Request(input);
+    const body = await request.json() as { messages: Array<{role: string; content: string; tool_call_id?: string}> };
+    assert.ok(body.messages.every(message => typeof message.content === "string"));
+    if (requests === 2) {
+      assert.ok(body.messages.some(message => message.role === "tool" && message.tool_call_id === "call-fixture"));
+      assert.ok(body.messages.some(message => message.role === "assistant"));
+    }
+    const message = requests === 1 ? {
+      role: "assistant", content: null, tool_calls: [{
+        id: "call-fixture", type: "function",
+        function: { name: "ping_onay", arguments: "{}" },
+      }],
+    } : { role: "assistant", content: "Verified" };
+    return Response.json({
+      id: "chatcmpl-fixture", object: "chat.completion", created: 1,
+      model: "@cf/zai-org/glm-4.7-flash", choices: [{
+        index: 0, finish_reason: requests === 1 ? "tool_calls" : "stop", message,
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
+    });
+  };
+  const configured = configureModelProvider({
+    AGENT_FACTORY_PROVIDER: "cloudflare",
+    CLOUDFLARE_API_TOKEN: "offline", CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
+  }, { fetch: fake });
+  assert.equal(configured.provider, "cloudflare");
+  if (configured.provider !== "cloudflare") return;
+  const executor = tool({
+    name: "ping_onay", description: "Offline integration test",
+    parameters: z.object({}),
+    execute: () => { executed++; return "OK"; },
+  });
+  const agent = new Agent({
+    name: "Cloudflare Offline Fixture", model: configured.model,
+    modelSettings: { parallelToolCalls: false }, tools: [executor],
+    instructions: "Call ping_onay then stop.",
+  });
+  const result = await new Runner({ modelProvider: configured.modelProvider }).run(agent, "Ping");
+  assert.equal(result.finalOutput, "Verified");
+  assert.equal(executed, 1);
+  assert.equal(requests, 2);
+});
