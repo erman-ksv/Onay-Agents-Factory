@@ -68,7 +68,7 @@ test("blank selection retains legacy behavior and blank OpenAI model retains the
 
 test("invalid provider selection is rejected without echoing the supplied value", () => {
   assert.throws(() => selectProviderConfig({ AGENT_FACTORY_PROVIDER: "invalid-secret-value", OPENAI_API_KEY: "openai-secret" }), {
-    message: "AGENT_FACTORY_PROVIDER must be gemini, openai, openrouter or groq.",
+    message: "AGENT_FACTORY_PROVIDER must be gemini, openai, openrouter, groq or cloudflare.",
   });
 });
 
