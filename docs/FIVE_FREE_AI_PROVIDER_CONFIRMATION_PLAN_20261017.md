@@ -1,6 +1,6 @@
 # Onay Agent Factory — five free AI APIs: confirmation plan (2026-10-17)
 
-Status: ACTIVE PLAN. Cloudflare and Groq live read-only Commanders verified 2026-10-17 by user Codespaces screenshots. Three providers pending.
+Status: ACTIVE PLAN. Cloudflare and Groq VERIFIED (2/5). OpenRouter latest live free audit BLOCKED by HTTP 429 at 22:34 (+05:00), Gemini free daily quota previously exhausted. Next attempt a different truly free provider, not repeated 429 calls.
 
 ## Objective and order
 
@@ -15,7 +15,7 @@ Status: ACTIVE PLAN. Cloudflare and Groq live read-only Commanders verified 2026
 | 1 | Cloudflare Workers AI | **CONFIRMED (1/5)**. User Codespaces screenshot 2026-10-17 20:26 +05:00: live Commander `STATUS: completed`, `SECURITY: clean`, `TESTS: true`, `MISSING: []`, `REASONS: []`. Free Workers AI token and function-call smoke were previously reported PASS. CI on `abe0965fd6d2eb231055257829d4c3f23b78bc08` successful: https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/39044533896 . Proof is a read-only audit, not autonomous coding/release. | Preserve confirmed evidence; no need to repeat this live audit |
 | 2 | Groq | **CONFIRMED (2/5)**. 2026-10-17 22:28 +05:00 user Codespaces screenshot on `feat/groq-compact-audit-20261017`: live read-only Commander `STATUS: completed`, `SECURITY: clean`, `TESTS: true`, `MISSING: []`, `REASONS: []`, `PROVIDER_FAILURE: NONE`. Groq Qwen3 previous synthetic specialists 14/14 and CI `f6f25cf76f445d29a1f1c1116ce59e0953fec41d` PASS: https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/39053542927 . Read-only audit only, not proven AI Coder or deployment readiness. | Preserve evidence and free-tier quota; no need to repeat Groq live audit |
 | 3 | Gemini | Provider implemented; previous free daily quota exhausted; **full live run not verified** | Resume only after observed free quota reset; no paid fallback |
-| 4 | OpenRouter | Explicit :free routes allowed; earlier HTTP 429; **full live run not verified** | Check actual free allowance and exact :free model; one bounded live validation if within limits |
+| 4 | OpenRouter | **BLOCKED — HTTP 429 again**. 2026-10-17 ~22:34 +05:00 live `openrouter/free` read-only audit screenshot: `STATUS: blocked`, `TESTS: false`, `MISSING: [explorer,tester,security]`, `REASONS` includes `429 Provider returned error` and no final explanation, `PROVIDER_FAILURE: NONE`. The exact cause of 429 (per-minute, daily quota, upstream limit) has NOT been verified; CI on `71768916d3dcb07102cc847f3ca55f440abec1fc` PASS. **Do not count as confirmed.** | Do not retry blindly; retain blocker and review precise free quota/settings when it changes |
 | 5 | Mistral AI | Not yet integrated or keyed; **not verified** | Set up Free mode (official docs: no card); add free-only adapter and offline tests; verify function calling and a bounded read-only audit |
 
 Alternative candidate if a proposed provider cannot be used at no cost: Cohere free trial key, subject to account availability and trial usage restrictions. Do not quietly substitute or falsely mark the failed provider as qualified.
@@ -53,13 +53,15 @@ The goal is **5/5 confirmed**, not 5 configured keys. **Confirmed provider tally
 - [x] Controlled Cloudflare LIVE Commander read-only audit: user screenshot at 20:26 +05:00 shows `completed` + `clean` + `true`, no missing actors or reasons. This verifies read-only Explorer/Security/Tester gates, not live source modification.
 - [x] Complete Groq free-tier live read-only Commander audit: screenshot at 22:28 +05:00 shows completed + clean + exact-commit TESTS true, no missing actors/reasons/provider failure.
 - [ ] Verify Gemini free quota and live audit or retain BLOCKED.
-- [ ] Verify OpenRouter exact :free model quota and live audit or retain BLOCKED.
+- [x] Verify OpenRouter current free API behaviour: one live read-only audit at ~22:34 +05:00 BLOCKED with HTTP 429 before Explorer/Tester/Security. Leave unconfirmed until quotas become available, no blind retries.
 - [ ] Add and qualify Mistral Free as the fifth provider (requires user to create API key in Codespaces).
 - [ ] Publish final provider scorecard, including 5/5 or explicit remaining blockers with supporting run links.
 
 ## Confirmation ledger (user-visible evidence)
 
 - 2026-10-17 20:26 (+05:00): Cloudflare Workers AI live read-only Commander test after latest green code and secrets configuration: `STATUS=completed; SECURITY=clean; TESTS=true; MISSING=[]; REASONS=[]` (screenshot supplied in chat). Count = **1/5**. Do not claim publication, merge, production release or legal approval.
-- Next: Gemini, then OpenRouter, then Mistral Free. Before live Gemini requests verify remaining free daily quota and reuse the bounded single-audit-tool pattern. Existing Groq+Cloudflare confirmations are for read-only audits; full coding collaboration remains a separate test.
+- Next: Mistral Free candidate. Gemini remains deferred due daily free quota, OpenRouter remains blocked by HTTP 429. Validate genuine no-billing free Mistral access before key creation; implement offline provider adapter and test tool calling before at most one bounded live run. For a fifth confirmed provider after this, scout an additional truly free option rather than counting blocked providers as successful. Existing Cloudflare+Groq confirmations are only for read-only audits; full coding collaboration remains a separate test.
 
 - 2026-10-17 22:28 (+05:00): Groq live read-only Commander on compact audit branch, model `qwen/qwen3.8-27b`: `STATUS=completed; SECURITY=clean; TESTS=true; MISSING=[]; REASONS=[]; PROVIDER_FAILURE=NONE`. Screenshot supplied in chat. **2/5** fully verified read-only providers. Corresponding code CI green at `f6f25cf76f445d29a1f1c1116ce59e0953fec41d`. No API-key values or Onay private source included.
+
+- 2026-10-17 ~22:34 (+05:00): OpenRouter `openrouter/free` compact Commander user terminal screenshot: `STATUS=blocked`, `TESTS=false`, `MISSING=[explorer,tester,security]`, `REASONS` includes `429 Provider returned error`, `PROVIDER_FAILURE=NONE` (the latter means the custom structured Groq-style failure diagnostic was not available, **not** that the HTTP failure did not occur). Do not re-issue API calls; **tally stays 2/5**. Gemini also deferred due its previously confirmed free daily quota exhaustion.
