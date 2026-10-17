@@ -21,15 +21,15 @@ export type SkillSearchResult = {
   skills: FoundSkill[];
 };
 
-const SOURCE = /^[a-z0-9][a-z0-9._-]{0,90}\\/[a-z0-9][a-z0-9._-]{0,90}$/i;
+const SOURCE = /^[a-z0-9][a-z0-9._-]{0,90}\/[a-z0-9][a-z0-9._-]{0,90}$/i;
 const SLUG = /^[a-z0-9][a-z0-9._-]{0,90}$/i;
-const SUSPICIOUS = /(?:\\bBearer\\s+\\S+|(?:sk-|gh[pousr]_|AIza)[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{48,})/i;
+const SUSPICIOUS = /(?:\bBearer\s+\S+|(?:sk-|gh[pousr]_|AIza)[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{48,})/i;
 const ENDPOINT = "https://skills.sh/api/search";
 const MAX_RESULTS = 8;
 
 function cleanLabel(value: unknown): string {
   if (typeof value !== "string") return "";
-  return value.replace(/[\\x00-\\x1f\\x7f]/g, " ").trim().slice(0, 100);
+  return value.replace(/[\x00-\x1f\x7f]/g, " ").trim().slice(0, 100);
 }
 
 export async function searchSkillCatalog(
@@ -38,7 +38,7 @@ export async function searchSkillCatalog(
 ): Promise<SkillSearchResult> {
   if (typeof rawQuery !== "string") throw new Error("Skill search query must be text.");
   const query = rawQuery.trim();
-  if (query.length < 2 || query.length > 100 || /[\\x00-\\x1f\\x7f]/.test(query) || SUSPICIOUS.test(query)) {
+  if (query.length < 2 || query.length > 100 || /[\x00-\x1f\x7f]/.test(query) || SUSPICIOUS.test(query)) {
     throw new Error("Skill search requires 2-100 safe keyword characters without credentials or private data.");
   }
   const url = ENDPOINT + "?" + new URLSearchParams({ q: query, limit: String(MAX_RESULTS) });
