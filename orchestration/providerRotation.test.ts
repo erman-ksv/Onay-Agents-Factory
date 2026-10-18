@@ -156,7 +156,7 @@ test("non-provider tool failure cannot trigger quota switch", async t => {
 
 test("provider identity mismatches cannot move to another API", () => {
   assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Groq 429"],
-    providerFailure: { provider: "groq", code: "rate_limited" }, upstreamRateLimitVerified: true }, "cloudflare"), true);
+    providerFailure: { provider: "groq", code: "rate_limited" }, upstreamRateLimitVerified: true }, "cloudflare"), false);
   assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Groq 429"],
     providerFailure: { provider: "groq", code: "rate_limited" } }, "groq"), false);
   assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Gemini daily request quota exhausted (HTTP 429)"],
