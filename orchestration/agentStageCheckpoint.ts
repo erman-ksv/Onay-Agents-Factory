@@ -111,10 +111,13 @@ export class StageCheckpointRecorder {
       };
       for (const entry of journal.snapshot()) this.apply(entry);
       this.persist();
-      this.unsubscribe = journal.subscribe(event => {
-        if (this.failure || this.closed) return;
+      this.unsubscribe = journal.subscribeRequired(event => {
+        if (this.failure || this.closed) throw new Error("Stage checkpoint writer unavailable.");
         try { this.apply(event); this.persist(); }
-        catch { this.failure = true; }
+        catch {
+          this.failure = true;
+          throw new Error("Stage checkpoint persistence failed; tool dispatch aborted.");
+        }
       });
     } catch (error) {
       closeSync(this.lockFd);

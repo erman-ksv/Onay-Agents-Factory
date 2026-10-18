@@ -31,6 +31,8 @@ export class AgentRunJournal {
   private sequence = 0;
   private readonly entries: AgentRunEvent[] = [];
   private readonly listeners = new Set<(event: AgentRunEvent) => void>();
+  /** Host-owned observers MUST persist before a side-effecting tool can run. */
+  private readonly requiredListeners = new Set<(event: AgentRunEvent) => void>();
 
   constructor(goal: string, taskId = `task-${Date.now()}`, onEvent?: (event: AgentRunEvent) => void) {
     if (!goal.trim()) throw new Error("A task goal is required.");
@@ -55,6 +57,9 @@ export class AgentRunJournal {
       ...(details ? { details: structuredClone(details) } : {}),
     };
     this.entries.push(event);
+    // Fail closed for durability: a required persistence error MUST reach the runner.
+    // Optional UI/dashboard observers remain best-effort below.
+    for (const listener of this.requiredListeners) listener(structuredClone(event));
     for (const listener of this.listeners) {
       try {
         listener(structuredClone(event));
@@ -81,6 +86,12 @@ export class AgentRunJournal {
   subscribe(listener: (event: AgentRunEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Required for durable checkpoint writers; an error aborts tool dispatch. */
+  subscribeRequired(listener: (event: AgentRunEvent) => void): () => void {
+    this.requiredListeners.add(listener);
+    return () => this.requiredListeners.delete(listener);
   }
 }
 
