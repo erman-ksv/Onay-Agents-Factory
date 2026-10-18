@@ -47,7 +47,11 @@ export type AiCommanderOptions = {
 function createAiCommanderExecution(goal: string, options: AiCommanderOptions = {}) {
   const env = options.env ?? process.env;
   const legalEnabled = legalAgentEnabled(env);
-  const provider = configureModelProvider(env, options.modelFetch ? { fetch: options.modelFetch } : {});
+  const upstreamQuota = { verified: false };
+  const provider = configureModelProvider(env, {
+    ...(options.modelFetch ? { fetch: options.modelFetch } : {}),
+    onUpstreamRateLimit: () => { upstreamQuota.verified = true; },
+  });
   const contextBudget = provider.provider !== "none" ? provider.contextBudget : undefined;
   const runner = new Runner(provider.provider !== "none" ? { modelProvider: provider.modelProvider } : {});
   const modelOptions = options.model ? { model: options.model } : provider.provider !== "none" && provider.model ? { model: provider.model } : {};
@@ -232,7 +236,7 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     buildCommanderPrompt(goal, env) + "\n\nPublication enabled for this run: " +
     (publishing ? "yes; publish then verify tests on branch " + options.publication!.branch : "no; return a proposal and do not call publish_change_set.");
   return { commander, session, prompt, runner, contextBudget, provider: provider.provider,
-    legalReview: legalEnabled ? "enabled" as const : "disabled" as const };
+    legalReview: legalEnabled ? "enabled" as const : "disabled" as const, upstreamQuota };
 }
 
 export function createAiCommander(goal: string, options: AiCommanderOptions = {}) {
@@ -241,7 +245,7 @@ export function createAiCommander(goal: string, options: AiCommanderOptions = {}
 }
 
 export async function runAiCommander(goal: string, options: AiCommanderOptions = {}) {
-  const { commander, session, prompt, runner, contextBudget, provider, legalReview } = createAiCommanderExecution(goal, options);
+  const { commander, session, prompt, runner, contextBudget, provider, legalReview, upstreamQuota } = createAiCommanderExecution(goal, options);
   // Opt-in persists events in order. No checkpoint is silently reused across runs.
   if (options.stageCheckpointPath && !options.expectedBaseSha)
     throw new Error("Durable Commander checkpoint requires an immutable expectedBaseSha.");
@@ -261,17 +265,18 @@ export async function runAiCommander(goal: string, options: AiCommanderOptions =
     if (failure) {
       const finished = session.finish(undefined, failure.message);
       recorder?.finish(finished.status);
-      return { ...finished, providerFailure: failure, legalReview };
+      return { ...finished, providerFailure: failure, legalReview, upstreamRateLimitVerified: upstreamQuota.verified };
     }
     await session.verifyFinalCandidate();
     const finished = session.finish(result.finalOutput);
     recorder?.finish(finished.status);
-    return { ...finished, legalReview };
+    return { ...finished, legalReview, upstreamRateLimitVerified: upstreamQuota.verified };
   } catch (error) {
     const failure = contextBudget?.failure ?? session.providerFailure ?? extractProviderFailure(error);
     const finished = session.finish(undefined, failure?.message ?? session.safeErrorMessage(error));
     recorder?.finish(finished.status);
-    return { ...finished, ...(failure ? { providerFailure: failure } : {}), legalReview };
+    return { ...finished, ...(failure ? { providerFailure: failure } : {}), legalReview,
+      upstreamRateLimitVerified: upstreamQuota.verified };
   } finally {
     recorder?.close();
   }
