@@ -185,3 +185,22 @@ test("real Agents SDK executes a Cloudflare tool call and retains the tool resul
   assert.equal(executed, 1);
   assert.equal(requests, 2);
 });
+
+test("Cloudflare upstream 429 emits host-owned signal but local request limit does not", async () => {
+  let quotaSignals = 0;
+  const upstream = createCloudflareCompatibleFetch(async () => new Response("private-upstream-body", { status: 429 }),
+    { onUpstreamRateLimit: () => { quotaSignals++; } });
+  const first = await req(upstream, { messages: [msg()] });
+  assert.equal(first.status, 429);
+  assert.equal(quotaSignals, 1);
+  const blocked = await req(upstream, { messages: [msg()] });
+  assert.equal(blocked.status, 429);
+  assert.equal(quotaSignals, 1);
+  assert.ok(!(await first.text()).includes("private-upstream-body"));
+
+  const local = createCloudflareCompatibleFetch(async () => Response.json({ ok: true }),
+    { maxRequests: 1, onUpstreamRateLimit: () => { quotaSignals++; } });
+  assert.equal((await req(local, { messages: [msg()] })).status, 200);
+  assert.equal((await req(local, { messages: [msg()] })).status, 429);
+  assert.equal(quotaSignals, 1);
+});
