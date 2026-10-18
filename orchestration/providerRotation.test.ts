@@ -18,7 +18,7 @@ function success(): RotationRunResult {
   return { status: "completed", reasons: [], missingActors: [],
     evidence: { repository: repo, baseSha: sha, publicationAttempted: false,
       security: { repository: { status: "clean" } }, testsExecuted: true,
-      tests: { status: "passed", testsExecuted: true }, changedFiles: [], proposedFiles: [] },
+      tests: { status: "passed", testsExecuted: true, expectedSha: sha, repository: repo, evidence: [{ headSha: sha, conclusion: "success" }] }, changedFiles: [], proposedFiles: [] },
     events: ["explore_onay", "security_review", "test_onay"].map(tool =>
       ({ type: "tool_completed", details: { tool } })) };
 }
