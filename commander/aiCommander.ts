@@ -70,11 +70,12 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const requiredStepNames = factory ? ["Typecheck", "Test"] : ["Typecheck", "API integration tests"];
   const plan = planTask(goal);
   const auditOnly = isReadOnlyRepositoryAudit(goal);
-  // Free-tier providers use a single compact, host-verified read-only audit tool.
+  // Free-tier providers, including Gemini, use a single compact, host-verified read-only audit tool.
   // No optional specialist fanout, Coder or publication routes; this bounds
   // consumption and preserves the three independent Explorer/Security/Tester gates.
   const compactFreeAudit = auditOnly && (provider.provider === "cloudflare" ||
-    provider.provider === "groq" || provider.provider === "openrouter" || provider.provider === "mistral");
+    provider.provider === "gemini" || provider.provider === "groq" ||
+    provider.provider === "openrouter" || provider.provider === "mistral");
   let generationContext = (): string => { throw new Error("Coder requires successful repository exploration first."); };
   const configuredDependencies: AiExecutionDependencies = options.dependencies ?? {
     getHead: getBaseHead,
