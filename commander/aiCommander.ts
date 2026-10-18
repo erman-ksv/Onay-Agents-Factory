@@ -18,6 +18,8 @@ import { prepareOnayChange } from "../github/changeWorkflow.js";
 import { waitForCiGate } from "../github/ciGate.js";
 import { assertRepositoryAllowed, resolveAllowedRepositories } from "../github/repositoryPolicy.js";
 import { extractProviderFailure } from "./providerContextBudget.js";
+import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
+import { StageCheckpointRecorder } from "../orchestration/agentStageCheckpoint.js";
 
 export type AiCommanderOptions = {
   journal?: AiExecutionOptions["journal"];
@@ -37,6 +39,8 @@ export type AiCommanderOptions = {
   maxTurns?: number;
   /** Host-supplied offline test transport. Never read from model messages or prompts. */
   modelFetch?: typeof fetch;
+  /** Opt-in, absolute host-owned checkpoint path. Never taken from model text. */
+  stageCheckpointPath?: string;
 };
 
 /** Fresh executable tools and evidence state for each task. */
@@ -113,7 +117,8 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   const session = new AiExecutionSession({
     goal, repository, ref, requiredActors: plan.steps.filter(step => legalEnabled || step.agent !== "legal").map(step => step.agent),
     auditOnly, publication: options.publication,
-    writesEnabled: env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true", journal: options.journal,
+    writesEnabled: env.AGENT_FACTORY_ENABLE_GITHUB_WRITES === "true", journal: options.journal ??
+      (options.stageCheckpointPath ? new AgentRunJournal(goal) : undefined),
     allowedChangePaths: options.allowedChangePaths,
     specialistContextTransform: options.specialistContextTransform,
     specialistSelections: options.specialistSelections,
@@ -237,6 +242,12 @@ export function createAiCommander(goal: string, options: AiCommanderOptions = {}
 
 export async function runAiCommander(goal: string, options: AiCommanderOptions = {}) {
   const { commander, session, prompt, runner, contextBudget, provider, legalReview } = createAiCommanderExecution(goal, options);
+  // Opt-in persists events in order. No checkpoint is silently reused across runs.
+  if (options.stageCheckpointPath && !options.expectedBaseSha)
+    throw new Error("Durable Commander checkpoint requires an immutable expectedBaseSha.");
+  const recorder = options.stageCheckpointPath ? new StageCheckpointRecorder(options.stageCheckpointPath,
+    { goal, repository: session.options.repository, baseRef: session.options.ref,
+      expectedSha: options.expectedBaseSha! }, session.journal) : undefined;
   try {
     if (provider === "none" && !options.model) {
       throw new Error(providerRequirementMessage(options.env ?? process.env));
@@ -247,13 +258,22 @@ export async function runAiCommander(goal: string, options: AiCommanderOptions =
     }
     const result = await runner.run(commander, prompt, { maxTurns: turns });
     const failure = contextBudget?.failure ?? session.providerFailure;
-    if (failure) return { ...session.finish(undefined, failure.message), providerFailure: failure, legalReview };
+    if (failure) {
+      const finished = session.finish(undefined, failure.message);
+      recorder?.finish(finished.status);
+      return { ...finished, providerFailure: failure, legalReview };
+    }
     await session.verifyFinalCandidate();
-    return { ...session.finish(result.finalOutput), legalReview };
+    const finished = session.finish(result.finalOutput);
+    recorder?.finish(finished.status);
+    return { ...finished, legalReview };
   } catch (error) {
     const failure = contextBudget?.failure ?? session.providerFailure ?? extractProviderFailure(error);
-    return { ...session.finish(undefined, failure?.message ?? session.safeErrorMessage(error)),
-      ...(failure ? { providerFailure: failure } : {}), legalReview };
+    const finished = session.finish(undefined, failure?.message ?? session.safeErrorMessage(error));
+    recorder?.finish(finished.status);
+    return { ...finished, ...(failure ? { providerFailure: failure } : {}), legalReview };
+  } finally {
+    recorder?.close();
   }
 }
 
