@@ -23,7 +23,7 @@ export type RotationRunResult = {
   providerFailure?: { provider?: string; code?: string };
   evidence?: {
     repository?: string; baseSha?: string; testsExecuted?: boolean;
-    tests?: { status?: string; testsExecuted?: boolean; expectedSha?: string; repository?: string; evidence?: Array<{ headSha: string; conclusion: string }> };
+    tests?: { status?: string; testsExecuted?: boolean; expectedSha?: string; repository?: string; evidence?: Array<{ headSha: string; conclusion: string | null }> };
     security?: { repository?: { status?: string } };
     changedFiles?: string[]; proposedFiles?: string[];
     publicationAttempted?: boolean; publication?: unknown;
