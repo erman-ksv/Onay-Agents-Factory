@@ -187,6 +187,7 @@ function failureResponse(problem: ProviderFailure): Response {
 export function createGroqBudgetedFetch(
   budget: ProviderContextBudget,
   underlyingFetch: typeof fetch = globalThis.fetch,
+  onUpstreamRateLimit?: () => void,
 ): typeof fetch {
   return async (input, init) => {
     const stopped = budget.failure;
@@ -233,6 +234,7 @@ export function createGroqBudgetedFetch(
     const response = await underlyingFetch(input, { ...init, headers, body });
     if (response.status !== 429) return response;
     // Never read, parse or retain a provider error body; it can echo input/secrets.
+    onUpstreamRateLimit?.();
     const retryAfter = safeRetryAfter(response.headers.get("retry-after"));
     void response.body?.cancel().catch(() => undefined);
     return failureResponse(budget.stop(failure("rate_limited", retryAfter ? { retryAfter } : {})));
