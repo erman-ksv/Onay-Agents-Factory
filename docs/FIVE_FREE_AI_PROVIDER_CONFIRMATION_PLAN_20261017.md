@@ -2,6 +2,14 @@
 
 Status: ACTIVE PLAN. Cloudflare, Groq and Gemini 3.5 Flash-Lite VERIFIED for read-only Commander audits (3/5). OpenRouter and Mistral live generation remain BLOCKED by HTTP 429. Evaluate alternative genuine no-billing free API candidates before any provider-specific implementation or live request.
 
+## Decision update — 2026-10-18 (user approved)
+
+- **Freeze the provider roster at exactly 3:** Cloudflare Workers AI, Groq, Gemini 3.5 Flash-Lite. Do not seek, add, or activate more APIs unless the user explicitly reopens provider discovery. The historical 5-provider target and its candidates below are archival, not an active instruction.
+- Goal: when one of these three reaches its legitimate free quota, preserve verified task progress and safely use the next qualified provider. Do not assume free keys can deliver 24/7 continuous service.
+- Current Draft PR #49 is an **offline-tested, read-only audit rotation prototype** only; it does not resume an interrupted write-capable Commander run or bypass Coder, Security, Reviewer, GitHub CI or human acceptance.
+- A model-provider limit must never cause replay of side-effecting tools. Preserve immutable repository SHA, branch, approved file scope, verified outputs, and task state. An interrupted GitHub write or unknown outcome must pause for human reconciliation. No unauthorized merges or deployments.
+- Keep Draft PR #48 and #49 unmerged pending independent review and acceptance. `main` stays untouched.
+
 ## Objective and order
 
 1. Fully verify the Cloudflare Workers AI integration before testing additional API providers.
