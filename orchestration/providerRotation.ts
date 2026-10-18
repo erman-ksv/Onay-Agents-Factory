@@ -76,14 +76,15 @@ function mayBeReadOnly(result: RotationRunResult): boolean {
 export function isModelQuotaFailure(result: RotationRunResult, provider: RotationProvider): boolean {
   if (result.status !== "blocked" || !mayBeReadOnly(result)) return false;
   if ((result.events ?? []).some(event => event.type === "tool_failed")) return false;
-  if (result.providerFailure?.provider === "groq" && provider === "groq" &&
-      result.providerFailure.code === "rate_limited") return true;
+  if (provider === "groq") return result.upstreamRateLimitVerified === true &&
+    result.providerFailure?.provider === "groq" && result.providerFailure.code === "rate_limited";
   // Cloudflare 429 must be observed by the outbound model transport, never
   // inferred from untrusted SDK/model text or local per-run budgets.
   if (provider === "cloudflare") return result.upstreamRateLimitVerified === true;
   const reasons = result.reasons.join(" ");
   if (/\bgithub\b|\bsecurity\b|\brepository api\b/i.test(reasons)) return false;
-  if (provider === "gemini" && /Gemini daily request quota exhausted/i.test(reasons)) return true;
+  if (provider === "gemini" && result.upstreamRateLimitVerified === true &&
+      /Gemini daily request quota exhausted/i.test(reasons)) return true;
   return false; // Other providers require structured, transport-grounded quota evidence.
 }
 
