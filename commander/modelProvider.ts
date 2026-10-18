@@ -64,6 +64,8 @@ export type ModelProviderOptions = {
   contextBudget?: ProviderContextBudget;
   /** Offline/in-process transport injection. Never changes the fixed provider endpoint. */
   fetch?: typeof fetch;
+  /** Host-only marker for an HTTP 429 received from the selected model endpoint. */
+  onUpstreamRateLimit?: () => void;
 };
 
 export function configureModelProvider(env: NodeJS.ProcessEnv = process.env, options: ModelProviderOptions = {}) {
@@ -77,7 +79,7 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env, opt
   const client = new OpenAI({
     apiKey: config.apiKey,
     ...(config.provider === "gemini" ? { fetch: createGeminiRateLimitedFetch(options.fetch) } :
-      config.provider === "cloudflare" ? { fetch: createCloudflareCompatibleFetch(options.fetch) } :
+      config.provider === "cloudflare" ? { fetch: createCloudflareCompatibleFetch(options.fetch, { onUpstreamRateLimit: options.onUpstreamRateLimit }) } :
       config.provider === "mistral" ? { fetch: createMistralFreeFetch(options.fetch) } :
       contextBudget ? { fetch: createGroqBudgetedFetch(contextBudget, options.fetch) } :
       options.fetch ? { fetch: options.fetch } : {}),
