@@ -54,7 +54,7 @@ export type RotationDecision = {
 };
 
 const SAFE_TOOLS = new Set<string>(["explore_onay", "security_review", "test_onay"]);
-const FORBIDDEN_TOOLS = new Set<string>(["code_onay", "publish_change_set", "final_review", "write_candidate", "verify_final_head"]);
+// Fail closed on unrecognized executable tools, including future GitHub mutations.
 
 function snapshotTools(result: RotationRunResult): SafeToolName[] {
   const events = result.events ?? [];
@@ -68,8 +68,10 @@ function mayBeReadOnly(result: RotationRunResult): boolean {
   if (evidence?.publicationAttempted || evidence?.publication ||
       (evidence?.changedFiles?.length ?? 0) > 0 || (evidence?.proposedFiles?.length ?? 0) > 0) return false;
   return !(result.events ?? []).some(event =>
-    (event.type === "tool_started" || event.type === "tool_completed") &&
-    FORBIDDEN_TOOLS.has(event.details?.tool ?? ""));
+    (event.type === "tool_started" || event.type === "tool_completed" ||
+      event.type === "tool_failed" ||
+      (event.type === "agent_started" && event.details?.tool !== undefined)) &&
+    !SAFE_TOOLS.has(event.details?.tool ?? ""));
 }
 
 /** Only provider errors may trigger rotation. GitHub 429 is NOT a model quota. */
