@@ -21,6 +21,7 @@ export type RotationRunResult = {
   reasons: string[];
   missingActors?: string[];
   providerFailure?: { provider?: string; code?: string };
+  upstreamRateLimitVerified?: boolean;
   evidence?: {
     repository?: string; baseSha?: string; testsExecuted?: boolean;
     tests?: { status?: string; testsExecuted?: boolean; expectedSha?: string; repository?: string; evidence?: Array<{ headSha: string; conclusion: string | null }> };
@@ -77,10 +78,13 @@ export function isModelQuotaFailure(result: RotationRunResult, provider: Rotatio
   if ((result.events ?? []).some(event => event.type === "tool_failed")) return false;
   if (result.providerFailure?.provider === "groq" && provider === "groq" &&
       result.providerFailure.code === "rate_limited") return true;
+  // Cloudflare 429 must be observed by the outbound model transport, never
+  // inferred from untrusted SDK/model text or local per-run budgets.
+  if (provider === "cloudflare") return result.upstreamRateLimitVerified === true;
   const reasons = result.reasons.join(" ");
   if (/\bgithub\b|\bsecurity\b|\brepository api\b/i.test(reasons)) return false;
   if (provider === "gemini" && /Gemini daily request quota exhausted/i.test(reasons)) return true;
-  return /\b429\b/.test(reasons) && /\b(rate.limit|quota|resource.exhausted|provider)\b/i.test(reasons);
+  return false; // Other providers require structured, transport-grounded quota evidence.
 }
 
 function verifiedAudit(result: RotationRunResult, repo: string, sha: string): boolean {

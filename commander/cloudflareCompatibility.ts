@@ -63,7 +63,7 @@ function rejected(status: number, message: string): Response {
 /** Request cap is per configured client/run. HTTP 429 permanently stops its budget. */
 export function createCloudflareCompatibleFetch(
   underlyingFetch: typeof fetch = globalThis.fetch,
-  options: { maxRequests?: number; maxOutputTokens?: number; maxRequestBytes?: number } = {},
+  options: { maxRequests?: number; maxOutputTokens?: number; maxRequestBytes?: number; onUpstreamRateLimit?: () => void } = {},
 ): typeof fetch {
   const maxRequests = options.maxRequests ?? CLOUDFLARE_MAX_REQUESTS;
   const maxOutputTokens = options.maxOutputTokens ?? CLOUDFLARE_MAX_OUTPUT_TOKENS;
@@ -101,6 +101,7 @@ export function createCloudflareCompatibleFetch(
     const response = await underlyingFetch(new Request(request, { body: normalized, headers }));
     if (response.status === 429) {
       stopped = true;
+      options.onUpstreamRateLimit?.();
       return rejected(429, "Cloudflare provider quota or rate limit reached. Stop this run.");
     }
     return response;

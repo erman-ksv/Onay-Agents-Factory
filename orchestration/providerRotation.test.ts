@@ -34,7 +34,7 @@ test("recognized provider quota rotates once and retains completed read-only sta
     run: async provider => {
       called.push(provider);
       if (provider === "cloudflare") return { status: "blocked",
-        reasons: ["429 Provider rate limit"], events: [] };
+        reasons: ["429 Provider rate limit"], upstreamRateLimitVerified: true, events: [] };
       return success();
     },
   });
@@ -92,7 +92,7 @@ test("two quota failures rotate to third configured provider without re-running 
   const called: string[] = [];
   const result = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
     called.push(provider);
-    return provider === "gemini" ? success() : { status: "blocked", reasons: ["429 Provider rate limit"], events: [] };
+    return provider === "gemini" ? success() : { status: "blocked", reasons: ["429 Provider rate limit"], upstreamRateLimitVerified: true, events: [] };
   } });
   assert.equal(result.status, "completed");
   assert.equal(result.provider, "gemini");
@@ -137,6 +137,17 @@ test("non-provider tool failure cannot trigger quota switch", async t => {
       { type: "tool_started", details: { tool: "explore_onay" } },
       { type: "tool_failed", details: { tool: "explore_onay" } },
     ] };
+  } });
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(called, ["cloudflare"]);
+});
+
+test("Cloudflare SDK text 429 is not enough to rotate without upstream transport evidence", async t => {
+  const checkpointPath = folder(t);
+  const called: string[] = [];
+  const result = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
+    called.push(provider);
+    return { status: "blocked", reasons: ["429 Provider quota"], events: [] };
   } });
   assert.equal(result.status, "blocked");
   assert.deepEqual(called, ["cloudflare"]);

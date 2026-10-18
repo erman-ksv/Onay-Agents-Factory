@@ -185,3 +185,40 @@ test("real Agents SDK executes a Cloudflare tool call and retains the tool resul
   assert.equal(executed, 1);
   assert.equal(requests, 2);
 });
+
+test("Cloudflare upstream 429 emits host-owned signal but local request limit does not", async () => {
+  let quotaSignals = 0;
+  const upstream = createCloudflareCompatibleFetch(async () => new Response("private-upstream-body", { status: 429 }),
+    { onUpstreamRateLimit: () => { quotaSignals++; } });
+  const first = await req(upstream, { messages: [msg()] });
+  assert.equal(first.status, 429);
+  assert.equal(quotaSignals, 1);
+  const blocked = await req(upstream, { messages: [msg()] });
+  assert.equal(blocked.status, 429);
+  assert.equal(quotaSignals, 1);
+  assert.ok(!(await first.text()).includes("private-upstream-body"));
+
+  const local = createCloudflareCompatibleFetch(async () => Response.json({ ok: true }),
+    { maxRequests: 1, onUpstreamRateLimit: () => { quotaSignals++; } });
+  assert.equal((await req(local, { messages: [msg()] })).status, 200);
+  assert.equal((await req(local, { messages: [msg()] })).status, 429);
+  assert.equal(quotaSignals, 1);
+});
+
+test("Cloudflare signals only upstream 429, not exhausted local request budget", async () => {
+  let upstream = 0;
+  let calls = 0;
+  const wrapped = createCloudflareCompatibleFetch(async () => {
+    calls++;
+    return new Response("upstream-sensitive-response", { status: 429 });
+  }, { maxRequests: 2, onUpstreamRateLimit: () => { upstream++; } });
+  assert.equal((await req(wrapped, { messages: [msg("first")] })).status, 429);
+  assert.equal((await req(wrapped, { messages: [msg("second")] })).status, 429);
+  assert.equal(calls, 1);
+  assert.equal(upstream, 1);
+  const limited = createCloudflareCompatibleFetch(async () => { calls++; return Response.json({ ok: true }); },
+    { maxRequests: 1, onUpstreamRateLimit: () => { upstream++; } });
+  assert.equal((await req(limited, { messages: [msg("first")] })).status, 200);
+  assert.equal((await req(limited, { messages: [msg("second")] })).status, 429);
+  assert.equal(upstream, 1);
+});
