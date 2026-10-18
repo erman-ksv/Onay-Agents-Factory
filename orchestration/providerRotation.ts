@@ -23,7 +23,7 @@ export type RotationRunResult = {
   providerFailure?: { provider?: string; code?: string };
   evidence?: {
     repository?: string; baseSha?: string; testsExecuted?: boolean;
-    tests?: { status?: string; testsExecuted?: boolean };
+    tests?: { status?: string; testsExecuted?: boolean; expectedSha?: string; repository?: string; evidence?: Array<{ headSha: string; conclusion: string }> };
     security?: { repository?: { status?: string } };
     changedFiles?: string[]; proposedFiles?: string[];
     publicationAttempted?: boolean; publication?: unknown;
@@ -91,6 +91,11 @@ function verifiedAudit(result: RotationRunResult, repo: string, sha: string): bo
     result.evidence?.security?.repository?.status === "clean" &&
     result.evidence?.testsExecuted === true &&
     result.evidence?.tests?.status === "passed" &&
+    result.evidence?.tests?.testsExecuted === true &&
+    result.evidence?.tests?.expectedSha?.toLowerCase() === sha.toLowerCase() &&
+    result.evidence?.tests?.repository === repo &&
+    (result.evidence?.tests?.evidence?.length ?? 0) > 0 &&
+    result.evidence!.tests!.evidence!.every(run => run.headSha.toLowerCase() === sha.toLowerCase() && run.conclusion === "success") &&
     (result.evidence?.changedFiles?.length ?? 0) === 0 &&
     (result.evidence?.proposedFiles?.length ?? 0) === 0 &&
     ["explore_onay", "security_review", "test_onay"].every(name =>
