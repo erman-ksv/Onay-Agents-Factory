@@ -80,7 +80,7 @@ export function isModelQuotaFailure(result: RotationRunResult, provider: Rotatio
     result.providerFailure?.provider === "groq" && result.providerFailure.code === "rate_limited";
   // Cloudflare 429 must be observed by the outbound model transport, never
   // inferred from untrusted SDK/model text or local per-run budgets.
-  if (provider === "cloudflare") return result.upstreamRateLimitVerified === true;
+  if (provider === "cloudflare") return result.upstreamRateLimitVerified === true && !result.providerFailure;
   const reasons = result.reasons.join(" ");
   if (/\bgithub\b|\bsecurity\b|\brepository api\b/i.test(reasons)) return false;
   if (provider === "gemini" && result.upstreamRateLimitVerified === true &&
