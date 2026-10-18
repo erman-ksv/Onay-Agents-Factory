@@ -81,7 +81,7 @@ function simulatedExecutor(calls: string[], mutate?: (result: Result, audit: boo
     if (!audit) await session.invoke("github", "publish_change_set", () => session.publish());
     await session.invoke("tester", "test_onay", () => session.test());
     if (!audit) await session.verifyFinalCandidate();
-    const result = { ...session.finish("Injected test executor completed its simulation."), legalReview: "enabled" as const };
+    const result = { ...session.finish("Injected test executor completed its simulation."), legalReview: "enabled" as const, upstreamRateLimitVerified: false };
     mutate?.(result, audit, options);
     return result;
   };
