@@ -204,3 +204,21 @@ test("Cloudflare upstream 429 emits host-owned signal but local request limit do
   assert.equal((await req(local, { messages: [msg()] })).status, 429);
   assert.equal(quotaSignals, 1);
 });
+
+test("Cloudflare signals only upstream 429, not exhausted local request budget", async () => {
+  let upstream = 0;
+  let calls = 0;
+  const wrapped = createCloudflareCompatibleFetch(async () => {
+    calls++;
+    return new Response("upstream-sensitive-response", { status: 429 });
+  }, { maxRequests: 2, onUpstreamRateLimit: () => { upstream++; } });
+  assert.equal((await req(wrapped, { messages: [msg("first")] })).status, 429);
+  assert.equal((await req(wrapped, { messages: [msg("second")] })).status, 429);
+  assert.equal(calls, 1);
+  assert.equal(upstream, 1);
+  const limited = createCloudflareCompatibleFetch(async () => { calls++; return Response.json({ ok: true }); },
+    { maxRequests: 1, onUpstreamRateLimit: () => { upstream++; } });
+  assert.equal((await req(limited, { messages: [msg("first")] })).status, 200);
+  assert.equal((await req(limited, { messages: [msg("second")] })).status, 429);
+  assert.equal(upstream, 1);
+});
