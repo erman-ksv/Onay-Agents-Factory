@@ -92,7 +92,7 @@ test("two quota failures rotate to third configured provider without re-running 
   const called: string[] = [];
   const result = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
     called.push(provider);
-    return provider === "gemini" ? success() : { status: "blocked", reasons: ["429 Provider rate limit"], upstreamRateLimitVerified: true, events: [] };
+    return provider === "gemini" ? success() : provider === "groq" ? { status: "blocked", reasons: ["Groq rate limit"], providerFailure: { provider: "groq", code: "rate_limited" }, upstreamRateLimitVerified: true, events: [] } : { status: "blocked", reasons: ["Cloudflare rate limit"], upstreamRateLimitVerified: true, events: [] };
   } });
   assert.equal(result.status, "completed");
   assert.equal(result.provider, "gemini");
@@ -106,7 +106,7 @@ test("two quota failures rotate to third configured provider without re-running 
 test("interrupted provider attempt pauses instead of replaying model, tools or publication", async t => {
   const checkpointPath = folder(t);
   const first = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async () =>
-    ({ status: "blocked", reasons: ["429 Provider quota exhausted"], events: [] }) });
+    ({ status: "blocked", reasons: ["429 Provider quota exhausted"], upstreamRateLimitVerified: true, events: [] }) });
   assert.equal(first.status, "exhausted");
   const state = JSON.parse(readFileSync(checkpointPath, "utf8"));
   state.status = "running";
