@@ -332,7 +332,7 @@ test("Commander and advisory specialists retain task-selected clients across pro
     };
     return new Response(JSON.stringify(response), { status: 200, headers: { "content-type": "application/json" } });
   });
-  const goal = "Audit Onay-Agents-Factory database without modifying files";
+  const goal = "Implement Onay-Agents-Factory database diagnostics";
   const gemini = await runAiCommander(goal, {
     env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "gemini-test-key", GEMINI_MODEL: "gemini-test-model" },
     dependencies: dependencies([]),
@@ -394,7 +394,7 @@ test("Gemini SDK retries a 503 after an executed Explorer tool without executing
     explorerCalls++;
     return originalExplore(sha);
   };
-  const result = await runAiCommander("Audit Onay-Agents-Factory repository without changing files", {
+  const result = await runAiCommander("Implement Onay-Agents-Factory retry-safe Explorer diagnostics", {
     env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini",
       GEMINI_API_KEY: "test-key-not-real", GEMINI_MODEL: "gemini-3.5-flash" },
     dependencies: deps,
@@ -550,4 +550,74 @@ test("OpenRouter development requests cannot bypass advisory and review gates us
   assert.ok(tools.includes("test_onay"));
   assert.ok(!tools.includes("audit_onay_read_only"));
   assert.ok(!tools.includes("rasul_legal_compliance"));
+});
+
+test("Gemini read-only audit exposes only the compact verified host tool", () => {
+  const execution = createAiCommander("Audit Onay-Agents-Factory repository without changing files", {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini",
+      GEMINI_API_KEY: "offline-test-key", GEMINI_MODEL: "gemini-3.5-flash-lite",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false", AGENT_FACTORY_LEGAL_ENABLED: "false" },
+  });
+  assert.equal(execution.provider, "gemini");
+  assert.deepEqual(execution.commander.tools.map(item => item.name), ["audit_onay_read_only"]);
+  assert.deepEqual(execution.session.options.requiredActors, ["explorer", "tester", "security"]);
+  assert.equal(execution.session.options.auditOnly, true);
+  assert.equal(execution.session.options.writesEnabled, false);
+  assert.ok(!execution.commander.tools.some(item =>
+    ["code_onay", "final_review", "publish_change_set", "rasul_legal_compliance"].includes(item.name)));
+});
+
+test("Gemini compact audit executes Explorer, Security, and exact-commit Tester without mutation", async () => {
+  const calls: string[] = [];
+  const deps = dependencies(calls);
+  const auditRef = "feat/commander-autonomous-backlog-20261017";
+  deps.generate = async () => { throw new Error("Read-only audit must not invoke Coder"); };
+  deps.review = () => { throw new Error("Read-only audit must not invoke final review"); };
+  deps.publish = async () => { throw new Error("Read-only audit must not publish"); };
+  deps.getCandidateHead = async () => { throw new Error("Read-only audit must not inspect candidate branch"); };
+  deps.verify = async (sha, ref) => {
+    assert.equal(sha, baseSha);
+    assert.equal(ref, auditRef);
+    calls.push("verify-ci");
+    return { testsExecuted: true, repository, ref, expectedSha: sha, status: "passed",
+      evidence: [{ runId: 800, name: "Agent Factory CI", headSha: sha,
+        conclusion: "success", url: "https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/800" }],
+      checks: [{ jobName: "typecheck", name: "Test", status: "completed", conclusion: "success" }],
+      notes: [] };
+  };
+  const model = new ScriptedModel(["audit_onay_read_only"]);
+  const result = await runAiCommander("Audit Onay-Agents-Factory repository without changing files", {
+    model, dependencies: deps, baseRef: auditRef, expectedBaseSha: baseSha,
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini",
+      GEMINI_API_KEY: "offline-test-key", GEMINI_MODEL: "gemini-3.5-flash-lite",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false", AGENT_FACTORY_LEGAL_ENABLED: "false" },
+  });
+  assert.equal(result.status, "completed", result.reasons.join("; "));
+  assert.deepEqual(result.missingActors, []);
+  assert.deepEqual(result.reasons, []);
+  assert.deepEqual(calls, ["resolve-base", "read-files", "scan-repository", "discover-tests", "verify-ci"]);
+  assert.deepEqual(result.evidence.changedFiles, []);
+  assert.deepEqual(result.evidence.proposedFiles, []);
+  assert.equal(result.evidence.testsExecuted, true);
+  assert.equal(result.evidence.security?.repository.status, "clean");
+  assert.equal(result.evidence.publicationAttempted, false);
+  assert.equal(result.legalReview, "disabled");
+  assert.equal(model.requests.length, 2);
+  const invoked = result.events.filter(event => event.type === "tool_started").map(event => event.details?.tool);
+  assert.deepEqual(invoked, ["explore_onay", "security_review", "test_onay"]);
+  assert.ok(!invoked.some(name => ["code_onay", "final_review", "publish_change_set"].includes(String(name))));
+});
+
+test("Gemini change tasks still require normal Coder and independent review tools", () => {
+  const execution = createAiCommander("Implement Onay-Agents-Factory feature", {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini",
+      GEMINI_API_KEY: "offline-test-key", GEMINI_MODEL: "gemini-3.5-flash-lite",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false", AGENT_FACTORY_LEGAL_ENABLED: "false" },
+  });
+  assert.equal(execution.session.options.auditOnly, false);
+  const tools = execution.commander.tools.map(item => item.name);
+  for (const name of ["explore_onay", "code_onay", "security_review", "final_review", "test_onay"]) {
+    assert.ok(tools.includes(name), name + " missing from change task");
+  }
+  assert.ok(!tools.includes("audit_onay_read_only"));
 });
