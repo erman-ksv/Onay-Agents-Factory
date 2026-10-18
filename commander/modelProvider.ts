@@ -28,11 +28,17 @@ export function isGeminiDailyQuotaExhausted(body: string): boolean {
 export function createGeminiRateLimitedFetch(
   underlyingFetch: typeof fetch = globalThis.fetch,
   intervalMs = 13_000,
+  onDailyQuotaExhausted?: () => void,
 ): typeof fetch {
   let nextSlot = 0;
   let queue = Promise.resolve();
+  let dailyQuotaExhausted = false;
+  const stoppedResponse = () => new Response(JSON.stringify({
+    error: { message: "Gemini daily request quota exhausted (HTTP 429). Stop this run and wait for quota reset.", type: "quota_exhausted" },
+  }), { status: 403, headers: { "content-type": "application/json", "x-should-retry": "false" } });
   return (input, init) => {
     const attempt = queue.then(async () => {
+      if (dailyQuotaExhausted) return stoppedResponse();
       // Use a monotonic clock; Date.now() can jump when the runner syncs its clock.
       const wait = Math.max(0, nextSlot - performance.now());
       if (wait > 0) await new Promise<void>(resolve => setTimeout(resolve, wait));
@@ -44,11 +50,10 @@ export function createGeminiRateLimitedFetch(
       if (response.status === 429) {
         const body = await response.clone().text();
         if (isGeminiDailyQuotaExhausted(body)) {
-          // The SDK retries thrown fetch errors as connection failures.
-          // Convert daily exhaustion into a non-retryable sanitized HTTP response.
-          return new Response(JSON.stringify({
-            error: { message: "Gemini daily request quota exhausted (HTTP 429). Stop this run and wait for quota reset.", type: "quota_exhausted" },
-          }), { status: 403, headers: { "content-type": "application/json" } });
+          // Retain only the host-owned signal, never the upstream response body.
+          dailyQuotaExhausted = true;
+          onDailyQuotaExhausted?.();
+          return stoppedResponse();
         }
       }
       return response;
@@ -78,10 +83,10 @@ export function configureModelProvider(env: NodeJS.ProcessEnv = process.env, opt
 
   const client = new OpenAI({
     apiKey: config.apiKey,
-    ...(config.provider === "gemini" ? { fetch: createGeminiRateLimitedFetch(options.fetch) } :
+    ...(config.provider === "gemini" ? { fetch: createGeminiRateLimitedFetch(options.fetch, 13_000, options.onUpstreamRateLimit) } :
       config.provider === "cloudflare" ? { fetch: createCloudflareCompatibleFetch(options.fetch, { onUpstreamRateLimit: options.onUpstreamRateLimit }) } :
       config.provider === "mistral" ? { fetch: createMistralFreeFetch(options.fetch) } :
-      contextBudget ? { fetch: createGroqBudgetedFetch(contextBudget, options.fetch) } :
+      contextBudget ? { fetch: createGroqBudgetedFetch(contextBudget, options.fetch, options.onUpstreamRateLimit) } :
       options.fetch ? { fetch: options.fetch } : {}),
     // OpenAI SDK retries 408/409/429/5xx with bounded backoff and Retry-After.
     // This is scoped to a failed model HTTP request; do not replay runner.run().
