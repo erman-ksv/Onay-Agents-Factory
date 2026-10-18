@@ -124,3 +124,25 @@ test("Gemini daily quota exhaustion stops without SDK retry", async () => {
   }), /Gemini daily request quota exhausted/);
   assert.equal(attempts, 1);
 });
+
+test("Gemini only signals upstream daily quota once and blocks further outbound calls", async () => {
+  let calls = 0, notifications = 0;
+  const wrapped = createGeminiRateLimitedFetch(async () => {
+    calls++;
+    return Response.json({ error: { details: [{ violations: [
+      { quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" },
+    ] }] } }, { status: 429 });
+  }, 0, () => { notifications++; });
+  assert.equal((await wrapped("https://example.invalid")).status, 403);
+  assert.equal((await wrapped("https://example.invalid")).status, 403);
+  assert.equal(calls, 1);
+  assert.equal(notifications, 1);
+});
+test("Gemini ordinary HTTP errors never signal daily quota", async () => {
+  let notifications = 0;
+  const wrapped = createGeminiRateLimitedFetch(async () =>
+    Response.json({ error: { message: "temporary" } }, { status: 503 }), 0,
+    () => { notifications++; });
+  assert.equal((await wrapped("https://example.invalid")).status, 503);
+  assert.equal(notifications, 0);
+});
