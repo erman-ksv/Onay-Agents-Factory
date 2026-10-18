@@ -621,3 +621,43 @@ test("Gemini change tasks still require normal Coder and independent review tool
   }
   assert.ok(!tools.includes("audit_onay_read_only"));
 });
+
+test("opt-in stage checkpoint records full read-only Commander execution on pinned SHA", async t => {
+  const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { inspectStageCheckpoint } = await import("../orchestration/agentStageCheckpoint.js");
+  const dir = mkdtempSync(join(tmpdir(), "commander-checkpoint-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const checkpointPath = join(dir, "checkpoint.json");
+  const baseRef = "feat/commander-autonomous-backlog-20261017";
+  const calls: string[] = [];
+  const deps = dependencies(calls);
+  deps.verify = async (sha, ref) => ({
+    testsExecuted: true, repository, ref, expectedSha: sha, status: "passed",
+    evidence: [{ runId: 1, headSha: sha, name: "CI", conclusion: "success", url: "https://github.com/erman-ksv/Onay-Agents-Factory/actions/runs/1" }],
+    checks: [], notes: [],
+  });
+  const outcome = await runAiCommander("Audit Onay-Agents-Factory repository without changing files", {
+    model: new ScriptedModel(["audit_onay_read_only"]),
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "gemini", GEMINI_API_KEY: "offline-test-key",
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false", AGENT_FACTORY_LEGAL_ENABLED: "false" },
+    dependencies: deps, baseRef, expectedBaseSha: baseSha, stageCheckpointPath: checkpointPath,
+  });
+  assert.equal(outcome.status, "completed", outcome.reasons.join("; "));
+  const identity = { goal: "Audit Onay-Agents-Factory repository without changing files", repository, baseRef, expectedSha: baseSha };
+  const advice = inspectStageCheckpoint(checkpointPath, identity);
+  assert.equal(advice.decision, "restart-read-only");
+  assert.deepEqual(advice.stages.map(x => x.tool), ["explore_onay", "security_review", "test_onay"]);
+  assert.equal(readFileSync(checkpointPath, "utf8").includes("offline-test-key"), false);
+  await assert.rejects(runAiCommander(identity.goal, {
+    model: new ScriptedModel(["audit_onay_read_only"]), env: factoryEnv, dependencies: deps,
+    baseRef, expectedBaseSha: baseSha, stageCheckpointPath: checkpointPath,
+  }), /existing stage checkpoint/);
+});
+
+test("stage checkpoint requires pinned SHA before runner can use an API", async () => {
+  await assert.rejects(runAiCommander("Audit Onay-Agents-Factory", {
+    model: new ScriptedModel([]), env: factoryEnv, stageCheckpointPath: "/tmp/no-run-without-sha.json",
+  }), /immutable expectedBaseSha/);
+});
