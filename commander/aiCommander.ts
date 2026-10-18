@@ -265,18 +265,18 @@ export async function runAiCommander(goal: string, options: AiCommanderOptions =
     if (failure) {
       const finished = session.finish(undefined, failure.message);
       recorder?.finish(finished.status);
-      return { ...finished, providerFailure: failure, legalReview, upstreamRateLimitVerified: upstreamQuota.verified };
+      return { ...finished, providerFailure: failure, legalReview, ...(upstreamQuota.verified ? { upstreamRateLimitVerified: true as const } : {}) };
     }
     await session.verifyFinalCandidate();
     const finished = session.finish(result.finalOutput);
     recorder?.finish(finished.status);
-    return { ...finished, legalReview, upstreamRateLimitVerified: upstreamQuota.verified };
+    return { ...finished, legalReview, ...(upstreamQuota.verified ? { upstreamRateLimitVerified: true as const } : {}) };
   } catch (error) {
     const failure = contextBudget?.failure ?? session.providerFailure ?? extractProviderFailure(error);
     const finished = session.finish(undefined, failure?.message ?? session.safeErrorMessage(error));
     recorder?.finish(finished.status);
     return { ...finished, ...(failure ? { providerFailure: failure } : {}), legalReview,
-      upstreamRateLimitVerified: upstreamQuota.verified };
+      ...(upstreamQuota.verified ? { upstreamRateLimitVerified: true as const } : {}) };
   } finally {
     recorder?.close();
   }
