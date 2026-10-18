@@ -48,7 +48,8 @@ test("recognized provider quota rotates once and retains completed read-only sta
   assert.equal(again.status, "completed");
 });
 test("quota from Gemini is allowed but GitHub 429 never rotates", () => {
-  assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Gemini daily request quota exhausted (HTTP 429)"] }, "gemini"), true);
+  assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Gemini daily request quota exhausted (HTTP 429)"], upstreamRateLimitVerified: true }, "gemini"), true);
+  assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Gemini daily request quota exhausted (HTTP 429)"] }, "gemini"), false);
   assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["GitHub API 429 provider rate limited"] }, "groq"), false);
   assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["503 unknown provider failure"] }, "groq"), false);
 });
@@ -92,7 +93,9 @@ test("two quota failures rotate to third configured provider without re-running 
   const called: string[] = [];
   const result = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
     called.push(provider);
-    return provider === "gemini" ? success() : { status: "blocked", reasons: ["429 Provider rate limit"], upstreamRateLimitVerified: true, events: [] };
+    return provider === "gemini" ? success() : provider === "groq" ?
+      { status: "blocked", reasons: ["Groq rate limit"], providerFailure: { provider: "groq", code: "rate_limited" }, upstreamRateLimitVerified: true, events: [] } :
+      { status: "blocked", reasons: ["Cloudflare rate limit"], upstreamRateLimitVerified: true, events: [] };
   } });
   assert.equal(result.status, "completed");
   assert.equal(result.provider, "gemini");
@@ -105,8 +108,17 @@ test("two quota failures rotate to third configured provider without re-running 
 
 test("interrupted provider attempt pauses instead of replaying model, tools or publication", async t => {
   const checkpointPath = folder(t);
-  const first = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async () =>
-    ({ status: "blocked", reasons: ["429 Provider quota exhausted"], events: [] }) });
+  const first = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
+    if (provider === "cloudflare") return {
+      status: "blocked", reasons: ["Cloudflare upstream 429"], upstreamRateLimitVerified: true, events: [],
+    };
+    if (provider === "groq") return {
+      status: "blocked", reasons: ["Groq upstream 429"], upstreamRateLimitVerified: true,
+      providerFailure: { provider: "groq", code: "rate_limited" }, events: [],
+    };
+    return { status: "blocked", reasons: ["Gemini daily request quota exhausted (HTTP 429)"],
+      upstreamRateLimitVerified: true, events: [] };
+  } });
   assert.equal(first.status, "exhausted");
   const state = JSON.parse(readFileSync(checkpointPath, "utf8"));
   state.status = "running";
@@ -140,6 +152,17 @@ test("non-provider tool failure cannot trigger quota switch", async t => {
   } });
   assert.equal(result.status, "blocked");
   assert.deepEqual(called, ["cloudflare"]);
+});
+
+test("provider identity mismatches cannot move to another API", () => {
+  assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Groq 429"],
+    providerFailure: { provider: "groq", code: "rate_limited" }, upstreamRateLimitVerified: true }, "cloudflare"), false);
+  assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Groq 429"],
+    providerFailure: { provider: "groq", code: "rate_limited" } }, "groq"), false);
+  assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Gemini daily request quota exhausted (HTTP 429)"],
+    upstreamRateLimitVerified: false }, "gemini"), false);
+  assert.equal(isModelQuotaFailure({ status: "blocked", reasons: ["Gemini daily request quota exhausted (HTTP 429)"],
+    upstreamRateLimitVerified: true, events: [{ type: "tool_failed", details: { tool: "test_onay" } }] }, "gemini"), false);
 });
 
 test("Cloudflare SDK text 429 is not enough to rotate without upstream transport evidence", async t => {
