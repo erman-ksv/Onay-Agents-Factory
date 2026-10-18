@@ -86,3 +86,58 @@ test("checkpoint stores no credentials", async t => {
   assert.ok(!data.includes("GEMINI_API_KEY"));
   assert.ok(!data.includes("fixture"));
 });
+
+test("two quota failures rotate to third configured provider without re-running previous providers", async t => {
+  const checkpointPath = folder(t);
+  const called: string[] = [];
+  const result = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
+    called.push(provider);
+    return provider === "gemini" ? success() : { status: "blocked", reasons: ["429 Provider rate limit"], events: [] };
+  } });
+  assert.equal(result.status, "completed");
+  assert.equal(result.provider, "gemini");
+  assert.deepEqual(called, ["cloudflare", "groq", "gemini"]);
+  assert.deepEqual(result.attempts.map(a => a.outcome), ["quota", "quota", "completed"]);
+  const retained = JSON.parse(readFileSync(checkpointPath, "utf8"));
+  assert.equal(retained.status, "completed");
+  assert.deepEqual(retained.attempts.map((a: { provider: string }) => a.provider), called);
+});
+
+test("interrupted provider attempt pauses instead of replaying model, tools or publication", async t => {
+  const checkpointPath = folder(t);
+  const first = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async () =>
+    ({ status: "blocked", reasons: ["429 Provider quota exhausted"], events: [] }) });
+  assert.equal(first.status, "exhausted");
+  const state = JSON.parse(readFileSync(checkpointPath, "utf8"));
+  state.status = "running";
+  state.attempts = [{ provider: "cloudflare", outcome: "running", verifiedTools: [] }];
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(checkpointPath, JSON.stringify(state), { mode: 0o600 });
+  let calls = 0;
+  const paused = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async () => {
+    calls++;
+    throw new Error("No model call allowed");
+  } });
+  assert.equal(paused.status, "paused");
+  assert.equal(calls, 0);
+  const again = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async () => {
+    calls++;
+    throw new Error("No model call allowed");
+  } });
+  assert.equal(again.status, "paused");
+  assert.equal(calls, 0);
+});
+
+test("non-provider tool failure cannot trigger quota switch", async t => {
+  const checkpointPath = folder(t);
+  const called: string[] = [];
+  const result = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
+    called.push(provider);
+    return { status: "blocked", reasons: ["429 Provider rate limit"], events: [
+      { type: "tool_started", details: { tool: "explore_onay" } },
+      { type: "tool_failed", details: { tool: "explore_onay" } },
+    ] };
+  } });
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(called, ["cloudflare"]);
+});
