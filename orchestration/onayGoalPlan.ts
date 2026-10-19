@@ -104,8 +104,9 @@ function normalizeRequest(input: GoalRequest | PreparedGoalRequest): PreparedGoa
   if (!plain(input)) return invalidRequest();
   if (!Object.hasOwn(input, "repository") && !Object.hasOwn(input, "fingerprint")) return prepareGoalRequest(input);
   if (!exactKeys(input, [...REQUEST_KEYS, "repository", "fingerprint"])) return invalidRequest();
-  const request = prepareGoalRequest(Object.fromEntries(REQUEST_KEYS.map(key => [key, input[key]])));
-  if (input.repository !== request.repository || input.fingerprint !== request.fingerprint) return invalidRequest();
+  const record = input as unknown as Record<string, unknown>;
+  const request = prepareGoalRequest(Object.fromEntries(REQUEST_KEYS.map(key => [key, record[key]])));
+  if (record.repository !== request.repository || record.fingerprint !== request.fingerprint) return invalidRequest();
   return request;
 }
 
@@ -120,7 +121,7 @@ export function prepareGoalInventory(input: unknown): GoalInventoryFile[] {
           !Number.isSafeInteger(item.bytes) || item.bytes < 0 || item.bytes > 4 * 1024 * 1024))) return invalidInventory();
     try { assertCommitSha(item.sha); } catch { return invalidInventory(); }
     seen.add(item.path);
-    return { path: item.path, sha: item.sha.toLowerCase(), ...(item.bytes !== undefined ? { bytes: item.bytes } : {}) };
+    return { path: item.path, sha: item.sha.toLowerCase(), ...(typeof item.bytes === "number" ? { bytes: item.bytes } : {}) };
   });
 }
 
@@ -217,7 +218,8 @@ export function validateGoalPlan(
     if (prepared.changePaths.some(path => /(?:^|\/)(?:schema|migrations?)(?:\/|[.-])/i.test(path))) {
       unsupported = true; continue;
     }
-    const missingEvidence = prepared.changePaths.filter(path => !inspected.has(path) || !item.evidencePaths.includes(path));
+    const taskEvidencePaths = item.evidencePaths as string[];
+    const missingEvidence = prepared.changePaths.filter(path => !inspected.has(path) || !taskEvidencePaths.includes(path));
     if (missingEvidence.length) {
       blockers.push("Task " + expectedId + " needs inspected-source evidence for each proposed change file.");
       unverifiedAreas.push("Task " + expectedId + ": " + missingEvidence.length +

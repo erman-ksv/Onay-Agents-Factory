@@ -34,6 +34,7 @@ function fixture(t: { after: (callback: () => void) => void }, options: { depend
     return { version: 1, taskId: task.id, fingerprint: task.fingerprint, execution: "live", status: "completed",
       reasonCode: "verified_candidate", repository: task.repository, baseSha: task.baseSha, branch: task.branch,
       legalReview: "disabled", mergePerformed: false, deploymentPerformed: false, changedPaths: [...task.changePaths],
+      readPaths: [...task.explorerPaths], proposedPaths: [...task.changePaths], contextCoverage: {}, advisoryFindings: {},
       publication: { number: 42, headSha: candidateSha, url: "https://github.com/erman-ksv/Onay/pull/42" }, testedSha: candidateSha,
       gates: { security: true, policyReview: true, testsExecuted: true, independentAdvice: true }, unverifiedAreas: [] };
   };
