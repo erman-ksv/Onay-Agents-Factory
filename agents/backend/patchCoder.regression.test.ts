@@ -65,7 +65,8 @@ test("patch Coder SDK sends snippets and full-source SHA while retaining unselec
   assert.equal(requests[0].includes("untouched private source line 0"), false);
   assert.equal(requests[0].includes(JSON.stringify(source).slice(1, -1)), false);
   assert.deepEqual(result, { summary: validOutput().summary,
-    files: [{ path, content: source.replace(before, after), message: "Adjust response interval" }] });
+    files: [{ path, content: source.replace(before, after), message: "Adjust response interval" }],
+    reviewPatches: [{ path, sourceSha256, edits: [{ before, after }], message: "Adjust response interval" }] });
   assert.equal(result.files[0].content.split("\n").length, source.split("\n").length);
   assert.ok(result.files[0].content.includes(privateMarker), "Unselected source is preserved only in the host proposal.");
   for (let index = 0; index < sourceLines.length; index++) {
