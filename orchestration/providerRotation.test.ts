@@ -175,3 +175,15 @@ test("Cloudflare SDK text 429 is not enough to rotate without upstream transport
   assert.equal(result.status, "blocked");
   assert.deepEqual(called, ["cloudflare"]);
 });
+
+test("unknown executable tool blocks quota failover without calling next provider", async t => {
+  const checkpointPath = folder(t);
+  const providers: string[] = [];
+  const result = await rotateReadOnlyAudit({ ...base, checkpointPath, run: async provider => {
+    providers.push(provider);
+    return { status: "blocked", reasons: ["429 upstream rate limit"], upstreamRateLimitVerified: true,
+      events: [{ type: "tool_started", details: { tool: "unknown_future_write" } }] };
+  } });
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(providers, ["cloudflare"]);
+});
