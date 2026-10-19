@@ -9,10 +9,10 @@ test("Find Skills returns metadata only, never executes or installs", async () =
     assert.match(url, /^https:\/\/skills\.sh\/api\/search\?q=expo&limit=20$/);
     assert.equal(init?.method, "GET");
     return new Response(JSON.stringify({ skills: [
-      { id: "vercel-labs/skills/find-skills", source: "vercel-labs/skills", name: "find-skills", installs: 52 },
-      { id: "trusted/skills/expo", source: "trusted/skills", name: "expo", installs: 1 },
-      { id: "trusted/skills/expo", source: "trusted/skills", name: "expo", installs: 1 },
-      { id: "evil/skills/../prompt", source: "evil/skills", name: "bad", installs: 900 },
+      { id: "find-skills", source: "vercel-labs/skills", name: "find-skills", installs: 52 },
+      { id: "expo", source: "trusted/skills", name: "expo", installs: 1 },
+      { id: "expo", source: "trusted/skills", name: "expo", installs: 1 },
+      { id: "../prompt", source: "evil/skills", name: "bad", installs: 900 },
     ] }), { status: 200 });
   }) as typeof fetch;
   const answer = await discoverFindSkills("expo", fakeFetch);
@@ -20,6 +20,7 @@ test("Find Skills returns metadata only, never executes or installs", async () =
   assert.equal(answer.status, "found");
   assert.equal(answer.reviewRequired, true);
   assert.equal(answer.installationPerformed, false);
+  assert.equal(answer.candidates[0]?.listingUrl, "https://skills.sh/vercel-labs/skills/find-skills");
   assert.deepEqual(answer.candidates.map(c => c.identifier),
     ["vercel-labs/skills@find-skills", "trusted/skills@expo"]);
 });
