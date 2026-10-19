@@ -48,7 +48,7 @@ export function applyBoundedPatches(
       patch.message.length > BOUNDED_PATCH_LIMITS.messageCharacters || scanForSecrets(patch.message).length ||
       !Array.isArray(patch.edits) || patch.edits.length < 1 || patch.edits.length > BOUNDED_PATCH_LIMITS.editsPerFile) fail();
     seen.add(patch.path);
-    const source = sources.get(patch.path);
+    const source = sources.get(patch.path) ?? fail();
     if (typeof source !== "string" || Buffer.byteLength(source, "utf8") > BOUNDED_PATCH_LIMITS.fileBytes ||
       createHash("sha256").update(source, "utf8").digest("hex") !== patch.sourceSha256) fail();
     const replacements: Array<{ start: number; end: number; after: string }> = [];

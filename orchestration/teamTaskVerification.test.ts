@@ -32,7 +32,7 @@ function fixture(t: { after: (callback: () => void) => void }, createReceipt = t
   };
   if (createReceipt) save();
   const pr = { state: "open", draft: true, html_url: publication.url,
-    head: { ref: task.branch, sha: headSha, repo: { full_name: task.repository } }, base: { ref: task.baseRef } };
+    head: { ref: task.branch, sha: headSha, repo: { full_name: task.repository as string } }, base: { ref: task.baseRef } };
   const calls: string[] = [];
   const evidence = (mode: "passed" | "pending" | "failed" | "missing-step" = "passed", sha = headSha) => {
     const result = evaluateTestExecutionEvidence([{
