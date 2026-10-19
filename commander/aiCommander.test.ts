@@ -504,6 +504,15 @@ test("Groq free audit exposes only the bounded host audit tool, with budget enab
   assert.ok(execution.contextBudget, "Groq shared conservative TPM/context limit stays active");
 });
 
+test("Find Skills read-only discovery is exposed only on normal changes, not compact audits", () => {
+  const change = createAiCommander("Implement a tested app feature", { env: factoryEnv, model: new ScriptedModel([]) });
+  assert.ok(change.commander.tools.some(tool => tool.name === "find_skills"));
+  const compact = createAiCommander("Audit Onay repository without changing files", {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "test-key" },
+    model: new ScriptedModel([]),
+  });
+  assert.ok(!compact.commander.tools.some(tool => tool.name === "find_skills"));
+});
 test("Groq change requests retain normal specialist tools and cannot use compact audit shortcut", () => {
   const execution = createAiCommander("Implement Onay passenger registration", {
     env: {
