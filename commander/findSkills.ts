@@ -28,7 +28,7 @@ const catalog = "https://skills.sh/api/search";
 
 export async function discoverFindSkills(query: string, fetcher: typeof fetch = fetch): Promise<SkillDiscovery> {
   const cleanQuery = query.trim();
-  if (!queryPattern.test(cleanQuery)) throw new Error("Find Skills query must be 2–80 plain characters.");
+  if (cleanQuery !== query || !queryPattern.test(cleanQuery)) throw new Error("Find Skills query must be 2–80 plain characters.");
   const unavailable: SkillDiscovery = { status: "unavailable", catalog: "skills.sh",
     candidates: [], reviewRequired: true, installationPerformed: false };
   try {
@@ -52,18 +52,18 @@ export async function discoverFindSkills(query: string, fetcher: typeof fetch = 
       if (!item || typeof item !== "object" || Array.isArray(item)) continue;
       const row = item as Record<string, unknown>;
       if (typeof row.source !== "string" || typeof row.id !== "string") continue;
+      // Official Vercel Skills API uses source="owner/repository", id="skill-slug".
+      // Do not confuse the slug with the full skills.sh listing URL.
       const sourceParts = row.source.split("/");
-      const parts = row.id.split("/");
-      if (sourceParts.length !== 2 || parts.length !== 3 ||
-          !sourceParts.every(v => repositoryName.test(v)) || !skillName.test(parts[2]!) ||
-          parts[0] !== sourceParts[0] || parts[1] !== sourceParts[1] || seen.has(row.id)) continue;
-      const name = typeof row.name === "string" && skillName.test(row.name) ? row.name : parts[2]!;
+      if (sourceParts.length !== 2 || !sourceParts.every(v => repositoryName.test(v)) ||
+          !skillName.test(row.id) || seen.has(row.source + "@" + row.id)) continue;
+      const name = typeof row.name === "string" && skillName.test(row.name) ? row.name : row.id;
       const installs = typeof row.installs === "number" && Number.isSafeInteger(row.installs) &&
         row.installs >= 0 ? row.installs : 0;
-      seen.add(row.id);
+      seen.add(row.source + "@" + row.id);
       candidates.push({
-        name, source: row.source, identifier: row.source + "@" + parts[2],
-        listingUrl: "https://skills.sh/" + row.id, installs,
+        name, source: row.source, identifier: row.source + "@" + row.id,
+        listingUrl: "https://skills.sh/" + row.source + "/" + row.id, installs,
       });
       if (candidates.length >= 8) break;
     }
