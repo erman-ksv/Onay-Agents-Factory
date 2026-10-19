@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, fsyncSync, linkSync, lstatSync, openSy
 import { isAbsolute, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
-import { createCalculatorPlan, prepareCalculatorGoal, calculatorPlanDigest, planObject, planKeys, refuseCalculatorPlan,
+import { CALCULATOR_PLAN_ERROR, createCalculatorPlan, prepareCalculatorGoal, calculatorPlanDigest, planObject, planKeys, refuseCalculatorPlan,
   type CalculatorPlan, type CalculatorPlanTask, type PreparedCalculatorGoal, type CalculatorGoalRequest } from "./calculatorPlan.js";
 import { scanForSecrets } from "../github/secretScanner.js";
 
@@ -44,7 +44,7 @@ export class CalculatorPlanStore {
       if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700 ||
           (process.getuid && stat.uid !== process.getuid())) refuseCalculatorPlan();
       this.rootDev = stat.dev; this.rootIno = stat.ino;
-    } catch { return refuseCalculatorPlan(); }
+    } catch { throw new Error(CALCULATOR_PLAN_ERROR); }
   }
   private root(): void {
     try {
