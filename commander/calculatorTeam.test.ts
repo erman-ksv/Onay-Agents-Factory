@@ -116,6 +116,7 @@ test("oversized, malformed, secret-bearing or cyclic reviews refuse without drop
   const secret = "ghp_" + "A".repeat(24);
   const bad: unknown[] = [null, { ...pass(), ready: "true" }, { ...pass(), summary: secret },
     { ...pass(), findings: [{ ...issue(), message: secret }] }, { ...pass(), findings: [{ ...issue(), severity: "critical" }] },
+    { ...pass(), findings: [{ ...issue(), severity: { toString: "untrusted JSON" } }] },
     { ...pass(), findings: [{ ...issue(), evidenceRefs: ["criterion:addition", "criterion:addition"] }] },
     { ...pass(), findings: [...Array.from({ length: 12 }, () => issue("low")), issue("blocker")] },
     { ...pass(), findings: [{ ...issue(), bypass: true }] }, { ...pass(), summary: "x".repeat(601) },

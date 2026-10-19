@@ -144,7 +144,7 @@ export function validateCalculatorAssessment(roleValue: unknown, input: unknown,
   const findings: Array<CalculatorAssessment["findings"][number]> = [];
   for (const finding of input.findings) {
     if (!plain(finding) || !keys(finding, ["severity", "message", "evidenceRefs"]) ||
-        !["blocker", "high", "medium", "low"].includes(String(finding.severity)) || !text(finding.message, 400) ||
+        typeof finding.severity !== "string" || !["blocker", "high", "medium", "low"].includes(finding.severity) || !text(finding.message, 400) ||
         !refs(finding.evidenceRefs) || finding.evidenceRefs.some(ref => !supplied.has(ref))) return refuse();
     findings.push(Object.freeze({ severity: finding.severity as Severity, message: finding.message,
       evidenceRefs: Object.freeze([...finding.evidenceRefs]), evidenceStatus: finding.evidenceRefs.length ? "supplied" : "missing" }));
