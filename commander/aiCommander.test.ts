@@ -504,6 +504,59 @@ test("Groq free audit exposes only the bounded host audit tool, with budget enab
   assert.ok(execution.contextBudget, "Groq shared conservative TPM/context limit stays active");
 });
 
+/** Exercises the SDK Commander -> find_skills tool dispatch offline. */
+test("SDK Commander calls Find Skills exactly once, without provider, installs, or GitHub changes", async t => {
+  let catalogCalls = 0;
+  t.mock.method(globalThis, "fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    catalogCalls++;
+    assert.equal(String(input), "https://skills.sh/api/search?q=expo&limit=20");
+    assert.equal(init?.method, "GET");
+    return new Response(JSON.stringify({ skills: [{
+      id: "find-skills", name: "find-skills", source: "vercel-labs/skills", installs: 100,
+    }] }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  class OneDiscoveryCallModel implements Model {
+    readonly requests: ModelRequest[] = [];
+    async getResponse(request: ModelRequest): Promise<ModelResponse> {
+      const index = this.requests.push(request) - 1;
+      return {
+        usage: new Usage(),
+        output: index === 0
+          ? [{ type: "function_call", callId: "find-once", name: "find_skills",
+            arguments: '{"query":"expo"}', status: "completed" }]
+          : [{ type: "message", role: "assistant", status: "completed",
+            content: [{ type: "output_text", text: "Discovery metadata only. No installation." }] }],
+      };
+    }
+    async *getStreamedResponse(): AsyncGenerator<never> {
+      throw new Error("Offline model uses non-streaming execution only.");
+    }
+  }
+  const model = new OneDiscoveryCallModel();
+  const operations: string[] = [];
+  const result = await runAiCommander("Implement a mobile Expo task; look up Find Skills metadata only", {
+    model,
+    env: { ...factoryEnv, AGENT_FACTORY_ENABLE_GITHUB_WRITES: "false", AGENT_FACTORY_LEGAL_ENABLED: "false" },
+    dependencies: dependencies(operations),
+    maxTurns: 2,
+  });
+  assert.equal(catalogCalls, 1, "Only the approved read-only catalog query may run");
+  assert.equal(model.requests.length, 2, "Commander receives its single tool response");
+  assert.match(JSON.stringify(model.requests[1]), /vercel-labs\/skills/);
+  assert.deepEqual(operations, [], "No GitHub/explorer/coder/publish operations");
+  assert.notEqual(result.status, "completed", "Discovery is not proof that a code task finished");
+  assert.deepEqual(result.evidence.changedFiles, []);
+});
+
+test("Find Skills read-only discovery is exposed only on normal changes, not compact audits", () => {
+  const change = createAiCommander("Implement a tested app feature", { env: factoryEnv, model: new ScriptedModel([]) });
+  assert.ok(change.commander.tools.some(tool => tool.name === "find_skills"));
+  const compact = createAiCommander("Audit Onay repository without changing files", {
+    env: { ...factoryEnv, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "test-key" },
+    model: new ScriptedModel([]),
+  });
+  assert.ok(!compact.commander.tools.some(tool => tool.name === "find_skills"));
+});
 test("Groq change requests retain normal specialist tools and cannot use compact audit shortcut", () => {
   const execution = createAiCommander("Implement Onay passenger registration", {
     env: {
