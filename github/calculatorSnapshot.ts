@@ -6,7 +6,7 @@ export type CalculatorTreeEntry = { path: string; sha: string; type: string; mod
 /** Injected by the trusted host, never exposed as model-controlled arguments. */
 export type CalculatorSnapshotReader = {
   getHead(ref: string): Promise<string>;
-  readCommit(sha: string): Promise<{ sha: string; treeSha: string }>;
+  readCommit(sha: string): Promise<{ sha: string; treeSha: string; parents?: readonly string[] }>;
   readTree(sha: string): Promise<{ sha: string; truncated: boolean; tree: CalculatorTreeEntry[] }>;
   readBlob(sha: string): Promise<{ sha: string; encoding: string; content: string }>;
 };
@@ -131,7 +131,9 @@ export function createCalculatorSnapshotReader(env: NodeJS.ProcessEnv = process.
     },
     readCommit: async sha => {
       const data = object(await read("/git/commits/" + digest(sha)));
-      return { sha: digest(data.sha), treeSha: digest(object(data.tree).sha) };
+      if (data.parents !== undefined && (!Array.isArray(data.parents) || data.parents.length > 16)) return refuseCalculatorChange();
+      return { sha: digest(data.sha), treeSha: digest(object(data.tree).sha),
+        ...(Array.isArray(data.parents) ? { parents: data.parents.map(parent => digest(object(parent).sha)) } : {}) };
     },
     readTree: async sha => {
       const data = object(await read("/git/trees/" + digest(sha) + "?recursive=1"));
