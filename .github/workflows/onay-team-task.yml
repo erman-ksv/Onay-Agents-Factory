@@ -1,0 +1,265 @@
+name: Onay Team One Task
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: 'Unique lowercase task ID; never reuse an expired/deleted receipt ID'
+        required: true
+        type: string
+      goal:
+        description: 'One small Onay source/test change; no secrets'
+        required: true
+        type: string
+      criteria:
+        description: 'Acceptance criteria, one per line (1–6 concise items)'
+        required: true
+        type: string
+      profile:
+        description: 'Approved source/test scope'
+        required: true
+        type: choice
+        options: [mobile, backend]
+      provider:
+        description: 'Explicit provider; confirm its free tier before run'
+        required: true
+        type: choice
+        options: [cloudflare, groq, gemini]
+      base_ref:
+        description: 'Existing Onay base branch; must still match base_sha'
+        required: true
+        type: string
+      base_sha:
+        description: 'Exact existing Onay commit SHA'
+        required: true
+        type: string
+      change_paths:
+        description: '1–3 existing authorized source/test files, one per line'
+        required: true
+        type: string
+      mode:
+        description: 'plan: no model/write; run: one Draft PR; verify: read-only CI check'
+        required: true
+        default: plan
+        type: choice
+        options: [plan, run, verify]
+      confirmation:
+        description: 'run only: RUN_ONE_FREE_TASK approves the free-tier task and one Draft PR'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: onay-team-task-${{ inputs.task_id }}
+  cancel-in-progress: false
+
+jobs:
+  task:
+    name: One bounded owner task
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TASK_ID: ${{ inputs.task_id }}
+      TASK_GOAL: ${{ inputs.goal }}
+      TASK_CRITERIA: ${{ inputs.criteria }}
+      TASK_PROFILE: ${{ inputs.profile }}
+      TASK_PROVIDER: ${{ inputs.provider }}
+      TASK_BASE_REF: ${{ inputs.base_ref }}
+      TASK_BASE_SHA: ${{ inputs.base_sha }}
+      TASK_CHANGE_PATHS: ${{ inputs.change_paths }}
+      TASK_MODE: ${{ inputs.mode }}
+      TASK_CONFIRMATION: ${{ inputs.confirmation }}
+      AGENT_FACTORY_PROVIDER: ${{ inputs.provider }}
+      ONAY_REPOSITORY: erman-ksv/Onay
+      AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay
+      AGENT_FACTORY_LEGAL_ENABLED: 'false'
+      AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: ${{ inputs.mode == 'run' && inputs.confirmation == 'RUN_ONE_FREE_TASK' && 'true' || 'false' }}
+      ONAY_TEAM_LIVE_APPROVED: ${{ inputs.mode == 'run' && inputs.confirmation == 'RUN_ONE_FREE_TASK' && 'RUN_ONE_FREE_TASK' || '' }}
+      ONAY_TEAM_FREE_TIER_CONFIRMED: ${{ inputs.mode == 'run' && inputs.confirmation == 'RUN_ONE_FREE_TASK' && 'true' || 'false' }}
+    steps:
+      - name: Checkout trusted Factory workflow ref
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build private task card without shell interpolation
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o077);
+          const env = process.env;
+          const invalid = () => { throw new Error('Invalid dispatch inputs or missing one-task free-tier approval.'); };
+          if (!/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(env.TASK_ID ?? '') ||
+              !['plan', 'run', 'verify'].includes(env.TASK_MODE ?? '') ||
+              !['mobile', 'backend'].includes(env.TASK_PROFILE ?? '') ||
+              !['cloudflare', 'groq', 'gemini'].includes(env.TASK_PROVIDER ?? '') ||
+              (env.TASK_MODE === 'run' && env.TASK_CONFIRMATION !== 'RUN_ONE_FREE_TASK')) invalid();
+          const lines = value => (value ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+          const card = {
+            version: 1,
+            id: env.TASK_ID,
+            goal: (env.TASK_GOAL ?? '').trim(),
+            acceptanceCriteria: lines(env.TASK_CRITERIA),
+            profile: env.TASK_PROFILE,
+            provider: env.TASK_PROVIDER,
+            baseRef: (env.TASK_BASE_REF ?? '').trim(),
+            baseSha: (env.TASK_BASE_SHA ?? '').trim(),
+            changePaths: lines(env.TASK_CHANGE_PATHS),
+            contextPaths: [],
+          };
+          for (const name of ['onay-team-state', 'onay-team-report', 'onay-team-restored', 'onay-team-export']) {
+            mkdirSync(join(env.RUNNER_TEMP, name), { mode: 0o700 });
+          }
+          writeFileSync(join(env.RUNNER_TEMP, 'onay-task.json'), JSON.stringify(card) + '\n', { mode: 0o600, flag: 'wx' });
+          NODE
+
+      - name: Find prior receipt using Factory read-only artifact access
+        id: history
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const name = 'onay-task-state-' + process.env.TASK_ID;
+            const matches = [];
+            let complete = false;
+            for (let page = 1; page <= 3; page++) {
+              const result = await github.rest.actions.listArtifactsForRepo({
+                ...context.repo, name, per_page: 100, page,
+              });
+              if (result.data.total_count > 300) throw new Error('Receipt history exceeds the bounded inspection limit. Inspect manually.');
+              for (const artifact of result.data.artifacts) {
+                if (artifact.name === name) matches.push(artifact);
+              }
+              if (result.data.artifacts.length < 100) { complete = true; break; }
+            }
+            if (!complete) throw new Error('Receipt history is truncated. Inspect manually; this task will not run.');
+            if (matches.some(artifact => artifact.expired)) throw new Error('A prior receipt expired. Inspect the task and Onay branch manually; do not replay.');
+            matches.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id - a.id);
+            const prior = matches[0];
+            if (!prior && Number(process.env.GITHUB_RUN_ATTEMPT) > 1) throw new Error('A rerun has no recoverable receipt. Inspect manually; do not replay.');
+            if (!prior && process.env.TASK_MODE === 'verify') throw new Error('Verify requires a prior task receipt. No model task will be started.');
+            if (prior) {
+              if (!Number.isSafeInteger(prior.id) || !Number.isSafeInteger(prior.workflow_run?.id)) throw new Error('Prior receipt metadata is incomplete.');
+              core.setOutput('artifact_id', String(prior.id));
+              core.setOutput('run_id', String(prior.workflow_run.id));
+            }
+            core.setOutput('exists', prior ? 'true' : 'false');
+
+      - name: Restore prior receipt before any task execution
+        if: ${{ steps.history.outputs.exists == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.history.outputs.artifact_id }}
+          run-id: ${{ steps.history.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/onay-team-restored
+          merge-multiple: true
+
+      - name: Validate and restore private receipt files
+        if: ${{ steps.history.outputs.exists == 'true' }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { chmodSync, copyFileSync, lstatSync, readdirSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o077);
+          const root = join(process.env.RUNNER_TEMP, 'onay-team-restored');
+          const destination = join(process.env.RUNNER_TEMP, 'onay-team-state');
+          const names = readdirSync(root);
+          const allowed = new Set([process.env.TASK_ID + '.json', process.env.TASK_ID + '.lock']);
+          if (!names.length || names.some(name => !allowed.has(name))) throw new Error('Unexpected prior receipt files; inspect manually.');
+          chmodSync(root, 0o700);
+          chmodSync(destination, 0o700);
+          for (const name of names) {
+            const source = join(root, name);
+            const stat = lstatSync(source);
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 32768 ||
+                (name.endsWith('.lock') && stat.size !== 0)) throw new Error('Invalid prior receipt file.');
+            copyFileSync(source, join(destination, name));
+            chmodSync(join(destination, name), 0o600);
+          }
+          NODE
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install locked Factory dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Execute one task or inspect its exact-commit CI
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ (inputs.mode == 'run' || inputs.mode == 'verify') && secrets.ONAY_TEAM_TOKEN || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.mode == 'run' && inputs.confirmation == 'RUN_ONE_FREE_TASK' && inputs.provider == 'cloudflare' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.mode == 'run' && inputs.confirmation == 'RUN_ONE_FREE_TASK' && inputs.provider == 'cloudflare' && secrets.CLOUDFLARE_ACCOUNT_ID || '' }}
+          GROQ_API_KEY: ${{ inputs.mode == 'run' && inputs.confirmation == 'RUN_ONE_FREE_TASK' && inputs.provider == 'groq' && secrets.GROQ_API_KEY || '' }}
+          GEMINI_API_KEY: ${{ inputs.mode == 'run' && inputs.confirmation == 'RUN_ONE_FREE_TASK' && inputs.provider == 'gemini' && secrets.GEMINI_API_KEY || '' }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
+        run: |
+          pnpm exec tsx orchestration/teamTaskCli.ts --task "$RUNNER_TEMP/onay-task.json" --state-dir "$RUNNER_TEMP/onay-team-state" --mode "$TASK_MODE" --output-dir "$RUNNER_TEMP/onay-team-report"
+
+      - name: Collect only allowlisted metadata artifacts
+        if: ${{ always() }}
+        id: metadata
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o077);
+          if (!/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(process.env.TASK_ID ?? '')) process.exit(0);
+          const exportRoot = join(process.env.RUNNER_TEMP, 'onay-team-export');
+          mkdirSync(exportRoot, { recursive: true, mode: 0o700 });
+          chmodSync(exportRoot, 0o700);
+          const copyMetadata = (source, target) => {
+            if (!existsSync(source)) return false;
+            const stat = lstatSync(source);
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 131072) throw new Error('Metadata artifact is invalid.');
+            copyFileSync(source, target);
+            chmodSync(target, 0o600);
+            return true;
+          };
+          let state = false, report = false;
+          for (const group of ['state', 'report']) mkdirSync(join(exportRoot, group), { mode: 0o700 });
+          for (const suffix of ['.json', '.lock']) {
+            const name = process.env.TASK_ID + suffix;
+            state = copyMetadata(join(process.env.RUNNER_TEMP, 'onay-team-state', name), join(exportRoot, 'state', name)) || state;
+          }
+          for (const name of ['report.json', 'summary.md']) {
+            report = copyMetadata(join(process.env.RUNNER_TEMP, 'onay-team-report', name), join(exportRoot, 'report', name)) || report;
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, 'state=' + state + '\nreport=' + report + '\n');
+          NODE
+
+      - name: Preserve first receipt without replacing prior replay barriers
+        if: ${{ always() && steps.metadata.outputs.state == 'true' && steps.history.outputs.exists != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: onay-task-state-${{ inputs.task_id }}
+          path: ${{ runner.temp }}/onay-team-export/state/*
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+
+      - name: Upload metadata-only task report
+        if: ${{ always() && steps.metadata.outputs.report == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: onay-task-report-${{ inputs.task_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/onay-team-export/report/*
+          if-no-files-found: error
+          retention-days: 7
