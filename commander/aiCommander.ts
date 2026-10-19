@@ -114,7 +114,11 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     discoverTests: async () => {
       // Test discovery is also a repository read; a model may request it before Explorer.
       assertAllowed();
-      if (options.expectedBaseSha !== undefined) await getBaseHead();
+      if (options.expectedBaseSha !== undefined) {
+        await getBaseHead();
+        // Read test scripts from the same immutable commit as Explorer.
+        return inspectTests(repository, options.expectedBaseSha);
+      }
       return inspectTests(repository, ref);
     },
     publish: (files, baseSha) => {
