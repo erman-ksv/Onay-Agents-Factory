@@ -20,6 +20,7 @@ import { assertRepositoryAllowed, resolveAllowedRepositories } from "../github/r
 import { extractProviderFailure } from "./providerContextBudget.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 import { StageCheckpointRecorder } from "../orchestration/agentStageCheckpoint.js";
+import { assertOnayMobileExplorerFiles, ONAY_MOBILE_REQUIRED_CI, ONAY_MOBILE_ORDER_CHANGES } from "./onayMobileScope.js";
 
 export type AiCommanderOptions = {
   journal?: AiExecutionOptions["journal"];
@@ -33,6 +34,8 @@ export type AiCommanderOptions = {
   expectedBaseSha?: string;
   /** Host-selected file scope; models cannot expand the permitted change set. */
   allowedChangePaths?: readonly string[];
+  /** Host-approved mobile-only exploration. No model-chosen paths. */
+  explorerPaths?: readonly string[];
   specialistContextTransform?: AiExecutionOptions["specialistContextTransform"];
   specialistSelections?: AiExecutionOptions["specialistSelections"];
   /** Host-only turn budget for an explicitly scoped synthetic multi-agent proof. */
@@ -73,9 +76,21 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     assertAllowed();
     return validateBaseHead(await new GitHubClient({ repository }).getCommitSha(ref));
   };
-  const paths = factory ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
-  const requiredNames = factory ? ["typecheck"] : ["Typecheck and API tests"];
-  const requiredStepNames = factory ? ["Typecheck", "Test"] : ["Typecheck", "API integration tests"];
+  if (factory && options.explorerPaths) throw new Error("Mobile task paths cannot target Agent Factory.");
+  const mobileTask = options.explorerPaths !== undefined;
+  if (mobileTask && (!options.allowedChangePaths ||
+    options.allowedChangePaths.length !== ONAY_MOBILE_ORDER_CHANGES.length ||
+    new Set(options.allowedChangePaths).size !== ONAY_MOBILE_ORDER_CHANGES.length ||
+    options.allowedChangePaths.some(path => !ONAY_MOBILE_ORDER_CHANGES.includes(path as typeof ONAY_MOBILE_ORDER_CHANGES[number])))) {
+    throw new Error("Mobile AI tasks require exactly the two approved change paths.");
+  }
+  const paths: readonly string[] = mobileTask
+    ? assertOnayMobileExplorerFiles(options.explorerPaths!)
+    : factory ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
+  const requiredNames = factory ? ["typecheck"] : mobileTask
+    ? [...ONAY_MOBILE_REQUIRED_CI.names] : ["Typecheck and API tests"];
+  const requiredStepNames = factory ? ["Typecheck", "Test"] : mobileTask
+    ? [...ONAY_MOBILE_REQUIRED_CI.steps] : ["Typecheck", "API integration tests"];
   const plan = planTask(goal);
   const auditOnly = isReadOnlyRepositoryAudit(goal);
   // Free-tier providers, including Gemini, use a single compact, host-verified read-only audit tool.
@@ -99,7 +114,11 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
     discoverTests: async () => {
       // Test discovery is also a repository read; a model may request it before Explorer.
       assertAllowed();
-      if (options.expectedBaseSha !== undefined) await getBaseHead();
+      if (options.expectedBaseSha !== undefined) {
+        await getBaseHead();
+        // Read test scripts from the same immutable commit as Explorer.
+        return inspectTests(repository, options.expectedBaseSha);
+      }
       return inspectTests(repository, ref);
     },
     publish: (files, baseSha) => {

@@ -219,8 +219,9 @@ test("a host-selected pinned base is shared by exploration, security and audit v
   assert.ok(requestedRefs.every(ref => ref === baseRef));
   assert.ok(ciRefs.length > 0);
   assert.ok(ciRefs.every(ref => ref === baseRef));
-  const branchReads = reads.filter(read => read.ref !== baseSha);
-  assert.deepEqual(branchReads, [{ path: "package.json", ref: baseRef }]);
+  assert.ok(reads.some(read => read.path === "package.json"), "Test discovery must read package.json.");
+  assert.ok(reads.every(read => read.ref.toLowerCase() === baseSha),
+    "All source and test discovery reads must be pinned to the verified commit SHA.");
 });
 
 test("a changed pinned base blocks both exploration and early discovery before reading or writing files", async t => {
