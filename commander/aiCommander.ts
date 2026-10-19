@@ -20,7 +20,7 @@ import { assertRepositoryAllowed, resolveAllowedRepositories } from "../github/r
 import { extractProviderFailure } from "./providerContextBudget.js";
 import { AgentRunJournal } from "../orchestration/agentRunJournal.js";
 import { StageCheckpointRecorder } from "../orchestration/agentStageCheckpoint.js";
-import { assertOnayMobileExplorerFiles, ONAY_MOBILE_REQUIRED_CI } from "./onayMobileScope.js";
+import { assertOnayMobileExplorerFiles, ONAY_MOBILE_REQUIRED_CI, ONAY_MOBILE_ORDER_CHANGES } from "./onayMobileScope.js";
 
 export type AiCommanderOptions = {
   journal?: AiExecutionOptions["journal"];
@@ -78,6 +78,12 @@ function createAiCommanderExecution(goal: string, options: AiCommanderOptions = 
   };
   if (factory && options.explorerPaths) throw new Error("Mobile task paths cannot target Agent Factory.");
   const mobileTask = options.explorerPaths !== undefined;
+  if (mobileTask && (!options.allowedChangePaths ||
+    options.allowedChangePaths.length !== ONAY_MOBILE_ORDER_CHANGES.length ||
+    new Set(options.allowedChangePaths).size !== ONAY_MOBILE_ORDER_CHANGES.length ||
+    options.allowedChangePaths.some(path => !ONAY_MOBILE_ORDER_CHANGES.includes(path as typeof ONAY_MOBILE_ORDER_CHANGES[number])))) {
+    throw new Error("Mobile AI tasks require exactly the two approved change paths.");
+  }
   const paths: readonly string[] = mobileTask
     ? assertOnayMobileExplorerFiles(options.explorerPaths!)
     : factory ? AGENT_FACTORY_EXPLORER_FILES : DEFAULT_EXPLORER_FILES;
