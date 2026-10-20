@@ -129,6 +129,22 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           overwrite: false
+      - name: Collect private execution evidence independently of metadata collection
+        if: \${{ always() && steps.barrier.outcome == 'success' && steps.prepare.outputs.mode == 'run' }}
+        id: collect_private
+        working-directory: runtime
+        env:
+          CALCULATOR_REMOTE_BARRIER_UPLOADED: 'true'
+        run: pnpm exec tsx orchestration/calculatorExecutionArtifact.ts "$RUNNER_TEMP/calculator-one-cycle" '${reviewedFactorySha}' '${image}'
+      - name: Preserve immutable private execution evidence
+        if: \${{ always() && steps.collect_private.outcome == 'success' && steps.prepare.outputs.mode == 'run' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-cycle-execution-\${{ github.run_id }}
+          path: \${{ runner.temp }}/calculator-one-cycle/execution-artifact/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
       - name: Preserve source-free report
         if: \${{ always() }}
         uses: actions/upload-artifact@v4
