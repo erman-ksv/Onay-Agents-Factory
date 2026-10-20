@@ -52,6 +52,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
   const saved = store.inspect();
   if (mode === "inspect") return { mode, status: saved?.status ?? "unplanned", planFingerprint: saved?.fingerprint,
     taskIds: saved?.tasks.map(task => task.id) ?? [], wholeAppCompleted: false, legalEnabled: false };
+  let phase = "runtime_configuration_unverified";
   try {
     const config = prepareCalculatorRuntimeConfig(configInput);
     if (!["plan", "run", "preflight"].includes(mode) || env.AGENT_FACTORY_TARGET_PROFILE !== "calculator" ||
@@ -60,10 +61,13 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         selectProviderConfig(env).provider !== owner.provider) return refuse();
     const reader = createCalculatorSnapshotReader(env);
     const sandbox = createCalculatorSandbox({ image: config.sandboxImage, baseSha: owner.baseSha, baseSources: new Map() }, env);
+    phase = "sandbox_readiness_unverified";
     const readiness = await sandbox.preflight();
     if (!readiness.ready) return { mode, status: "blocked", reasonCode: readiness.reasonCode, wholeAppCompleted: false, legalEnabled: false };
+    phase = "bootstrap_head_unverified";
     if (await reader.getHead(owner.baseRef) !== owner.baseSha) return refuse();
     const ci = createCalculatorCiReader({ trustedWorkflows: config.trustedWorkflows, approvedBase: { ref: owner.baseRef, sha: owner.baseSha } }, env);
+    phase = "workflow_provenance_unverified";
     await ci({ repository: owner.repository, branch: owner.baseRef, candidateSha: owner.baseSha });
     if (mode === "preflight") return { mode, status: "ready-for-explicit-plan-or-run", wholeAppCompleted: false, legalEnabled: false,
       unverifiedAreas: ["No models or app tests ran", "Atomic publication requires explicit run mode and write authorization"] };
@@ -85,16 +89,21 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       }
       finally { claim.close(); }
     }
+    phase = "saved_plan_unverified";
     if (!saved || saved.status !== "planned") return refuse();
     const publisher = createCalculatorPublisher({ plan: saved, reader, env });
     let started = false;
     for (const task of saved.tasks) {
       const receipt = store.taskReceipt(saved, task); try { if (receipt.inspectExisting()) started = true; } finally { receipt.close(); }
     }
+    phase = "branch_bootstrap_unverified";
     if (!started) await publisher.bootstrapProjectBranch();
+    phase = "project_head_unverified";
     const currentSha = await reader.getHead(saved.branch);
     // Verify the pinned workflow itself before model calls and durable task claim.
+    phase = "project_workflow_unverified";
     await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
+    phase = "current_sources_unverified";
     const sources = await loadCalculatorRuntimeSources(reader, saved.branch, currentSha);
     const checks = createCalculatorSandbox({ image: config.sandboxImage, baseSha: currentSha, baseSources: sources }, env);
     const team = createCalculatorModelTeam(input, env);
@@ -119,10 +128,12 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       return { repository: owner.repository, planFingerprint: saved.fingerprint, taskId: task.id, candidateSha: evidence.candidateSha,
         currentSha, securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
     };
+    phase = "workspace_unverified";
     const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
+    phase = "one_task_execution_failed";
     const result = await runCalculatorExecution(workspace, { team, env, verifyDependencies,
       tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } });
     if (team.snapshot().stopped) console.error(JSON.stringify({ event: "calculator_execution_model_failed", ...team.diagnostic() }));
     return result;
-  } catch { return refuse(); }
+  } catch { console.error(JSON.stringify({ event: "calculator_runtime_failed", reasonCode: phase })); return refuse(); }
 }

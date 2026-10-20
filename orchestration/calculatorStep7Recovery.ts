@@ -131,16 +131,23 @@ export async function runCalculatorStep7Recovery(args: string[], env: NodeJS.Pro
   if (active.size !== 1 || [...active].some(([name, bytes]) => !bytes.equals(prior.state.get(name)!))) return refuse();
   if (env.AGENT_FACTORY_PROVIDER !== "groq" || env.GROQ_MODEL || env.AGENT_FACTORY_LEGAL_ENABLED !== "false") return refuse();
   const marker = new TeamTaskStore(join(root, "state"), { id: "calc-recovery-" + owner.id, fingerprint: digest(barrier) });
-  let team: ReturnType<typeof createCalculatorModelTeam> | undefined;
+  let team: ReturnType<typeof createCalculatorModelTeam> | undefined, failureStage = "recovery_claim_unverified";
   try {
     if (marker.claim() !== "claimed") return refuse();
+    failureStage = "recovery_preflight_unverified";
     const readiness = await runCalculatorRuntime(request.goal, request.config, join(root, "state"), "preflight", env);
     if (readiness.status !== "ready-for-explicit-plan-or-run") return refuse();
     marker.recordStage("recovery_plan", "running");
     team = createCalculatorModelTeam(request.goal, env, globalThis.fetch, {}, CALCULATOR_RECOVERY_CHARGE);
+    failureStage = "recovery_model_plan_failed";
     const plan = await team.plan(), checked = createCalculatorPlan(request.goal, plan.proposal), first = checked.tasks[0];
+    failureStage = "recovery_plan_scope_or_coverage_unverified";
+    put(join(root, "planning-proposal.json"), plan.proposal);
+    console.log(JSON.stringify({ event: "calculator_recovery_plan_evaluated", status: checked.status, blockers: checked.blockers,
+      unverifiedAreas: checked.unverifiedAreas, taskCount: checked.tasks.length }));
     if (checked.status !== "planned" || checked.fingerprint !== plan.fingerprint || !first || first.role !== "coder" || first.dependsOn.length ||
         [...first.paths].sort().join(",") !== "src/calculator.mjs,test/calculator.test.mjs") return refuse();
+    failureStage = "recovery_plan_persistence_failed";
     new CalculatorPlanStore(join(root, "state"), request.goal).initialize(plan.proposal);
     marker.recordStage("recovery_plan", "passed");
     console.log(JSON.stringify({ event: "calculator_recovery_plan_saved", planFingerprint: plan.fingerprint,
@@ -150,13 +157,14 @@ export async function runCalculatorStep7Recovery(args: string[], env: NodeJS.Pro
     // One explicit task only. The unchanged runtime still requires every role,
     // scoped snapshots, host proposal tests, atomic publication and exact CI.
     marker.recordStage("one_task", "running");
+    failureStage = "recovery_one_task_failed";
     const result = await runCalculatorRuntime(request.goal, request.config, join(root, "state"), "run", env);
     marker.recordStage("one_task", result.status === "blocked" ? "blocked" : "passed");
     marker.finish(result.status === "blocked" ? "blocked" : "needs-review", "one_recovery_task_attempted_no_replay");
     put(join(root, "calculator-report.json"), result); console.log(JSON.stringify(result));
     if (result.status === "blocked") process.exitCode = 10;
   } catch {
-    if (team) console.error(JSON.stringify({ event: "calculator_recovery_stopped", ...team.diagnostic() }));
+    console.error(JSON.stringify({ event: "calculator_recovery_stopped", stage: failureStage, ...(team ? team.diagnostic() : {}) }));
     try { marker.finish("blocked", "recovery_stopped_no_replay"); } catch { /* Existing terminal marker remains intact. */ }
     throw Error(ERROR);
   } finally { marker.close(); }
