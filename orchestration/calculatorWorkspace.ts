@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader, type CalculatorSnapshot, type CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
@@ -146,5 +148,53 @@ export async function loadCalculatorWorkspaceTask(workspace: CalculatorWorkspace
     const snapshot = await loadCalculatorSnapshot({ repository: workspace.repository, baseRef: workspace.ref,
       baseSha: workspace.sha, changePaths: task.paths }, host.reader);
     await fresh(workspace); return snapshot;
+  } catch { return refuse(); }
+}
+
+/** Trusted plan access for the executor, with the same current-head guard. */
+export async function calculatorWorkspacePlan(workspace: CalculatorWorkspace): Promise<CalculatorPlan> {
+  try { return (await fresh(workspace)).plan; } catch { return refuse(); }
+}
+/** After publication the old workspace SHA is intentionally stale. Verify the
+ * exact single-parent candidate and every published blob, without adopting it. */
+export async function assertCalculatorPublishedCandidate(workspace: CalculatorWorkspace, candidateSha: string,
+  changes: PreparedCalculatorChanges): Promise<void> {
+  try {
+    const host = workspaces.get(workspace);
+    if (!host || host.store.inspect()?.fingerprint !== workspace.planFingerprint || !sha(candidateSha) || candidateSha === workspace.sha ||
+        changes.repository !== workspace.repository || changes.baseRef !== workspace.ref || changes.baseSha !== workspace.sha ||
+        await host.reader.getHead(workspace.ref) !== candidateSha) return refuse();
+    const commit = await host.reader.readCommit(candidateSha);
+    if (commit.sha !== candidateSha || !sha(commit.treeSha) || !Array.isArray(commit.parents) ||
+        commit.parents.length !== 1 || commit.parents[0] !== workspace.sha) return refuse();
+    const result = await host.reader.readTree(commit.treeSha);
+    if (result.sha !== commit.treeSha || result.truncated !== false || !Array.isArray(result.tree) ||
+        result.tree.length > CALCULATOR_PROFILE.maxTreeEntries || new Set(result.tree.map(entry => entry.path)).size !== result.tree.length) return refuse();
+    const baseCommit = await host.reader.readCommit(workspace.sha);
+    if (baseCommit.sha !== workspace.sha || !sha(baseCommit.treeSha)) return refuse();
+    const base = await host.reader.readTree(baseCommit.treeSha);
+    if (base.sha !== baseCommit.treeSha || base.truncated !== false || !Array.isArray(base.tree) ||
+        base.tree.length > CALCULATOR_PROFILE.maxTreeEntries || new Set(base.tree.map(entry => entry.path)).size !== base.tree.length) return refuse();
+    const old = new Map(base.tree.map(entry => [entry.path, entry]));
+    const paths = new Set(changes.files.map(file => file.path));
+    for (const entry of result.tree) {
+      if (!sha(entry.sha)) return refuse();
+      if (paths.has(entry.path)) continue;
+      if (changes.files.some(file => file.path.startsWith(entry.path + "/")) && entry.type === "tree" && entry.mode === "040000") continue;
+      const before = old.get(entry.path);
+      if (!before || before.sha !== entry.sha || before.mode !== entry.mode || before.type !== entry.type) return refuse();
+    }
+    if (base.tree.some(entry => !result.tree.some(item => item.path === entry.path))) return refuse();
+    for (const file of changes.files) {
+      const parts = file.path.split("/");
+      for (let index = 1; index < parts.length; index++) {
+        const parent = result.tree.find(item => item.path === parts.slice(0, index).join("/"));
+        if (!parent || parent.type !== "tree" || parent.mode !== "040000") return refuse();
+      }
+      const data = Buffer.from(file.content), expected = createHash("sha1").update(Buffer.concat([Buffer.from("blob " + data.length + "\0"), data])).digest("hex");
+      const entry = result.tree.find(item => item.path === file.path);
+      if (!entry || entry.type !== "blob" || entry.mode !== "100644" || entry.sha !== expected) return refuse();
+    }
+    if (await host.reader.getHead(workspace.ref) !== candidateSha) return refuse();
   } catch { return refuse(); }
 }
