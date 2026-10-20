@@ -14,7 +14,11 @@ The runtime currently requires the reviewed Groq accounting adapter for executio
 
 ## Rollout and remaining checks
 
-The existing one-cycle workflow pins an older runtime and uploads a validated metadata-only capsule. Its format is unchanged. This patch alone does **not** make private execution evidence survive removal of an Actions runner: a reviewed immutable runtime pin and a separate private artifact upload/manifest still need to be integrated and checked. Never add proposal source to the metadata-only collector or public report.
+The metadata-only capsule format is unchanged. A separate host collector, `calculatorExecutionArtifact.ts <root> <factorySha> <image>`, exports exact bounded private bytes into `execution-artifact/` with a source-free SHA256 manifest. It verifies the current run, launch barrier, filesystem safety and credentials before export. Stale empty locks and damaged UTF-8 JSON are forensic evidence; capsule semantics remain explicitly **unvalidated**, with `resumeAuthorized:false` and `budgetResetAuthorized:false`.
+
+The one-cycle renderer runs this collector only in execution mode, after a successful remote barrier, independently of metadata collection outcome. Only its completed private output is uploaded. Planning runs retain their original artifact whitelist. Collector stdout contains only status, counts and manifest digest. Never add proposal source to the metadata-only collector or public report.
+
+Deployment of this wiring requires the actual workflow to pin a reviewed immutable commit containing the collector, after its full CI passes. A pin/workflow change cannot silently adopt older planning history: the existing workflow-blob and owner/runtime bindings still refuse incompatible history. Unit tests and wiring alone do not prove preservation on a real runner.
 
 No automatic resume is implemented. An existing private capsule causes a new runtime writer to refuse execution. A future continuation must separately verify original receipts, remote artifact identity/digest, exact source/configuration and the original aggregate charge, and must receive explicit bounded authorization. A new goal ID or fresh budget cannot bypass an interrupted task.
 
