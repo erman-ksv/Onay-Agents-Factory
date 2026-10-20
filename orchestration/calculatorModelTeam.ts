@@ -9,13 +9,14 @@ import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.j
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
 import { createTaskModelBudgetFetch } from "./taskModelBudget.js";
+import { createCalculatorGroqPacer, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
 
 export const CALCULATOR_MODEL_ERROR = "Calculator model team stopped: configuration, evidence, response or context budget is unverified. No retry or write is authorized.";
 function refuse(): never { throw new Error(CALCULATOR_MODEL_ERROR); }
 /** Real HTTP adapter. No SDK tools, arbitrary URLs, provider fallback, Git writes,
  * installs, automatic retries, or legal role. One instance owns one run's ledger. */
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
-  transport: typeof fetch = globalThis.fetch) {
+  transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}) {
   const owner = prepareCalculatorGoal(ownerRequest);
   const requestOwner = Object.freeze({ version: 1 as const, id: owner.id, goal: owner.goal,
     baseRef: owner.baseRef, baseSha: owner.baseSha, provider: owner.provider });
@@ -28,8 +29,10 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       (config.provider !== "groq" && config.provider !== "cloudflare" && config.provider !== "gemini")) return refuse();
   // Capture identity/configuration once. No later process.env lookup can switch it.
   const endpoint = config.baseURL.replace(/\/$/, "") + "/chat/completions", model = config.model, apiKey = config.apiKey;
-  const budget = createTaskModelBudgetFetch({}, transport);
-  const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: 1200 }) : undefined;
+  const now = timing.now ?? (() => performance.now());
+  const budget = createTaskModelBudgetFetch({ now }, transport);
+  const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: 1200, now }) : undefined;
+  const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
   let stopped = false, planned = false;
@@ -42,10 +45,14 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       if (stopped) return refuse();
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
+      const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
+        messages: [{ role: "system", content: instructions }, { role: "user", content: input }] });
+      if (admit) await admit(body);
+      if (stopped || budget.failure) return refuse();
+      const requestNumber = contextBudget ? contextBudget.snapshot().attemptedRequests + 1 : undefined;
       const response = await request(endpoint, { method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
         headers: { Authorization: "Bearer " + apiKey, "content-type": "application/json" },
-        body: JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
-          messages: [{ role: "system", content: instructions }, { role: "user", content: input }] }) });
+        body });
       if (!response.ok || !response.body) { void response.body?.cancel().catch(() => undefined); return refuse(); }
       const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
       try {
@@ -62,7 +69,19 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
           data.choices[0]?.message?.function_call || typeof data.choices[0]?.message?.content !== "string") return refuse();
       const content: string = data.choices[0].message.content;
       if (Buffer.byteLength(content) > 16_000 || scanForSecrets(content).length) return refuse();
-      return JSON.parse(content);
+      const parsed: unknown = JSON.parse(content);
+      // Only transport-level provider usage is eligible, never model JSON.
+      // Without complete bounded accounting the reservation remains charged.
+      const usage = data.usage;
+      if (contextBudget && requestNumber !== undefined && usage && typeof usage === "object" && !Array.isArray(usage) &&
+          Number.isSafeInteger(usage.prompt_tokens) && usage.prompt_tokens > 0 &&
+          Number.isSafeInteger(usage.completion_tokens) && usage.completion_tokens > 0 &&
+          Number.isSafeInteger(usage.total_tokens) && usage.total_tokens === usage.prompt_tokens + usage.completion_tokens &&
+          (usage.completion_tokens_details?.reasoning_tokens === undefined ||
+            (Number.isSafeInteger(usage.completion_tokens_details.reasoning_tokens) && usage.completion_tokens_details.reasoning_tokens >= 0 &&
+              usage.completion_tokens_details.reasoning_tokens <= usage.completion_tokens)))
+        contextBudget.settleUsage(requestNumber, usage.prompt_tokens, usage.completion_tokens);
+      return parsed;
     } catch { stopped = true; return refuse(); }
   }
   function taskIn(plan: CalculatorPlan, taskId: string) {

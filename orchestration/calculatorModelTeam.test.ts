@@ -134,6 +134,51 @@ test("Groq applies its TPM ledger and a rate limit stops the whole team without 
   await assert.rejects(() => team.plan(), refusal); await assert.rejects(() => team.plan(), refusal);
   assert.equal(calls, 1); assert.equal(team.snapshot().contextBudget?.attemptedRequests, 1);
 });
+test("Groq completes a small Coder and three independent assessments within unchanged budgets", async () => {
+  const groqOwner = { ...owner, provider: "groq" };
+  const original = proposal(), ids = new Map(original.tasks.map((item, index) => [item.id, calculatorPlanTaskId(groqOwner, index + 1)]));
+  const groqPlan = createCalculatorPlan(groqOwner, { ...original, tasks: original.tasks.map(item => ({ ...item,
+    id: ids.get(item.id), dependsOn: item.dependsOn.map(id => ids.get(id)) })) });
+  let now = 0; const waits: number[] = [], sentAt: number[] = [];
+  const team = createCalculatorModelTeam(groqOwner, { ...environment, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "fixture-key" }, async () => {
+    sentAt.push(now);
+    const content = sentAt.length === 1 ? generated : { ready: true, summary: "Scoped review only.", findings: [], unverifiedAreas: ["No actual tests ran."] };
+    const completion = sentAt.length === 1 ? 300 : 80;
+    return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: JSON.stringify(content) } }],
+      usage: { prompt_tokens: 1000, completion_tokens: completion, total_tokens: 1000 + completion } });
+  }, { now: () => now, wait: async milliseconds => { assert.ok(milliseconds > 0 && milliseconds <= 15000); waits.push(milliseconds); now += milliseconds; } });
+  const changes = await team.generate(groqPlan, groqPlan.tasks[0].id, await snapshot());
+  for (const role of ["security", "reviewer", "tester"] as const) {
+    try { assert.equal((await team.assess(role, groqPlan, groqPlan.tasks[0].id, changes)).ready, true); }
+    catch { assert.fail(JSON.stringify({ role, now, sentAt, waits, snapshot: team.snapshot() })); }
+  }
+  assert.equal(sentAt.length, 4); assert.ok(waits.length > 0); assert.ok(now < 120000);
+  assert.equal(team.snapshot().contextBudget?.attemptedRequests, 4); assert.equal(team.snapshot().modelBudget.attemptedRequests, 4);
+  assert.ok(team.snapshot().contextBudget!.reservedRunTokens <= 16000); assert.ok(team.snapshot().contextBudget!.reservedWindowTokens <= 6000);
+});
+test("Groq never discounts missing, excessive or inconsistent transport usage", async t => {
+  for (const usage of [undefined, { prompt_tokens: 1000, completion_tokens: 10, total_tokens: 999 },
+    { prompt_tokens: 1000, completion_tokens: 1201, total_tokens: 2201 }, { prompt_tokens: 100000, completion_tokens: 10, total_tokens: 100010 },
+    { prompt_tokens: 1000, completion_tokens: 10, total_tokens: 1010, completion_tokens_details: { reasoning_tokens: 11 } }]) await t.test(JSON.stringify(usage) ?? "missing", async () => {
+    const groqOwner = { ...owner, provider: "groq" }, original = proposal();
+    const ids = new Map(original.tasks.map((item, index) => [item.id, calculatorPlanTaskId(groqOwner, index + 1)]));
+    const groqPlan = createCalculatorPlan(groqOwner, { ...original, tasks: original.tasks.map(item => ({ ...item, id: ids.get(item.id), dependsOn: item.dependsOn.map(id => ids.get(id)) })) });
+    let bytes = 0;
+    const team = createCalculatorModelTeam(groqOwner, { ...environment, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "fixture-key" }, async (_url, init) => {
+      bytes = Buffer.byteLength(String(init?.body));
+      return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: JSON.stringify(generated) } }], usage });
+    });
+    await team.generate(groqPlan, groqPlan.tasks[0].id, await snapshot());
+    assert.equal(team.snapshot().contextBudget!.reservedRunTokens, Math.ceil(bytes / 3) + 256 + 1200);
+  });
+});
+test("Groq 429 remains terminal with pacing enabled and never sleeps or retries", async () => {
+  let calls = 0, waits = 0;
+  const team = createCalculatorModelTeam({ ...owner, provider: "groq" }, { ...environment, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "fixture-key" },
+    async () => { calls++; return new Response("private upstream data", { status: 429 }); }, { now: () => 0, wait: async () => { waits++; } });
+  await assert.rejects(() => team.plan(), refusal); await assert.rejects(() => team.plan(), refusal);
+  assert.equal(calls, 1); assert.equal(waits, 0); assert.equal(team.snapshot().contextBudget!.attemptedRequests, 1);
+});
 test("a repeated developer or specialist invocation cannot consume another request", async () => {
   let calls = 0;
   const team = createCalculatorModelTeam(owner, environment, async () => {

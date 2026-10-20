@@ -49,6 +49,22 @@ failure stop the entire instance with a fixed diagnostic and no replay. These ar
 local resource bounds, not discovered provider quota. Even a successful model
 assessment has testsExecuted=false and publicationAuthorized=false.
 
+For Groq, fresh requests first check read-only admission on the same ledger.
+They may wait in chunks of at most 15 seconds for a minute window, within the
+unchanged 120-second task deadline. The 30-second HTTP timeout starts after
+admission. Per-request, cumulative and terminal failures never trigger waiting
+or retries. Limits and independent specialist calls are unchanged.
+
+After a successful, bounded and validated response, only transport-level Groq
+usage can settle that request once. Positive input/output counts must fit their
+original reservations, total_tokens must equal their sum, and reported reasoning
+tokens cannot exceed completion tokens. Missing or inconsistent usage keeps the
+full reservation; model-produced JSON cannot supply this authority. Failed
+requests keep their charge, terminal failures cannot reopen, request counts are
+never reset, and settled cumulative consumption remains charged after a window
+expires. A chain that cannot fit still stops within its budget rather than
+replaying or skipping Security, Reviewer or Tester.
+
 ## Still required to finish step 7
 
 Wire the model team to durable workspace claims, real host task tests, precise
