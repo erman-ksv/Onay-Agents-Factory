@@ -247,3 +247,30 @@ test("a later transport failure never inherits the previous successful provider 
   assert.equal(team.diagnostic().httpStatus, 502); assert.equal(team.diagnostic().providerHttpStatus, undefined);
   assert.equal(team.diagnostic().finishReason, undefined); assert.equal(team.diagnostic().httpRequestsAttempted, 2);
 });
+
+test("reviewed Groq JSON mode uses low reasoning without raising output or dropping role instructions", async () => {
+  let body: any;
+  const groqOwner = { ...owner, provider: "groq" };
+  const team = createCalculatorModelTeam(groqOwner, { ...environment, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "fixture-key" }, async (_url, init) => {
+    body = JSON.parse(String(init?.body)); return new Response("blocked", { status: 429 });
+  });
+  await assert.rejects(() => team.plan());
+  assert.equal(body.reasoning_effort, "low"); assert.deepEqual(body.response_format, { type: "json_object" });
+  assert.equal(body.max_completion_tokens, 1200); assert.ok(body.messages[0].content.includes("No role may directly write GitHub"));
+});
+test("host recovery prior charge reduces remaining budgets, is visible, and 429 remains terminal", async () => {
+  const groqOwner = { ...owner, provider: "groq" }, env = { ...environment, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "fixture-key" };
+  const prior = { attemptedRequests: 1, totalRequestBytes: 24000, reservedRunTokens: 6000, elapsedMs: 30000 }; let calls = 0;
+  const team = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return new Response("private source", { status: 429 }); }, {}, prior);
+  await assert.rejects(() => team.plan()); await assert.rejects(() => team.plan()); assert.equal(calls, 1);
+  assert.equal(team.snapshot().aggregatePlanningCharge?.attemptedRequests, 2);
+  assert.ok(team.snapshot().aggregatePlanningCharge!.totalRequestBytes > 24000);
+  assert.ok(team.snapshot().aggregatePlanningCharge!.reservedRunTokens > 6000);
+  assert.ok(team.snapshot().aggregatePlanningCharge!.elapsedMs >= 30000);
+  assert.equal(team.snapshot().modelBudget.remainingRequests, 14);
+  const exhausted = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return response({}); }, {}, { ...prior, reservedRunTokens: 14000 });
+  await assert.rejects(() => exhausted.plan()); assert.equal(calls, 1);
+  assert.ok(!JSON.stringify(team.snapshot()).includes('private source'));
+  for (const raw of [{ ...prior, elapsedMs: 120000 }, { ...prior, attemptedRequests: 16 }, { ...prior, totalRequestBytes: 192000 }, { ...prior, reservedRunTokens: -1 }])
+    assert.throws(() => createCalculatorModelTeam(groqOwner, env, undefined, {}, raw));
+});

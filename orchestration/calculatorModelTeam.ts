@@ -8,15 +8,18 @@ import { buildCalculatorRoleInstructions, prepareCalculatorRoleChanges, validate
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
-import { createTaskModelBudgetFetch } from "./taskModelBudget.js";
+import { DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
 import { createCalculatorGroqPacer, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
 
 export const CALCULATOR_MODEL_ERROR = "Calculator model team stopped: configuration, evidence, response or context budget is unverified. No retry or write is authorized.";
 function refuse(): never { throw new Error(CALCULATOR_MODEL_ERROR); }
+/** Host-supplied conservative prior charge for a separately authorized recovery.
+ * Never accepted from model output or environment variables. Unknown usage stays charged. */
+export type CalculatorPriorModelCharge = Readonly<{ attemptedRequests: number; totalRequestBytes: number; reservedRunTokens: number; elapsedMs: number }>;
 /** Real HTTP adapter. No SDK tools, arbitrary URLs, provider fallback, Git writes,
  * installs, automatic retries, or legal role. One instance owns one run's ledger. */
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
-  transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}) {
+  transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}, priorCharge?: CalculatorPriorModelCharge) {
   const owner = prepareCalculatorGoal(ownerRequest);
   const requestOwner = Object.freeze({ version: 1 as const, id: owner.id, goal: owner.goal,
     baseRef: owner.baseRef, baseSha: owner.baseSha, provider: owner.provider });
@@ -30,8 +33,18 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   // Capture identity/configuration once. No later process.env lookup can switch it.
   const endpoint = config.baseURL.replace(/\/$/, "") + "/chat/completions", model = config.model, apiKey = config.apiKey;
   const now = timing.now ?? (() => performance.now());
-  const budget = createTaskModelBudgetFetch({ now }, transport);
-  const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: 1200, now }) : undefined;
+  const prior = priorCharge ? Object.freeze({ ...priorCharge }) : undefined;
+  if (prior && (config.provider !== "groq" || Object.keys(prior).sort().join(",") !== "attemptedRequests,elapsedMs,reservedRunTokens,totalRequestBytes" ||
+      Object.values(prior).some(value => !Number.isSafeInteger(value) || value < 1) ||
+      prior.attemptedRequests >= DEFAULT_TASK_MODEL_BUDGET.maxRequests || prior.totalRequestBytes >= DEFAULT_TASK_MODEL_BUDGET.maxRunBytes ||
+      prior.elapsedMs >= DEFAULT_TASK_MODEL_BUDGET.wallTimeMs || prior.reservedRunTokens >= 16000 - 1200)) return refuse();
+  const budget = createTaskModelBudgetFetch({ now, ...(prior ? {
+    maxRequests: DEFAULT_TASK_MODEL_BUDGET.maxRequests - prior.attemptedRequests,
+    maxRunBytes: DEFAULT_TASK_MODEL_BUDGET.maxRunBytes - prior.totalRequestBytes,
+    wallTimeMs: DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - prior.elapsedMs,
+  } : {}) }, transport);
+  const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: 1200, now,
+    ...(prior ? { maxRunTokens: 16000 - prior.reservedRunTokens } : {}) }) : undefined;
   const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
@@ -49,7 +62,10 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
       const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
-        messages: [{ role: "system", content: instructions }, { role: "user", content: input }] });
+        messages: [{ role: "system", content: instructions }, { role: "user", content: input }],
+        ...(config.provider === "groq" && model === "openai/gpt-oss-120b" ? {
+          reasoning_effort: "low", response_format: { type: "json_object" },
+        } : {}) });
       phase = "model_admission_failed";
       if (admit) await admit(body);
       if (stopped || budget.failure) return refuse();
@@ -199,6 +215,12 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       ...(budget.failure ? { taskBudgetCode: budget.failure.code } : {}), ...(contextBudget?.failure ? { contextBudgetCode: contextBudget.failure.code } : {}) }),
     snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size, repairedTasks: repaired.size,
       modelBudget: budget.snapshot(), ...(contextBudget ? { contextBudget: contextBudget.snapshot() } : {}),
+      ...(prior ? { carriedPriorCharge: prior, aggregatePlanningCharge: {
+        attemptedRequests: prior.attemptedRequests + budget.snapshot().attemptedRequests,
+        totalRequestBytes: prior.totalRequestBytes + budget.snapshot().totalRequestBytes,
+        reservedRunTokens: prior.reservedRunTokens + (contextBudget?.snapshot().reservedRunTokens ?? 0),
+        elapsedMs: prior.elapsedMs + budget.snapshot().elapsedMs,
+      } } : {}),
       testsExecuted: false as const, publicationAuthorized: false as const, legalEnabled: false as const }),
   });
 }

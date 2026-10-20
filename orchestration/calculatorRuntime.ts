@@ -120,7 +120,9 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         currentSha, securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
     };
     const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
-    return await runCalculatorExecution(workspace, { team, env, verifyDependencies,
+    const result = await runCalculatorExecution(workspace, { team, env, verifyDependencies,
       tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } });
+    if (team.snapshot().stopped) console.error(JSON.stringify({ event: "calculator_execution_model_failed", ...team.diagnostic() }));
+    return result;
   } catch { return refuse(); }
 }
