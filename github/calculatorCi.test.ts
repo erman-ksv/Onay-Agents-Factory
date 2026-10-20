@@ -4,7 +4,7 @@ import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { evaluateCiJobs } from "./ciGate.js";
 import { CALCULATOR_CI_ERROR, createCalculatorCiReader, type CalculatorWorkflowPin } from "./calculatorCi.js";
 
-const repository = CALCULATOR_PROFILE.repository, branch = "feat/calculator-agent/ci-reader-pilot";
+const repository: string = CALCULATOR_PROFILE.repository, branch = "feat/calculator-agent/ci-reader-pilot";
 const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat(40);
 const pin: CalculatorWorkflowPin = { id: 3, path: ".github/workflows/calculator-task-ci.yml", blobSha: C };
 const env = { AGENT_FACTORY_TARGET_PROFILE: "calculator", AGENT_ALLOWED_REPOSITORIES: repository, GITHUB_TOKEN: "fixture-credential" };
