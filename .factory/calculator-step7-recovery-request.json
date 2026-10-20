@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "approval": "ONE_REVIEWED_STEP7_RECOVERY",
+  "priorRunId": 39437299742,
+  "runtimeSha": "4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2",
+  "request": {
+    "version": 1,
+    "mode": "plan",
+    "factorySha": "d733e078800505534cd7c39f15406822416e7f24",
+    "freeTierConfirmed": true,
+    "goal": {
+      "version": 1,
+      "id": "calculator-pilot-step7-v1",
+      "goal": "Create the complete agreed static calculator with independent tests, keyboard support and a responsive phone layout.",
+      "provider": "groq",
+      "baseRef": "feat/calculator-pilot-bootstrap",
+      "baseSha": "2c1218f2b020962ad93adf68d902a847271a7e72"
+    },
+    "config": {
+      "version": 1,
+      "sandboxImage": "node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392",
+      "trustedWorkflows": [
+        {
+          "id": 390241255,
+          "path": ".github/workflows/calculator-task-ci.yml",
+          "blobSha": "45fae4a292a04e89a631ad7ff2469a3af7265e70"
+        }
+      ]
+    }
+  }
+}
