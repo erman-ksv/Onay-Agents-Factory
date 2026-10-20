@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createProviderContextBudget, createGroqBudgetedFetch } from "../commander/providerContextBudget.js";
 import { createTaskModelBudgetFetch } from "./taskModelBudget.js";
-import { createCalculatorGroqPacer } from "./calculatorGroqPacing.js";
+import { CalculatorModelAdmissionError, createCalculatorGroqPacer } from "./calculatorGroqPacing.js";
 
 const body = JSON.stringify({ max_completion_tokens: 1200, messages: [{ role: "user", content: "x".repeat(3000) }] });
 test("admission is read-only and accounting settles successful usage once", () => {
@@ -67,4 +67,74 @@ test("a backwards host clock never manufactures a new quota window", async () =>
   const task = createTaskModelBudgetFetch({ now: () => now }, async () => Response.json({}));
   const pace = createCalculatorGroqPacer(context, task, { now: () => now, wait: async () => { now--; } });
   await assert.rejects(() => pace(body)); assert.equal(context.snapshot().attemptedRequests, 1);
+});
+
+test("admission distinguishes context, cumulative, byte and invalid requests without source data", async t => {
+  for (const kind of ["context", "run", "bytes", "json"] as const) await t.test(kind, async () => {
+    const sentinel = "PRIVATE_SOURCE_SENTINEL";
+    const context = createProviderContextBudget({ reservedOutputTokens: 1200, now: () => 0,
+      ...(kind === "run" ? { maxRunTokens: 6000 } : {}) });
+    if (kind === "run") context.reserve(3500, 1200);
+    const task = createTaskModelBudgetFetch({ now: () => 0 }, async () => assert.fail("No HTTP is allowed"));
+    const raw = kind === "json" ? sentinel : JSON.stringify({ max_completion_tokens: 1200,
+      content: sentinel + "x".repeat(kind === "context" ? 14000 : kind === "bytes" ? 24001 : 3000) });
+    const before = context.snapshot();
+    await assert.rejects(() => createCalculatorGroqPacer(context, task, { now: () => 0 })(raw), error => {
+      assert.ok(error instanceof CalculatorModelAdmissionError);
+      assert.equal(error.diagnostic.code, { context: "context_budget_exceeded", run: "run_budget_exceeded",
+        bytes: "request_bytes_exceeded", json: "invalid_budget_request" }[kind]);
+      assert.equal(error.diagnostic.requestBytes, Buffer.byteLength(raw));
+      assert.equal(error.diagnostic.reservedRunTokens, before.reservedRunTokens);
+      assert.equal(error.diagnostic.remainingRunTokens, context.limits.maxRunTokens - before.reservedRunTokens);
+      assert.equal(error.diagnostic.contextTokenLimit, 6000);
+      assert.ok(!JSON.stringify(error.diagnostic).includes(sentinel));
+      assert.ok(Object.isFrozen(error.diagnostic));
+      return true;
+    });
+    assert.deepEqual(context.snapshot(), before);
+    assert.equal(task.snapshot().attemptedRequests, 0);
+  });
+});
+
+test("prior charge shortens the very same admission deadline without waiting or resetting quota", async () => {
+  const context = createProviderContextBudget({ reservedOutputTokens: 1200, now: () => 0 });
+  context.reserve(2800, 1200);
+  const task = createTaskModelBudgetFetch({ wallTimeMs: 60000, now: () => 0 }, async () => assert.fail("No HTTP"));
+  let waits = 0;
+  const pace = createCalculatorGroqPacer(context, task, { now: () => 0, wait: async () => { waits++; } }, 60000);
+  await assert.rejects(() => pace(body), error => {
+    assert.ok(error instanceof CalculatorModelAdmissionError);
+    assert.equal(error.diagnostic.code, "wait_exceeds_deadline");
+    assert.equal(error.diagnostic.remainingTaskMs, 60000);
+    assert.equal(error.diagnostic.waitMs, 60000);
+    assert.equal(error.diagnostic.reservedWindowTokens, 4000);
+    return true;
+  });
+  assert.equal(waits, 0); assert.equal(task.snapshot().attemptedRequests, 0);
+});
+
+test("spent task requests and run bytes cannot consume a TPM wait", async t => {
+  for (const kind of ["requests", "bytes"] as const) await t.test(kind, async () => {
+    const context = createProviderContextBudget({ reservedOutputTokens: 1200, now: () => 0 }); context.reserve(2800, 1200);
+    const task = createTaskModelBudgetFetch({ now: () => 0 }, async () => assert.fail("No HTTP"));
+    let waits = 0;
+    await assert.rejects(() => createCalculatorGroqPacer(context, {
+      get failure() { return task.failure; },
+      snapshot: () => ({ ...task.snapshot(), ...(kind === "requests" ? { remainingRequests: 0 } : { remainingRunBytes: 1 }) }),
+    }, { now: () => 0, wait: async () => { waits++; } })(body), error => {
+      assert.ok(error instanceof CalculatorModelAdmissionError);
+      assert.equal(error.diagnostic.code, kind === "requests" ? "task_request_limit" : "task_run_bytes_limit"); return true;
+    });
+    assert.equal(waits, 0); assert.equal(task.snapshot().attemptedRequests, 0);
+  });
+});
+
+test("a failed host wait never copies its exception into admission diagnostics", async () => {
+  const context = createProviderContextBudget({ reservedOutputTokens: 1200, now: () => 0 }); context.reserve(2800, 1200);
+  const task = createTaskModelBudgetFetch({ now: () => 0 }, async () => assert.fail("No HTTP"));
+  await assert.rejects(() => createCalculatorGroqPacer(context, task, { now: () => 0,
+    wait: async () => { throw Error("PRIVATE_WAIT_SOURCE_AND_KEY"); } })(body), error => {
+    assert.ok(error instanceof CalculatorModelAdmissionError); assert.equal(error.diagnostic.code, "wait_failed");
+    assert.ok(!JSON.stringify(error.diagnostic).includes("PRIVATE_WAIT_SOURCE_AND_KEY")); return true;
+  });
 });

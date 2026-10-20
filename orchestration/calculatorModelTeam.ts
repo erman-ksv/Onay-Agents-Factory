@@ -9,17 +9,22 @@ import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.j
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
 import { DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
-import { createCalculatorGroqPacer, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
+import { CalculatorModelAdmissionError, createCalculatorGroqPacer, type CalculatorModelAdmissionDiagnostic, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
 
 export const CALCULATOR_MODEL_ERROR = "Calculator model team stopped: configuration, evidence, response or context budget is unverified. No retry or write is authorized.";
 function refuse(): never { throw new Error(CALCULATOR_MODEL_ERROR); }
 /** Host-supplied conservative prior charge for a separately authorized recovery.
  * Never accepted from model output or environment variables. Unknown usage stays charged. */
 export type CalculatorPriorModelCharge = Readonly<{ attemptedRequests: number; totalRequestBytes: number; reservedRunTokens: number; elapsedMs: number }>;
+export type CalculatorModelCheckpointHooks = Readonly<{
+  /** Host persistence only. Both ledgers have reserved this request; no HTTP has been sent. */
+  beforeRequest?: (state: CalculatorPriorModelCharge) => void | Promise<void>;
+}>;
 /** Real HTTP adapter. No SDK tools, arbitrary URLs, provider fallback, Git writes,
  * installs, automatic retries, or legal role. One instance owns one run's ledger. */
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
-  transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}, priorCharge?: CalculatorPriorModelCharge) {
+  transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}, priorCharge?: CalculatorPriorModelCharge,
+  checkpointHooks?: CalculatorModelCheckpointHooks) {
   const owner = prepareCalculatorGoal(ownerRequest);
   const requestOwner = Object.freeze({ version: 1 as const, id: owner.id, goal: owner.goal,
     baseRef: owner.baseRef, baseSha: owner.baseSha, provider: owner.provider });
@@ -33,32 +38,65 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   // Capture identity/configuration once. No later process.env lookup can switch it.
   const endpoint = config.baseURL.replace(/\/$/, "") + "/chat/completions", model = config.model, apiKey = config.apiKey;
   const now = timing.now ?? (() => performance.now());
+  if (checkpointHooks && (Object.keys(checkpointHooks).some(key => key !== "beforeRequest") ||
+      (checkpointHooks.beforeRequest !== undefined && typeof checkpointHooks.beforeRequest !== "function"))) return refuse();
   const prior = priorCharge ? Object.freeze({ ...priorCharge }) : undefined;
   if (prior && (config.provider !== "groq" || Object.keys(prior).sort().join(",") !== "attemptedRequests,elapsedMs,reservedRunTokens,totalRequestBytes" ||
       Object.values(prior).some(value => !Number.isSafeInteger(value) || value < 1) ||
       prior.attemptedRequests >= DEFAULT_TASK_MODEL_BUDGET.maxRequests || prior.totalRequestBytes >= DEFAULT_TASK_MODEL_BUDGET.maxRunBytes ||
       prior.elapsedMs >= DEFAULT_TASK_MODEL_BUDGET.wallTimeMs || prior.reservedRunTokens >= 16000 - 1200)) return refuse();
+  const wallTimeMs = DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - (prior?.elapsedMs ?? 0);
+  let stopped = false, planned = false, httpRequestsSent = 0;
+  let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
+  let admissionDiagnostic: CalculatorModelAdmissionDiagnostic | undefined;
+  const guardedTransport: typeof fetch = async (input, init) => {
+    if (checkpointHooks?.beforeRequest) {
+      try {
+        const state = checkpointCharge();
+        if (!state) return refuse();
+        await checkpointHooks.beforeRequest(state);
+      } catch {
+        failureCode ??= "model_checkpoint_persistence_failed"; stopped = true; return refuse();
+      }
+    }
+    // Persistence can await I/O. A deadline that expires meanwhile still stops
+    // the original request before transport; it never grants a fresh ledger.
+    if (stopped || budget.failure) return refuse();
+    httpRequestsSent++;
+    return transport(input, init);
+  };
   const budget = createTaskModelBudgetFetch({ now, ...(prior ? {
     maxRequests: DEFAULT_TASK_MODEL_BUDGET.maxRequests - prior.attemptedRequests,
     maxRunBytes: DEFAULT_TASK_MODEL_BUDGET.maxRunBytes - prior.totalRequestBytes,
     wallTimeMs: DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - prior.elapsedMs,
-  } : {}) }, transport);
+  } : {}) }, guardedTransport);
   const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: 1200, now,
     ...(prior ? { maxRunTokens: 16000 - prior.reservedRunTokens } : {}) }) : undefined;
-  const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }) : undefined;
+  const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
-  let stopped = false, planned = false;
-  let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   const generated = new Set<string>(), repaired = new Set<string>();
   const proposals = new WeakMap<PreparedCalculatorChanges, { taskId: string; planFingerprint: string; snapshot: CalculatorSnapshot; inspectionSha?: string }>();
   const assessed = new WeakMap<PreparedCalculatorChanges, Set<string>>();
+
+  function checkpointCharge(): CalculatorPriorModelCharge | undefined {
+    if (!contextBudget) return undefined;
+    const state = budget.snapshot();
+    const charge = {
+      attemptedRequests: (prior?.attemptedRequests ?? 0) + state.attemptedRequests,
+      totalRequestBytes: (prior?.totalRequestBytes ?? 0) + state.totalRequestBytes,
+      reservedRunTokens: (prior?.reservedRunTokens ?? 0) + contextBudget.snapshot().reservedRunTokens,
+      elapsedMs: (prior?.elapsedMs ?? 0) + state.elapsedMs,
+    };
+    if (Object.values(charge).some(value => !Number.isSafeInteger(value) || value < 0)) return undefined;
+    return Object.freeze(charge);
+  }
 
   async function call(instructions: string, packet: unknown): Promise<unknown> {
     let phase = "request_preparation_failed";
     try {
       if (stopped) return refuse();
-      httpStatus = undefined; providerHttpStatus = undefined; finishReason = undefined;
+      httpStatus = undefined; providerHttpStatus = undefined; finishReason = undefined; admissionDiagnostic = undefined;
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
       const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
@@ -110,7 +148,10 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
               usage.completion_tokens_details.reasoning_tokens <= usage.completion_tokens)))
         contextBudget.settleUsage(requestNumber, usage.prompt_tokens, usage.completion_tokens);
       return parsed;
-    } catch { failureCode ??= phase; stopped = true; return refuse(); }
+    } catch (error) {
+      if (phase === "model_admission_failed" && error instanceof CalculatorModelAdmissionError) admissionDiagnostic = error.diagnostic;
+      failureCode ??= phase; stopped = true; return refuse();
+    }
   }
   function taskIn(plan: CalculatorPlan, taskId: string) {
     const actual = createCalculatorPlan(requestOwner, plan.proposal);
@@ -203,15 +244,24 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         const seen = assessed.get(changes) ?? new Set<string>();
         if (seen.has(role)) return refuse(); seen.add(role); assessed.set(changes, seen);
         const evidenceId = "changes@" + (identity.inspectionSha ?? changes.baseSha);
-        const result = await call(buildCalculatorRoleInstructions(role), { repository: owner.repository,
-          task, acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId, ...(identity.inspectionSha ? { inspectedCommitSha: identity.inspectionSha } : {}), completeChangedText: JSON.parse(changes.reviewEvidence),
-          unverifiedAreas: ["Unshown unchanged source", "No runtime tests or browser checks have executed", "No publication or completion"] });
+        const evidence = JSON.parse(changes.reviewEvidence);
+        const result = await call(buildCalculatorRoleInstructions(role), { repository: owner.repository, baseSha: changes.baseSha,
+          task: { id: task.id, role: task.role, goal: task.goal, paths: task.paths, acceptanceIds: task.acceptanceIds },
+          acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId,
+          ...(identity.inspectionSha ? { inspectedCommitSha: identity.inspectionSha } : {}),
+          // Preserve every changed byte and hash. Repository/base identity and
+          // unknown areas already occur once in this packet, not in each layer.
+          completeChangedText: { changes: evidence.changes },
+          unverifiedAreas: [...new Set(["Unshown unchanged source", "No runtime tests or browser checks have executed", "No publication or completion",
+            ...evidence.unverified])] });
         return validateCalculatorAssessment(role, result, [evidenceId]);
       } catch { stopped = true; return refuse(); }
     },
+    checkpointCharge,
     diagnostic: () => Object.freeze({ reasonCode: failureCode ?? "model_failure_unclassified", ...(httpStatus !== undefined ? { httpStatus } : {}),
       ...(providerHttpStatus !== undefined ? { providerHttpStatus } : {}),
-      ...(finishReason ? { finishReason } : {}), httpRequestsAttempted: budget.snapshot().attemptedRequests,
+      ...(finishReason ? { finishReason } : {}), ...(admissionDiagnostic ? { admission: admissionDiagnostic } : {}),
+      httpRequestsAttempted: budget.snapshot().attemptedRequests, httpRequestsSent,
       ...(budget.failure ? { taskBudgetCode: budget.failure.code } : {}), ...(contextBudget?.failure ? { contextBudgetCode: contextBudget.failure.code } : {}) }),
     snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size, repairedTasks: repaired.size,
       modelBudget: budget.snapshot(), ...(contextBudget ? { contextBudget: contextBudget.snapshot() } : {}),

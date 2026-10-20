@@ -34,26 +34,46 @@ export type CalculatorExecutionReport = Readonly<{
   proposalTestsExecuted: boolean; candidateTestsExecuted: boolean;
   wholeAppCompleted: false; finalCalculatorCiVerified: false; legalEnabled: false;
 }>;
+/** Private host evidence, persisted before advancing. This is data, never replay
+ * authorization; source-free task receipts remain separate. */
+export type CalculatorExecutionCheckpointEvent = Readonly<{
+  taskId: string; attempt: 1 | 2; stage: string; status: "running" | "passed" | "blocked";
+  proposal?: PreparedCalculatorChanges; assessments: readonly CalculatorAssessment[];
+  publicationStarted: boolean;
+}>;
 /** One claimed task, at most one repair, no whole-task replay or idle CI polling.
  * Task CI is explicitly separate from the unchanged final Calculator CI gate. */
 export async function runCalculatorExecution(workspace: CalculatorWorkspace, options: {
   team: CalculatorExecutionTeam; tools: CalculatorExecutionTools; verifyDependencies?: CalculatorCheckRunner;
+  checkpoint?: (event: CalculatorExecutionCheckpointEvent) => void | Promise<void>;
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
   let attempts = 0, repairs = 0, proposalTestsExecuted = false, candidateTestsExecuted = false;
   let activeStage: string | undefined, publicationStarted = false;
+  let activeAttempt: 1 | 2 = 1, checkpointProposal: PreparedCalculatorChanges | undefined;
+  let assessments: CalculatorAssessment[] = [];
   const answer = (status: CalculatorExecutionReport["status"], reasonCode: string): CalculatorExecutionReport => Object.freeze({
     status, reasonCode, ...(task ? { taskId: task.id } : {}), attempts, repairs,
     ...(publication ? { publication: Object.freeze({ ...publication }) } : {}), proposalTestsExecuted, candidateTestsExecuted,
     wholeAppCompleted: false, finalCalculatorCiVerified: false, legalEnabled: false,
   });
-  function finish(status: "blocked" | "needs-review", reason: string, reportStatus: CalculatorExecutionReport["status"] = status) {
+  async function checkpoint(stageName: string, status: CalculatorExecutionCheckpointEvent["status"]) {
+    if (task && options.checkpoint) await options.checkpoint(Object.freeze({ taskId: task.id, attempt: activeAttempt,
+      stage: stageName, status, ...(checkpointProposal ? { proposal: checkpointProposal } : {}),
+      assessments: Object.freeze([...assessments]), publicationStarted }));
+  }
+  async function finish(status: "blocked" | "needs-review", reason: string,
+    reportStatus: CalculatorExecutionReport["status"] = status, save = true) {
+    if (save) await checkpoint("execution_complete", status === "blocked" ? "blocked" : "passed");
     receipt?.finish(status, reason); return answer(reportStatus, reason);
   }
   async function stage<T>(name: string, action: () => Promise<T>): Promise<T> {
     activeStage = name; receipt!.recordStage(name, "running");
-    const value = await action(); receipt!.recordStage(name, "passed"); activeStage = undefined; return value;
+    await checkpoint(name, "running");
+    const value = await action();
+    await checkpoint(name, "passed");
+    receipt!.recordStage(name, "passed"); activeStage = undefined; return value;
   }
   try {
     // Configuration failures do not consume a task identity or invoke a model.
@@ -70,34 +90,39 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     receipt = claimed.store; task = claimed.selection.task;
     if (!receipt || !task) return answer(claimed.selection.status === "blocked" ? "blocked" : "needs-review", claimed.selection.reasonCode);
     const snapshot = await stage("load_current_source", () => loadCalculatorWorkspaceTask(workspace, task!.id));
-    let changes = await stage("generate_1", async () => {
-      await assertCalculatorWorkspaceCurrent(workspace); attempts++;
-      const result = await options.team.generate(plan, task!.id, snapshot);
-      await assertCalculatorWorkspaceCurrent(workspace); return result;
-    });
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      // Rebuild static/policy/secret gates independently of the injected team.
+    function validateChanges(changes: PreparedCalculatorChanges): PreparedCalculatorChanges {
+      // Rebuild static/policy/secret gates before storing a successful proposal.
       const raw = JSON.parse(changes.reviewEvidence);
-      const verified = prepareCalculatorRoleChanges(task.role, { summary: changes.summary,
+      const verified = prepareCalculatorRoleChanges(task!.role, { summary: changes.summary,
         changes: raw.changes.map((change: Record<string, unknown>) => {
           const message = changes.files.find(file => file.path === change.path)?.message;
           return change.operation === "create" ? { operation: "create", path: change.path, content: change.content, message } :
             { operation: change.operation, path: change.path, sourceSha256: change.sourceSha256, edits: change.edits, message };
         }) }, snapshot);
-      if (calculatorProposalDigest(verified) !== calculatorProposalDigest(changes) || verified.reviewEvidence !== changes.reviewEvidence) return refuseCalculatorExecution();
-      if (changes.repository !== workspace.repository || changes.baseSha !== workspace.sha || changes.baseRef !== workspace.ref ||
+      if (calculatorProposalDigest(verified) !== calculatorProposalDigest(changes) || verified.reviewEvidence !== changes.reviewEvidence ||
+          changes.repository !== workspace.repository || changes.baseSha !== workspace.sha || changes.baseRef !== workspace.ref ||
           !changes.files.length || changes.files.some(file => !task!.paths.includes(file.path)) ||
-          task.paths.some(path => !changes.files.some(file => file.path === path) && !snapshot.files.some(file => file.path === path && file.exists)))
-        return finish("blocked", "proposal_scope_or_required_files_unverified");
+          task!.paths.some(path => !changes.files.some(file => file.path === path) && !snapshot.files.some(file => file.path === path && file.exists)))
+        return refuseCalculatorExecution();
+      return changes;
+    }
+    let changes = await stage("generate_1", async () => {
+      await assertCalculatorWorkspaceCurrent(workspace); attempts++;
+      const result = await options.team.generate(plan, task!.id, snapshot);
+      await assertCalculatorWorkspaceCurrent(workspace);
+      checkpointProposal = validateChanges(result); return checkpointProposal;
+    });
+    for (let attempt = 1; attempt <= 2; attempt++) {
       const issues: string[] = [];
       for (const role of ["security", "reviewer", "tester"] as const) {
         const assessment = await stage(role + "_" + attempt, async () => {
           await assertCalculatorWorkspaceCurrent(workspace);
           const value = await options.team.assess(role, plan, task!.id, changes);
-          await assertCalculatorWorkspaceCurrent(workspace); return value;
+          await assertCalculatorWorkspaceCurrent(workspace);
+          if (value.role !== role || typeof value.ready !== "boolean" || value.testsExecuted !== false ||
+              value.publicationAuthorized !== false || value.overallTaskCompletionVerified !== false) return refuseCalculatorExecution();
+          assessments.push(value); return value;
         });
-        if (assessment.role !== role || typeof assessment.ready !== "boolean" || assessment.testsExecuted !== false ||
-            assessment.publicationAuthorized !== false || assessment.overallTaskCompletionVerified !== false) return refuseCalculatorExecution();
         if (!assessment.ready || assessment.findings.some(finding => finding.severity === "blocker" || finding.severity === "high"))
           issues.push(role + ": " + assessment.summary);
       }
@@ -109,25 +134,29 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         await assertCalculatorWorkspaceCurrent(workspace); return result;
       });
       proposalTestsExecuted = checks?.testsExecuted === true;
-      if (checks?.status === "unverified") return finish("blocked", "proposal_tests_unverified");
+      if (checks?.status === "unverified") return await finish("blocked", "proposal_tests_unverified");
       if (checks?.status === "failed") issues.push(...checks.failures);
       if (issues.length) {
         // Failure is persisted before any repair call. A crash never resets attempts.
         const failed = "checks_failed_" + attempt;
-        receipt.recordStage(failed, "running"); receipt.recordStage(failed, "blocked");
-        if (attempt === 2) return finish("blocked", "repair_limit_reached");
+        activeStage = failed; receipt.recordStage(failed, "running");
+        await checkpoint(failed, "blocked"); receipt.recordStage(failed, "blocked"); activeStage = undefined;
+        if (attempt === 2) return await finish("blocked", "repair_limit_reached");
+        activeAttempt = 2; attempts++; repairs++;
         changes = await stage("repair_2", async () => {
-          await assertCalculatorWorkspaceCurrent(workspace); attempts++; repairs++;
+          await assertCalculatorWorkspaceCurrent(workspace);
           const result = await options.team.repair(plan, task!.id, snapshot, {
             previous: changes, proposalDigest: calculatorProposalDigest(changes), issues: Object.freeze([...issues]),
           });
-          await assertCalculatorWorkspaceCurrent(workspace); return result;
+          await assertCalculatorWorkspaceCurrent(workspace);
+          checkpointProposal = validateChanges(result); assessments = []; return checkpointProposal;
         });
         continue;
       }
-      if (!checks || checks.status !== "passed" || !checks.testsExecuted) return finish("blocked", "proposal_tests_unverified");
+      if (!checks || checks.status !== "passed" || !checks.testsExecuted) return await finish("blocked", "proposal_tests_unverified");
       publication = await stage("publish_candidate", async () => {
         await assertCalculatorWorkspaceCurrent(workspace); publicationStarted = true;
+        await checkpoint("publish_candidate", "running");
         const candidate = await options.tools.publish({ task: task!, changes, expectedSha: workspace.sha, branch: plan.branch });
         if (candidate.branch !== plan.branch || !/^[a-f0-9]{40}$/.test(candidate.headSha) ||
             !Number.isSafeInteger(candidate.number) || candidate.number < 1 ||
@@ -143,17 +172,21 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         return evaluateTestExecutionEvidence(result.runs, result.jobs, publication!.headSha, ["Calculator task CI"], ["Syntax", "Task tests"]);
       });
       candidateTestsExecuted = ci.testsExecuted;
-      if (ci.status === "failed") return finish("blocked", "candidate_ci_failed_explicit_repair_required");
-      if (!ci.testsExecuted) return finish("needs-review", "candidate_ci_pending_no_polling");
-      return finish("needs-review", "task_candidate_verified_not_whole_app", "candidate-verified");
+      if (ci.status === "failed") return await finish("blocked", "candidate_ci_failed_explicit_repair_required");
+      if (!ci.testsExecuted) return await finish("needs-review", "candidate_ci_pending_no_polling");
+      return await finish("needs-review", "task_candidate_verified_not_whole_app", "candidate-verified");
     }
-    return finish("blocked", "repair_limit_reached");
+    return await finish("blocked", "repair_limit_reached");
   } catch {
     if (!receipt) return answer("blocked", "workspace_or_configuration_unverified");
     const candidateUnverified = publication !== undefined && activeStage === "publish_candidate";
+    // A failed write is itself terminal: preserve the previous private evidence
+    // and still close the source-free replay barrier. No model/tool follows it.
+    try { await checkpoint(activeStage ?? "execution_failed", "blocked"); } catch { /* Previous capsule remains authoritative. */ }
     if (activeStage) { receipt.recordStage(activeStage, "blocked"); activeStage = undefined; }
-    if (candidateUnverified) return finish("blocked", "published_candidate_unverified_no_replay");
-    return finish(publicationStarted ? "needs-review" : "blocked",
-      publicationStarted ? "publication_or_ci_uncertain_inspect_no_replay" : "execution_failed_no_replay");
+    if (candidateUnverified) return await finish("blocked", "published_candidate_unverified_no_replay", "blocked", false);
+    return await finish(publicationStarted ? "needs-review" : "blocked",
+      publicationStarted ? "publication_or_ci_uncertain_inspect_no_replay" : "execution_failed_no_replay",
+      publicationStarted ? "needs-review" : "blocked", false);
   } finally { receipt?.close(); }
 }
