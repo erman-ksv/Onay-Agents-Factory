@@ -25,7 +25,7 @@ jobs:
       - name: Checkout immutable reviewed recovery runtime
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2
+          ref: 4b8f56ee80c1aecb9f25536ccf2b0c96ef2fa203
           path: runtime
           persist-credentials: false
       - uses: pnpm/action-setup@v4
@@ -53,11 +53,27 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/calculator-step7-recovery/prior-barrier
           merge-multiple: true
+      - name: Restore fixed failed recovery capsule for reviewed request correction
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12277146675'
+          run-id: 39446900969
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-step7-recovery/prior-recovery
+          merge-multiple: true
+      - name: Restore fixed failed recovery barrier
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12275543477'
+          run-id: 39446900969
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-step7-recovery/prior-recovery-barrier
+          merge-multiple: true
       - name: Verify one-use history, exact old evidence and conservative prior charge
         working-directory: runtime
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: pnpm exec tsx orchestration/calculatorStep7Recovery.ts prepare "$RUNNER_TEMP/calculator-step7-recovery" '4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2'
+        run: pnpm exec tsx orchestration/calculatorStep7Recovery.ts prepare "$RUNNER_TEMP/calculator-step7-recovery" '4b8f56ee80c1aecb9f25536ccf2b0c96ef2fa203'
       - name: Persist immutable remote recovery barrier before inference or writes
         uses: actions/upload-artifact@v4
         with:
@@ -83,7 +99,7 @@ jobs:
           AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
           GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: pnpm exec tsx orchestration/calculatorStep7Recovery.ts execute "$RUNNER_TEMP/calculator-step7-recovery" '4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2'
+        run: pnpm exec tsx orchestration/calculatorStep7Recovery.ts execute "$RUNNER_TEMP/calculator-step7-recovery" '4b8f56ee80c1aecb9f25536ccf2b0c96ef2fa203'
       - name: Preserve all prior and recovery receipts even after refusal
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
