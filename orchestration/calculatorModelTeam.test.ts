@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import { CALCULATOR_ACCEPTANCE, calculatorPlanTaskId, createCalculatorPlan } from "./calculatorPlan.js";
-import { CALCULATOR_MODEL_ERROR, createCalculatorModelTeam } from "./calculatorModelTeam.js";
+import { CALCULATOR_MODEL_ERROR, createCalculatorModelTeam, type CalculatorPriorModelCharge } from "./calculatorModelTeam.js";
 
 const A = "a".repeat(40), B = "b".repeat(40);
 const owner = { version: 1, id: "model-pilot", goal: "Create the agreed complete calculator website with arithmetic and browser acceptance tests.",
@@ -66,6 +66,14 @@ test("Coder prepares validated new files and independent specialists receive com
     if (seen.length === 1) return response(generated);
     const packet = JSON.parse(body.messages[1].content);
     assert.equal(packet.completeChangedText.changes[0].content, generated.changes[0].content);
+    assert.deepEqual(Object.keys(packet.completeChangedText), ["changes"]);
+    assert.equal(packet.task.dependsOn, undefined);
+    assert.ok(packet.completeChangedText.changes[0].contentSha256);
+    assert.equal(packet.baseSha, A);
+    assert.ok(packet.unverifiedAreas.includes("No runtime tests or browser checks have executed"));
+    for (const area of ["Unshown unchanged source", "Independent review", "Exact-candidate runtime CI", "Browser acceptance"])
+      assert.ok(packet.unverifiedAreas.includes(area));
+    assert.equal(new Set(packet.unverifiedAreas).size, packet.unverifiedAreas.length);
     assert.ok(packet.acceptance.some((item: { scenario: string }) => item.scenario === "2 + 3 = 5"));
     return response({ ready: true, summary: "The shown arithmetic change is scoped.", findings: [], unverifiedAreas: ["No runtime tests executed."] });
   });
@@ -287,4 +295,114 @@ test("two failed planning charges leave only the original remaining tokens/time 
   const expired = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return response({}); }, { now: () => now }, prior);
   now = 60001; await assert.rejects(() => expired.plan()); assert.equal(calls, 1);
   assert.equal(expired.snapshot().modelBudget.failureCode, "task_timeout");
+});
+
+function groqCheckpointFixture() {
+  const groqOwner = { ...owner, provider: "groq" }, original = proposal();
+  const ids = new Map(original.tasks.map((item, index) => [item.id, calculatorPlanTaskId(groqOwner, index + 1)]));
+  const groqPlan = createCalculatorPlan(groqOwner, { ...original, tasks: original.tasks.map(item => ({ ...item,
+    id: ids.get(item.id), dependsOn: item.dependsOn.map(id => ids.get(id)) })) });
+  return { groqOwner, groqPlan, env: { ...environment, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "fixture-key" } };
+}
+
+test("checkpoint charges are persisted after both reservations and before each real transport", async () => {
+  const { groqOwner, groqPlan, env } = groqCheckpointFixture();
+  let now = 0, calls = 0;
+  const charges: CalculatorPriorModelCharge[] = [], ordering: string[] = [];
+  const team = createCalculatorModelTeam(groqOwner, env, async (_url, init) => {
+    calls++; ordering.push("http" + calls);
+    const charge = charges.at(-1)!;
+    assert.equal(charge.attemptedRequests, calls);
+    assert.ok(charge.totalRequestBytes >= Buffer.byteLength(String(init?.body)));
+    assert.ok(charge.reservedRunTokens >= Math.ceil(Buffer.byteLength(String(init?.body)) / 3) + 256 + 1200);
+    return response(calls === 1 ? generated : { ready: true, summary: "Scoped review only.", findings: [], unverifiedAreas: [] });
+  }, { now: () => now, wait: async milliseconds => { now += milliseconds; } }, undefined, {
+    beforeRequest: async charge => {
+      assert.ok(Object.isFrozen(charge));
+      assert.equal(calls + 1, charge.attemptedRequests);
+      assert.ok(!JSON.stringify(charge).includes("fixture-key"));
+      charges.push(charge); ordering.push("persist" + charges.length);
+    },
+  });
+  assert.deepEqual(team.checkpointCharge(), { attemptedRequests: 0, totalRequestBytes: 0, reservedRunTokens: 0, elapsedMs: 0 });
+  const changes = await team.generate(groqPlan, groqPlan.tasks[0].id, await snapshot());
+  await team.assess("security", groqPlan, groqPlan.tasks[0].id, changes);
+  assert.deepEqual(ordering, ["persist1", "http1", "persist2", "http2"]);
+  assert.equal(team.checkpointCharge()!.attemptedRequests, 2);
+  assert.equal(team.diagnostic().httpRequestsSent, 2);
+  assert.equal(team.checkpointCharge()!.reservedRunTokens, team.snapshot().contextBudget!.reservedRunTokens);
+});
+
+test("failed checkpoint persistence charges the reservation but sends no HTTP and never replays", async () => {
+  const { groqOwner, groqPlan, env } = groqCheckpointFixture();
+  let calls = 0, saves = 0;
+  const team = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return response(generated); }, { now: () => 0 }, undefined, {
+    beforeRequest: () => { saves++; throw Error("PRIVATE_CHECKPOINT_SOURCE_AND_KEY"); },
+  });
+  await assert.rejects(async () => team.generate(groqPlan, groqPlan.tasks[0].id, await snapshot()), refusal);
+  assert.equal(calls, 0); assert.equal(saves, 1);
+  assert.equal(team.checkpointCharge()!.attemptedRequests, 1);
+  assert.ok(team.checkpointCharge()!.reservedRunTokens > 1200);
+  assert.equal(team.diagnostic().reasonCode, "model_checkpoint_persistence_failed");
+  assert.equal(team.diagnostic().httpRequestsAttempted, 1); assert.equal(team.diagnostic().httpRequestsSent, 0);
+  assert.ok(!JSON.stringify(team.diagnostic()).includes("PRIVATE_CHECKPOINT_SOURCE_AND_KEY"));
+  await assert.rejects(() => team.assess("security", groqPlan, groqPlan.tasks[0].id, {} as never), refusal);
+  assert.equal(calls, 0); assert.equal(saves, 1);
+});
+
+test("a checkpoint wait cannot outlive the original task deadline and send afterwards", async () => {
+  const { groqOwner, groqPlan, env } = groqCheckpointFixture();
+  let now = 0, calls = 0;
+  const team = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return response(generated); }, { now: () => now }, undefined, {
+    beforeRequest: () => { now = 120001; },
+  });
+  await assert.rejects(async () => team.generate(groqPlan, groqPlan.tasks[0].id, await snapshot()), refusal);
+  assert.equal(calls, 0); assert.equal(team.diagnostic().httpRequestsSent, 0);
+  assert.equal(team.snapshot().modelBudget.failureCode, "task_timeout");
+  assert.equal(team.checkpointCharge()!.elapsedMs, 120001);
+});
+
+test("checkpoint charge carries all prior usage instead of resetting it", async () => {
+  const { groqOwner, env } = groqCheckpointFixture();
+  const prior = { attemptedRequests: 2, totalRequestBytes: 48000, reservedRunTokens: 12000, elapsedMs: 60000 };
+  let saved: CalculatorPriorModelCharge | undefined, calls = 0;
+  const team = createCalculatorModelTeam(groqOwner, env, async (_url, init) => {
+    calls++; assert.ok(saved); assert.equal(saved.attemptedRequests, 3);
+    assert.equal(saved.totalRequestBytes, 48000 + Buffer.byteLength(String(init?.body)));
+    assert.ok(saved.reservedRunTokens > 12000); assert.equal(saved.elapsedMs, 60000);
+    return new Response("ignored upstream body", { status: 429 });
+  }, { now: () => 0 }, prior, { beforeRequest: charge => { saved = charge; } });
+  await assert.rejects(() => team.plan(), refusal);
+  assert.equal(calls, 1); assert.deepEqual(team.checkpointCharge(), saved);
+  assert.equal(team.diagnostic().httpRequestsSent, 1);
+});
+
+test("model admission diagnostics preserve the exact local run limit without source, transport or a retry", async () => {
+  const { groqOwner, env } = groqCheckpointFixture(); let calls = 0;
+  const team = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return response({}); }, { now: () => 0 },
+    { attemptedRequests: 1, totalRequestBytes: 24000, reservedRunTokens: 14000, elapsedMs: 30000 });
+  await assert.rejects(() => team.plan(), refusal);
+  const diagnostic = team.diagnostic();
+  assert.equal(diagnostic.reasonCode, "model_admission_failed");
+  assert.equal(diagnostic.admission?.code, "run_budget_exceeded");
+  assert.equal(diagnostic.admission.runTokenLimit, 2000);
+  assert.equal(diagnostic.admission.remainingRunTokens, 2000);
+  assert.equal(diagnostic.admission.remainingTaskMs, 90000);
+  assert.ok(diagnostic.admission.requestBytes > 0);
+  assert.ok(!JSON.stringify(diagnostic).includes(groqOwner.goal));
+  assert.ok(!JSON.stringify(diagnostic).includes("fixture-key"));
+  assert.equal(diagnostic.httpRequestsAttempted, 0); assert.equal(diagnostic.httpRequestsSent, 0);
+  await assert.rejects(() => team.plan(), refusal); assert.equal(calls, 0);
+  assert.deepEqual(team.diagnostic(), diagnostic);
+});
+
+test("a provider without provable Groq accounting cannot execute a checkpointed live request", async () => {
+  let calls = 0, saves = 0;
+  const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response(generated); }, {}, undefined, {
+    beforeRequest: () => { saves++; },
+  });
+  assert.equal(team.checkpointCharge(), undefined);
+  await assert.rejects(async () => team.generate(plan, task.id, await snapshot()), refusal);
+  assert.equal(calls, 0); assert.equal(saves, 0);
+  assert.equal(team.diagnostic().reasonCode, "model_checkpoint_persistence_failed");
 });

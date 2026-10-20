@@ -1,13 +1,18 @@
+import { createHash } from "node:crypto";
+import { lstatSync, mkdirSync } from "node:fs";
+import { dirname, join, parse, resolve } from "node:path";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { createCalculatorSnapshotReader, loadCalculatorSnapshot, calculatorSources, type CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import { createCalculatorPublisher } from "../github/calculatorPublisher.js";
 import { createCalculatorCiReader, type CalculatorWorkflowPin } from "../github/calculatorCi.js";
 import { createCalculatorSandbox } from "./calculatorSandbox.js";
-import { createCalculatorModelTeam } from "./calculatorModelTeam.js";
+import { createCalculatorModelTeam, type CalculatorPriorModelCharge } from "./calculatorModelTeam.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import { prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { openCalculatorWorkspace } from "./calculatorWorkspace.js";
-import { runCalculatorExecution } from "./calculatorExecution.js";
+import { runCalculatorExecution, type CalculatorExecutionCheckpointEvent } from "./calculatorExecution.js";
+import { createCalculatorExecutionCheckpointStore, type CalculatorExecutionCheckpointPayload,
+  type CalculatorExecutionCheckpointStore, type CalculatorExecutionCheckpointIdentity } from "./calculatorExecutionCheckpoint.js";
 import { TeamTaskStore } from "./teamTaskStore.js";
 import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
 import { calculatorProposalDigest, validateCalculatorProposalTests } from "./calculatorExecutionEvidence.js";
@@ -16,6 +21,61 @@ import { evaluateTestExecutionEvidence } from "../agents/tester/agent.js";
 
 export const CALCULATOR_RUNTIME_ERROR = "Calculator live runtime is not ready. Inspect private state, provider, sandbox, workflow pins and GitHub access; no replay.";
 function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
+function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
+/** Private evidence is never placed in the source-free receipt/artifact tree.
+ * Namespace by metadata directory, so sibling runs cannot share task filenames.
+ * Identity changes stay in the same namespace and fail closed in the store. */
+function privateExecutionDirectory(metadataDirectory: string): string {
+  const root = join(dirname(resolve(metadataDirectory)), "execution-private");
+  if (root === resolve(metadataDirectory)) return refuse();
+  const namespace = join(root, digest(resolve(metadataDirectory)));
+  for (const target of [root, namespace]) {
+    let current = parse(target).root;
+    for (const part of dirname(target).slice(current.length).split("/").filter(Boolean)) {
+      current = join(current, part);
+      const stat = lstatSync(current);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) return refuse();
+    }
+    try { lstatSync(target); } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") return refuse();
+      mkdirSync(target, { mode: 0o700 });
+    }
+    const stat = lstatSync(target);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700 ||
+        (process.getuid && stat.uid !== process.getuid())) return refuse();
+  }
+  return namespace;
+}
+/** Host-only writers. Existing evidence is an immutable replay barrier, including
+ * after the first refusal is caught by an executor failure checkpoint. */
+export function createCalculatorRuntimeCheckpointWriters(directory: string,
+  identity: Omit<CalculatorExecutionCheckpointIdentity, "taskId">) {
+  const writers = new Map<string, CalculatorExecutionCheckpointStore>(), poisoned = new Set<string>();
+  let closed = false;
+  return Object.freeze({
+    get(taskId: string): CalculatorExecutionCheckpointStore {
+      if (closed || poisoned.has(taskId)) return refuse();
+      const existing = writers.get(taskId); if (existing) return existing;
+      let candidate: CalculatorExecutionCheckpointStore | undefined;
+      try {
+        candidate = createCalculatorExecutionCheckpointStore(directory, { ...identity, taskId });
+        if (candidate.inspect()) return refuse();
+        writers.set(taskId, candidate); return candidate;
+      } catch {
+        poisoned.add(taskId);
+        try { candidate?.close(); } catch { /* Preserve the replay barrier. */ }
+        return refuse();
+      }
+    },
+    has: (taskId: string) => writers.has(taskId),
+    close(): void {
+      if (closed) return; closed = true;
+      let failed = false;
+      for (const writer of writers.values()) try { writer.close(); } catch { failed = true; }
+      if (failed) return refuse();
+    },
+  });
+}
 export type CalculatorRuntimeConfig = Readonly<{ version: 1; sandboxImage: string; trustedWorkflows: readonly CalculatorWorkflowPin[] }>;
 export function prepareCalculatorRuntimeConfig(value: unknown): CalculatorRuntimeConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) return refuse();
@@ -54,11 +114,11 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     taskIds: saved?.tasks.map(task => task.id) ?? [], wholeAppCompleted: false, legalEnabled: false };
   let phase = "runtime_configuration_unverified";
   try {
-    const config = prepareCalculatorRuntimeConfig(configInput);
+    const config = prepareCalculatorRuntimeConfig(configInput), provider = selectProviderConfig(env);
     if (!["plan", "run", "preflight"].includes(mode) || env.AGENT_FACTORY_TARGET_PROFILE !== "calculator" ||
         env.AGENT_FACTORY_LEGAL_ENABLED !== "false" || env.ONAY_TEAM_FREE_TIER_CONFIRMED !== "true" ||
         env.AGENT_FACTORY_PROVIDER !== owner.provider || env.CALCULATOR_MODEL_LIVE_APPROVED !== "ONE_FREE_BOUNDED_RUN" ||
-        selectProviderConfig(env).provider !== owner.provider) return refuse();
+        provider.provider !== owner.provider) return refuse();
     const reader = createCalculatorSnapshotReader(env);
     const sandbox = createCalculatorSandbox({ image: config.sandboxImage, baseSha: owner.baseSha, baseSources: new Map() }, env);
     phase = "sandbox_readiness_unverified";
@@ -91,6 +151,10 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     }
     phase = "saved_plan_unverified";
     if (!saved || saved.status !== "planned") return refuse();
+    // Only the reviewed Groq adapter can export a provable aggregate ledger.
+    // Planning, inspect/preflight and injected offline executor teams are unchanged.
+    phase = "execution_checkpoint_accounting_unavailable";
+    if (provider.provider !== "groq") return refuse();
     const publisher = createCalculatorPublisher({ plan: saved, reader, env });
     let started = false;
     for (const task of saved.tasks) {
@@ -106,34 +170,90 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     phase = "current_sources_unverified";
     const sources = await loadCalculatorRuntimeSources(reader, saved.branch, currentSha);
     const checks = createCalculatorSandbox({ image: config.sandboxImage, baseSha: currentSha, baseSources: sources }, env);
-    const team = createCalculatorModelTeam(input, env);
-    const verifyDependencies: CalculatorCheckRunner = async evidence => {
-      if (evidence.currentSha !== currentSha || await reader.getHead(saved.branch) !== currentSha) return undefined;
-      const task = evidence.task, receipt = store.taskReceipt(saved, task);
-      try {
-        const data = receipt.inspectExisting();
-        if (!data || data.publication?.headSha !== evidence.candidateSha ||
-            !data.stages.some(stage => stage.stage === "publish_candidate" && stage.status === "passed")) return undefined;
-      } finally { receipt.close(); }
-      const original = await loadCalculatorSnapshot({ repository: owner.repository, baseRef: owner.baseSha, baseSha: owner.baseSha, changePaths: task.paths }, reader);
-      const current = await loadCalculatorSnapshot({ repository: owner.repository, baseRef: saved.branch, baseSha: currentSha, changePaths: task.paths }, reader);
-      const observed = team.observeCommitted(saved, task.id, original, current);
-      for (const role of ["security", "reviewer", "tester"] as const) if (!(await team.assess(role, saved, task.id, observed)).ready) return undefined;
-      const currentChanges = Object.freeze({ ...observed, baseRef: saved.branch, baseSha: currentSha });
-      const proof = validateCalculatorProposalTests(await checks.checkProposal({ task, changes: currentChanges,
-        proposalDigest: calculatorProposalDigest(currentChanges) }), task.id, currentChanges);
-      const result = await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
-      const tested = evaluateTestExecutionEvidence(result.runs, result.jobs, currentSha, ["Calculator task CI"], ["Syntax", "Task tests"]);
-      if (proof.status !== "passed" || !proof.testsExecuted || !tested.testsExecuted || await reader.getHead(saved.branch) !== currentSha) return undefined;
-      return { repository: owner.repository, planFingerprint: saved.fingerprint, taskId: task.id, candidateSha: evidence.candidateSha,
-        currentSha, securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
+    phase = "private_execution_checkpoint_unverified";
+    const privateDirectory = privateExecutionDirectory(directory);
+    // Runtime checkout provenance is pinned by the host workflow barrier. This
+    // digest binds evidence to policy/config/model; it grants no resume authority.
+    const runtimeConfigDigest = digest({ policyVersion: "calculator-private-execution-v1", provider: provider.provider, model: provider.model,
+      version: config.version, sandboxImage: config.sandboxImage,
+      trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
+    const writers = createCalculatorRuntimeCheckpointWriters(privateDirectory, { repository: owner.repository,
+      goalId: owner.id, ownerFingerprint: owner.ownerFingerprint, planFingerprint: saved.fingerprint,
+      branch: saved.branch, baseSha: currentSha, bootstrapSha: owner.baseSha, runtimeConfigDigest });
+    const runtimeId = "runtime-" + digest({ goalId: owner.id, currentSha }).slice(0, 48);
+    let checkpointUnavailable = false, activeId = runtimeId, active: CalculatorExecutionCheckpointPayload = {
+      attempt: 1, stage: "runtime_budget", status: "running", assessments: [],
+      modelState: { attemptedRequests: 0, totalRequestBytes: 0, reservedRunTokens: 0, elapsedMs: 0 },
+      httpInFlight: false, publicationStarted: false,
     };
-    phase = "workspace_unverified";
-    const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
-    phase = "one_task_execution_failed";
-    const result = await runCalculatorExecution(workspace, { team, env, verifyDependencies,
-      tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } });
-    if (team.snapshot().stopped) console.error(JSON.stringify({ event: "calculator_execution_model_failed", ...team.diagnostic() }));
-    return result;
+    function save(payload: CalculatorExecutionCheckpointPayload, charge: CalculatorPriorModelCharge): void {
+      if (checkpointUnavailable) return refuse();
+      try {
+        const modelState = { ...charge, elapsedMs: Math.ceil(charge.elapsedMs) };
+        if (Object.values(modelState).some(value => !Number.isSafeInteger(value) || value < 0)) return refuse();
+        const next = { ...payload, modelState };
+        writers.get(activeId).save(next); active = next;
+      } catch { checkpointUnavailable = true; return refuse(); }
+    }
+    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, {
+      beforeRequest: charge => save({ ...active, status: "running", httpInFlight: true }, charge),
+    });
+    function charge(): CalculatorPriorModelCharge {
+      const result = team.checkpointCharge(); if (!result) return refuse(); return result;
+    }
+    function checkpoint(event: CalculatorExecutionCheckpointEvent): void {
+      if (!saved!.tasks.some(task => task.id === event.taskId) ||
+          (activeId !== runtimeId && activeId !== event.taskId) || (activeId !== event.taskId && active.httpInFlight)) return refuse();
+      const inFlight = activeId === event.taskId && active.httpInFlight;
+      activeId = event.taskId;
+      save({ attempt: event.attempt, stage: event.stage, status: event.status,
+        ...(event.proposal ? { proposal: event.proposal } : {}), assessments: event.assessments,
+        modelState: active.modelState, publicationStarted: event.publicationStarted,
+        // Only a returned, validated stage output can clear an uncertain request.
+        httpInFlight: event.status === "passed" ? false : inFlight }, charge());
+    }
+    try {
+      const verifyDependencies: CalculatorCheckRunner = async evidence => {
+        if (evidence.currentSha !== currentSha || await reader.getHead(saved.branch) !== currentSha) return undefined;
+        const task = evidence.task, receipt = store.taskReceipt(saved, task);
+        try {
+          const data = receipt.inspectExisting();
+          if (!data || data.publication?.headSha !== evidence.candidateSha ||
+              !data.stages.some(stage => stage.stage === "publish_candidate" && stage.status === "passed")) return undefined;
+        } finally { receipt.close(); }
+        const original = await loadCalculatorSnapshot({ repository: owner.repository, baseRef: owner.baseSha, baseSha: owner.baseSha, changePaths: task.paths }, reader);
+        const current = await loadCalculatorSnapshot({ repository: owner.repository, baseRef: saved.branch, baseSha: currentSha, changePaths: task.paths }, reader);
+        const observed = team.observeCommitted(saved, task.id, original, current);
+        for (const role of ["security", "reviewer", "tester"] as const) {
+          // Dependency checks precede the next task claim. Preserve the shared
+          // ledger in a source-free runtime capsule, never a fictitious task run.
+          if (activeId !== runtimeId || active.httpInFlight) return refuse();
+          save({ ...active, stage: "dependency_" + role, status: "running" }, charge());
+          const assessment = await team.assess(role, saved, task.id, observed);
+          save({ ...active, status: "passed", httpInFlight: false }, charge());
+          if (!assessment.ready) return undefined;
+        }
+        const currentChanges = Object.freeze({ ...observed, baseRef: saved.branch, baseSha: currentSha });
+        const proof = validateCalculatorProposalTests(await checks.checkProposal({ task, changes: currentChanges,
+          proposalDigest: calculatorProposalDigest(currentChanges) }), task.id, currentChanges);
+        const result = await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
+        const tested = evaluateTestExecutionEvidence(result.runs, result.jobs, currentSha, ["Calculator task CI"], ["Syntax", "Task tests"]);
+        if (proof.status !== "passed" || !proof.testsExecuted || !tested.testsExecuted || await reader.getHead(saved.branch) !== currentSha) return undefined;
+        return { repository: owner.repository, planFingerprint: saved.fingerprint, taskId: task.id, candidateSha: evidence.candidateSha,
+          currentSha, securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
+      };
+      phase = "workspace_unverified";
+      const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
+      phase = "one_task_execution_failed";
+      const result = await runCalculatorExecution(workspace, { team, env, verifyDependencies, checkpoint,
+        tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } });
+      if (active.httpInFlight || (active.status === "running" && writers.has(activeId)))
+        save({ ...active, status: "blocked" }, charge());
+      if (team.snapshot().stopped) console.error(JSON.stringify({ event: "calculator_execution_model_failed", ...team.diagnostic() }));
+      return result;
+    } catch {
+      if (writers.has(activeId)) try { save({ ...active, status: "blocked" }, charge()); } catch { /* Retain the last durable conservative capsule. */ }
+      throw new Error(CALCULATOR_RUNTIME_ERROR);
+    } finally { writers.close(); }
   } catch { console.error(JSON.stringify({ event: "calculator_runtime_failed", reasonCode: phase })); return refuse(); }
 }
