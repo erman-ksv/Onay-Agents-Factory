@@ -1,0 +1,40 @@
+name: Calculator failed plan read-only audit
+on:
+  push:
+    branches: ['feat/onay-task-runner-20261019']
+    paths: ['.github/workflows/calculator-failed-plan-audit.yml', 'scripts/calculator-failed-plan-audit.mjs']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/calculator-failed-plan-audit.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12272791735'
+          run-id: 39437299742
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/failed-plan-audit/capsule
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12272402010'
+          run-id: 39437299742
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/failed-plan-audit/barrier
+          merge-multiple: true
+      - name: Validate fixed failure metadata without replay or inference
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: node scripts/calculator-failed-plan-audit.mjs "$RUNNER_TEMP/failed-plan-audit"
