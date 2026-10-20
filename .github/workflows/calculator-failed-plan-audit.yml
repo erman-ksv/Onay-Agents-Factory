@@ -1,0 +1,31 @@
+name: Calculator stopped task read-only audit
+on:
+  push:
+    branches: ['feat/onay-task-runner-20261019']
+    paths: ['.github/workflows/calculator-failed-plan-audit.yml', 'scripts/calculator-failed-plan-audit.mjs']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/calculator-failed-plan-audit.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12276359076'
+          run-id: 39448498604
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/stopped-task-audit
+          merge-multiple: true
+      - name: Inspect only fixed task receipt and missing execution evidence
+        run: node scripts/calculator-failed-plan-audit.mjs "$RUNNER_TEMP/stopped-task-audit"

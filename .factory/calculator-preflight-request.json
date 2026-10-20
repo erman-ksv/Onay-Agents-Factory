@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "factorySha": "18f6408007f95720e0e534636e8f2a322db82294",
+  "goal": {
+    "version": 1,
+    "id": "calculator-pilot-step7-v1",
+    "goal": "Create the complete agreed static calculator with independent tests, keyboard support and a responsive phone layout.",
+    "baseRef": "feat/calculator-pilot-bootstrap",
+    "baseSha": "2c1218f2b020962ad93adf68d902a847271a7e72",
+    "provider": "groq"
+  },
+  "config": {
+    "version": 1,
+    "sandboxImage": "node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392",
+    "trustedWorkflows": [
+      {
+        "id": 390241255,
+        "path": ".github/workflows/calculator-task-ci.yml",
+        "blobSha": "45fae4a292a04e89a631ad7ff2469a3af7265e70"
+      }
+    ]
+  },
+  "freeTierConfirmed": true
+}

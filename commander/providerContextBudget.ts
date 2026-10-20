@@ -78,6 +78,7 @@ export type ProviderBudgetSnapshot = {
   reservedWindowTokens: number;
   attemptedRequests: number;
 };
+export type ProviderAdmission = { status: "ready" } | { status: "wait"; waitMs: number } | { status: "refused"; failure: ProviderFailure };
 
 /** Share this instance across commander, Coder and specialist clients for ONE run.
  * Reservations are synchronous, so concurrent specialists cannot oversubscribe it.
@@ -89,6 +90,7 @@ export class ProviderContextBudget {
   private reservedRunTokens = 0;
   private attemptedRequests = 0;
   private readonly window: { at: number; tokens: number }[] = [];
+  private readonly unsettled = new Map<number, { charge: { at: number; tokens: number }; input: number; output: number }>();
   private stopped?: ProviderFailure;
 
   constructor(options: ProviderContextBudgetOptions = {}) {
@@ -127,6 +129,40 @@ export class ProviderContextBudget {
     return { ...this.stopped };
   }
 
+  /** Read-only admission: no reservations, pruning, stop or quota reset. The
+   * sending wrapper must still reserve atomically when admission becomes ready. */
+  preview(estimatedInputTokens: number, reservedOutputTokens = this.limits.reservedOutputTokens): ProviderAdmission {
+    if (this.stopped) return { status: "refused", failure: { ...this.stopped } };
+    const reject = (code: ProviderFailureCode, details: Partial<ProviderFailure> = {}): ProviderAdmission => ({ status: "refused", failure: failure(code, details) });
+    if (!positiveInteger(estimatedInputTokens) || !positiveInteger(reservedOutputTokens) || reservedOutputTokens > this.limits.reservedOutputTokens ||
+        !Number.isSafeInteger(estimatedInputTokens + reservedOutputTokens)) return reject("invalid_budget_request");
+    const requestedTokens = estimatedInputTokens + reservedOutputTokens, details = { estimatedInputTokens, reservedOutputTokens, requestedTokens };
+    if (requestedTokens > this.limits.maxContextTokens) return reject("context_budget_exceeded", { ...details, limitTokens: this.limits.maxContextTokens });
+    if (requestedTokens > this.limits.maxRunTokens - this.reservedRunTokens) return reject("run_budget_exceeded", { ...details, limitTokens: this.limits.maxRunTokens });
+    if (requestedTokens > this.limits.maxTokensPerMinute) return reject("tpm_budget_exceeded", { ...details, limitTokens: this.limits.maxTokensPerMinute });
+    const now = this.now(); if (!Number.isFinite(now)) return reject("invalid_budget_request");
+    const active = this.window.filter(item => now - item.at < 60000).sort((a, b) => a.at - b.at);
+    let reserved = active.reduce((sum, item) => sum + item.tokens, 0);
+    if (requestedTokens <= this.limits.maxTokensPerMinute - reserved) return { status: "ready" };
+    for (const item of active) { reserved -= item.tokens; if (requestedTokens <= this.limits.maxTokensPerMinute - reserved)
+      return { status: "wait", waitMs: Math.max(1, Math.ceil(item.at + 60000 - now)) }; }
+    return reject("tpm_budget_exceeded");
+  }
+
+  /** Host-only settlement of a successful provider response. Missing, invalid,
+   * excessive or duplicate usage keeps the full original reservation. A failed
+   * run cannot be reopened. The request counter and all ceilings stay intact. */
+  settleUsage(requestNumber: number, inputTokens: number, outputTokens: number): boolean {
+    const pending = this.unsettled.get(requestNumber);
+    if (this.stopped || !pending || !positiveInteger(inputTokens) || !Number.isSafeInteger(outputTokens) || outputTokens < 0 ||
+        inputTokens > pending.input || outputTokens > pending.output) return false;
+    const actual = inputTokens + outputTokens;
+    this.reservedRunTokens -= pending.charge.tokens - actual;
+    pending.charge.tokens = actual;
+    this.unsettled.delete(requestNumber);
+    return true;
+  }
+
   reserve(estimatedInputTokens: number, reservedOutputTokens = this.limits.reservedOutputTokens): ProviderFailure | undefined {
     if (this.stopped) return this.failure;
     if (!positiveInteger(estimatedInputTokens) || !positiveInteger(reservedOutputTokens) ||
@@ -148,7 +184,9 @@ export class ProviderContextBudget {
     }
     this.reservedRunTokens += requestedTokens;
     this.attemptedRequests++;
-    this.window.push({ at: window.now, tokens: requestedTokens });
+    const charge = { at: window.now, tokens: requestedTokens };
+    this.window.push(charge);
+    this.unsettled.set(this.attemptedRequests, { charge, input: estimatedInputTokens, output: reservedOutputTokens });
     return undefined;
   }
 }

@@ -1,0 +1,270 @@
+name: Onay Team Owner Goal
+
+on:
+  workflow_dispatch:
+    inputs:
+      goal_id:
+        description: 'Unique goal ID; never reuse deleted or expired goal metadata'
+        required: true
+        type: string
+      goal:
+        description: 'Your Onay product goal in natural language; no source or secrets'
+        required: true
+        type: string
+      provider:
+        description: 'Explicit provider with owner-confirmed free-tier eligibility'
+        required: true
+        type: choice
+        options: [cloudflare, groq, gemini]
+      base_ref:
+        description: 'Existing Onay base branch, unchanged from the saved goal'
+        required: true
+        type: string
+      base_sha:
+        description: 'Exact Onay base SHA, unchanged from the saved goal'
+        required: true
+        type: string
+      mode:
+        description: 'plan: read-only analysis; continue: one task; inspect: saved metadata only'
+        required: true
+        default: inspect
+        type: choice
+        options: [plan, continue, inspect]
+      confirmation:
+        description: 'plan: PLAN_FREE_GOAL; continue: RUN_FREE_GOAL_CYCLE; inspect: blank'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: onay-team-goal-${{ inputs.goal_id }}
+  cancel-in-progress: false
+
+jobs:
+  goal:
+    name: One bounded goal planning or execution cycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOAL_ID: ${{ inputs.goal_id }}
+      GOAL_TEXT: ${{ inputs.goal }}
+      GOAL_PROVIDER: ${{ inputs.provider }}
+      GOAL_BASE_REF: ${{ inputs.base_ref }}
+      GOAL_BASE_SHA: ${{ inputs.base_sha }}
+      GOAL_MODE: ${{ inputs.mode }}
+      GOAL_CONFIRMATION: ${{ inputs.confirmation }}
+      AGENT_FACTORY_PROVIDER: ${{ inputs.provider }}
+      ONAY_REPOSITORY: erman-ksv/Onay
+      AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay
+      AGENT_FACTORY_LEGAL_ENABLED: 'false'
+      AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+      ONAY_GOAL_APPROVED: ${{ inputs.confirmation }}
+      ONAY_TEAM_FREE_TIER_CONFIRMED: ${{ (inputs.mode == 'plan' && inputs.confirmation == 'PLAN_FREE_GOAL' || inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE') && 'true' || 'false' }}
+      AGENT_FACTORY_ENABLE_GITHUB_WRITES: ${{ inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE' && 'true' || 'false' }}
+      ONAY_TEAM_LIVE_APPROVED: ${{ inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE' && 'RUN_ONE_FREE_TASK' || '' }}
+    steps:
+      - name: Checkout trusted Factory workflow ref
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build private goal request without shell interpolation
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o077);
+          const env = process.env;
+          const invalid = () => { throw new Error('Invalid goal dispatch inputs or missing matching free-tier approval.'); };
+          if (!/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(env.GOAL_ID ?? '') ||
+              !['plan', 'continue', 'inspect'].includes(env.GOAL_MODE ?? '') ||
+              !['cloudflare', 'groq', 'gemini'].includes(env.GOAL_PROVIDER ?? '') ||
+              (env.GOAL_MODE === 'plan' && env.GOAL_CONFIRMATION !== 'PLAN_FREE_GOAL') ||
+              (env.GOAL_MODE === 'continue' && env.GOAL_CONFIRMATION !== 'RUN_FREE_GOAL_CYCLE')) invalid();
+          if (env.GOAL_MODE !== 'inspect' && Number(env.GITHUB_RUN_ATTEMPT) > 1) {
+            throw new Error('Start a new workflow run with the same goal ID. Reruns cannot safely replace immutable per-run goal artifacts.');
+          }
+          const request = {
+            version: 1, id: env.GOAL_ID, goal: (env.GOAL_TEXT ?? '').trim(),
+            provider: env.GOAL_PROVIDER, baseRef: (env.GOAL_BASE_REF ?? '').trim(),
+            baseSha: (env.GOAL_BASE_SHA ?? '').trim(),
+          };
+          for (const name of ['onay-goal-state', 'onay-goal-report', 'onay-goal-restored', 'onay-goal-export']) {
+            mkdirSync(join(env.RUNNER_TEMP, name), { mode: 0o700 });
+          }
+          writeFileSync(join(env.RUNNER_TEMP, 'onay-goal.json'), JSON.stringify(request) + '\n', { mode: 0o600, flag: 'wx' });
+          NODE
+
+      - name: Find latest immutable goal snapshot using Factory artifact reads
+        id: history
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const name = 'onay-goal-state-' + process.env.GOAL_ID;
+            const matches = [];
+            let complete = false;
+            for (let page = 1; page <= 3; page++) {
+              const result = await github.rest.actions.listArtifactsForRepo({ ...context.repo, name, per_page: 100, page });
+              if (!Number.isSafeInteger(result.data.total_count) || result.data.total_count > 300) {
+                throw new Error('Goal history exceeds the bounded inspection limit. Inspect manually.');
+              }
+              for (const artifact of result.data.artifacts) if (artifact.name === name) matches.push(artifact);
+              if (result.data.artifacts.length < 100 || page * 100 >= result.data.total_count) { complete = true; break; }
+            }
+            if (!complete) throw new Error('Goal history is truncated. No model or Onay writes will run.');
+            if (matches.some(artifact => artifact.expired)) throw new Error('Goal history contains expired metadata. Inspect manually; do not replay.');
+            if (!matches.length && process.env.GOAL_MODE !== 'plan') {
+              throw new Error('Continue and inspect require recoverable goal state. No new model task will be started.');
+            }
+            const seenRuns = new Set();
+            for (let start = 0; start < matches.length; start += 10) {
+              await Promise.all(matches.slice(start, start + 10).map(async artifact => {
+                const id = artifact.workflow_run?.id;
+                if (!Number.isSafeInteger(artifact.id) || !Number.isSafeInteger(id) || seenRuns.has(id) ||
+                    !Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes > 1_500_000) {
+                  throw new Error('Goal artifact metadata is incomplete, oversized or ambiguous.');
+                }
+                seenRuns.add(id);
+                const { data: run } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: id });
+                if (run.path !== '.github/workflows/onay-team-goal.yml' || run.event !== 'workflow_dispatch' ||
+                    run.head_repository?.full_name !== context.repo.owner + '/' + context.repo.repo ||
+                    !Number.isFinite(Date.parse(run.created_at))) throw new Error('Goal artifact is not from the trusted goal workflow.');
+                artifact.goalRunCreatedAt = Date.parse(run.created_at);
+              }));
+            }
+            matches.sort((a, b) => b.goalRunCreatedAt - a.goalRunCreatedAt || b.workflow_run.id - a.workflow_run.id);
+            const prior = matches[0];
+            if (prior) {
+              core.setOutput('artifact_id', String(prior.id));
+              core.setOutput('run_id', String(prior.workflow_run.id));
+            }
+            core.setOutput('exists', prior ? 'true' : 'false');
+
+      - name: Restore latest snapshot before planning or continuing
+        if: ${{ steps.history.outputs.exists == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.history.outputs.artifact_id }}
+          run-id: ${{ steps.history.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/onay-goal-restored
+          merge-multiple: true
+
+      - name: Validate flat private goal state and task replay barriers
+        if: ${{ steps.history.outputs.exists == 'true' }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { chmodSync, constants, copyFileSync, lstatSync, readdirSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o077);
+          const id = process.env.GOAL_ID;
+          const root = join(process.env.RUNNER_TEMP, 'onay-goal-restored');
+          const destination = join(process.env.RUNNER_TEMP, 'onay-goal-state');
+          const goalNames = new Set([id + '.goal.json', id + '.goal.identity.json', id + '.goal.lock', id + '.goal.planning.lock']);
+          const taskName = new RegExp('^' + id.slice(0, 36) + '-[a-f0-9]{6}-t0[1-6]\\.(?:json|lock)$');
+          const allowed = name => goalNames.has(name) || taskName.test(name);
+          const names = readdirSync(root);
+          if (!lstatSync(root).isDirectory() || lstatSync(root).isSymbolicLink() || !names.length || names.length > 16 ||
+              names.some(name => !allowed(name))) throw new Error('Unexpected goal snapshot files; inspect manually.');
+          if ((!names.includes(id + '.goal.json') || !names.includes(id + '.goal.identity.json')) &&
+              !names.includes(id + '.goal.planning.lock')) {
+            throw new Error('Goal state or identity is missing. No goal cycle will run.');
+          }
+          chmodSync(root, 0o700); chmodSync(destination, 0o700);
+          for (const name of names) {
+            const source = join(root, name);
+            const stat = lstatSync(source);
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 65_536 ||
+                (name.endsWith('.lock') && stat.size !== 0)) throw new Error('Invalid private goal snapshot file.');
+            copyFileSync(source, join(destination, name), constants.COPYFILE_EXCL);
+            chmodSync(join(destination, name), 0o600);
+          }
+          NODE
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install locked Factory dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Plan, continue one bounded task, or inspect offline metadata
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ (inputs.mode == 'plan' && inputs.confirmation == 'PLAN_FREE_GOAL' || inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE') && secrets.ONAY_TEAM_TOKEN || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ (inputs.mode == 'plan' && inputs.confirmation == 'PLAN_FREE_GOAL' || inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE') && inputs.provider == 'cloudflare' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ (inputs.mode == 'plan' && inputs.confirmation == 'PLAN_FREE_GOAL' || inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE') && inputs.provider == 'cloudflare' && secrets.CLOUDFLARE_ACCOUNT_ID || '' }}
+          GROQ_API_KEY: ${{ (inputs.mode == 'plan' && inputs.confirmation == 'PLAN_FREE_GOAL' || inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE') && inputs.provider == 'groq' && secrets.GROQ_API_KEY || '' }}
+          GEMINI_API_KEY: ${{ (inputs.mode == 'plan' && inputs.confirmation == 'PLAN_FREE_GOAL' || inputs.mode == 'continue' && inputs.confirmation == 'RUN_FREE_GOAL_CYCLE') && inputs.provider == 'gemini' && secrets.GEMINI_API_KEY || '' }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}
+        run: |
+          pnpm exec tsx orchestration/onayGoalCli.ts --goal "$RUNNER_TEMP/onay-goal.json" --state-dir "$RUNNER_TEMP/onay-goal-state" --mode "$GOAL_MODE" --output-dir "$RUNNER_TEMP/onay-goal-report"
+
+      - name: Collect only goal metadata, task receipts and sanitized report
+        if: ${{ always() }}
+        id: metadata
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, chmodSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o077);
+          const id = process.env.GOAL_ID;
+          if (!/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(id ?? '')) process.exit(0);
+          const root = join(process.env.RUNNER_TEMP, 'onay-goal-export');
+          mkdirSync(root, { recursive: true, mode: 0o700 }); chmodSync(root, 0o700);
+          for (const group of ['state', 'report']) mkdirSync(join(root, group), { mode: 0o700 });
+          const copyMetadata = (source, target) => {
+            const stat = lstatSync(source);
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 65_536 ||
+                (source.endsWith('.lock') && stat.size !== 0)) throw new Error('Goal metadata export is invalid.');
+            copyFileSync(source, target, constants.COPYFILE_EXCL); chmodSync(target, 0o600);
+          };
+          const goalNames = new Set([id + '.goal.json', id + '.goal.identity.json', id + '.goal.lock', id + '.goal.planning.lock']);
+          const taskName = new RegExp('^' + id.slice(0, 36) + '-[a-f0-9]{6}-t0[1-6]\\.(?:json|lock)$');
+          const stateRoot = join(process.env.RUNNER_TEMP, 'onay-goal-state');
+          let state = false, report = false;
+          if (existsSync(stateRoot)) {
+            const names = readdirSync(stateRoot).filter(name => goalNames.has(name) || taskName.test(name));
+            if (names.length > 16) throw new Error('Goal metadata exceeds the bounded export file count.');
+            for (const name of names) { copyMetadata(join(stateRoot, name), join(root, 'state', name)); state = true; }
+          }
+          for (const name of ['report.json', 'summary.md']) {
+            const source = join(process.env.RUNNER_TEMP, 'onay-goal-report', name);
+            if (existsSync(source)) { copyMetadata(source, join(root, 'report', name)); report = true; }
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, 'state=' + state + '\nreport=' + report + '\n');
+          NODE
+
+      - name: Preserve new immutable goal snapshot for the next workflow run
+        if: ${{ always() && inputs.mode != 'inspect' && steps.metadata.outputs.state == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: onay-goal-state-${{ inputs.goal_id }}
+          path: ${{ runner.temp }}/onay-goal-export/state/*
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+
+      - name: Upload metadata-only goal report
+        if: ${{ always() && steps.metadata.outputs.report == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: onay-goal-report-${{ inputs.goal_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/onay-goal-export/report/*
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
