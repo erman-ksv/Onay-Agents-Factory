@@ -35,7 +35,7 @@ export function prepareCalculatorLaunchRequest(value: unknown, factorySha?: stri
   hash(raw.factorySha); const owner = prepareCalculatorGoal(raw.goal), config = prepareCalculatorRuntimeConfig(raw.config);
   if (owner.baseRef !== "feat/calculator-pilot-bootstrap" || (image !== undefined && config.sandboxImage !== image)) return refuse();
   return Object.freeze({ version: 1, mode: raw.mode as "plan" | "run", factorySha: raw.factorySha as string, freeTierConfirmed: true,
-    goal: { version: 1, id: owner.id, goal: owner.goal, provider: owner.provider, baseRef: owner.baseRef, baseSha: owner.baseSha }, config });
+    goal: { version: 1 as const, id: owner.id, goal: owner.goal, provider: owner.provider, baseRef: owner.baseRef, baseSha: owner.baseSha }, config });
 }
 export function calculatorLaunchBinding(request: CalculatorLaunchRequest): string {
   return digest({ ownerFingerprint: prepareCalculatorGoal(request.goal).ownerFingerprint, configDigest: digest(request.config), factorySha: request.factorySha });
