@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: erman-ksv/Onay-Agents-Factory
-          ref: d733e078800505534cd7c39f15406822416e7f24
+          ref: 9718f9564c0fa85257fe831a5e6108e9adc00014
           path: runtime
           persist-credentials: false
       - name: Setup pnpm
@@ -50,7 +50,7 @@ jobs:
           HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
           HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && (secrets.CLOUDFLARE_ACCOUNT_ID != '' || vars.CLOUDFLARE_ACCOUNT_ID != '') }}
           HAS_CALCULATOR_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN != '' }}
-        run: pnpm exec tsx orchestration/calculatorLaunchState.ts prepare "$RUNNER_TEMP/calculator-one-cycle" 'd733e078800505534cd7c39f15406822416e7f24' 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+        run: pnpm exec tsx orchestration/calculatorLaunchState.ts prepare "$RUNNER_TEMP/calculator-one-cycle" '9718f9564c0fa85257fe831a5e6108e9adc00014' 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
       - name: Restore exact prior planning barrier
         if: ${{ steps.prepare.outputs.restore == 'true' }}
         uses: actions/download-artifact@v4
@@ -71,7 +71,7 @@ jobs:
           merge-multiple: true
       - name: Validate private state and prepare immutable launch barrier
         working-directory: runtime
-        run: pnpm exec tsx orchestration/calculatorLaunchState.ts restore "$RUNNER_TEMP/calculator-one-cycle" 'd733e078800505534cd7c39f15406822416e7f24' 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+        run: pnpm exec tsx orchestration/calculatorLaunchState.ts restore "$RUNNER_TEMP/calculator-one-cycle" '9718f9564c0fa85257fe831a5e6108e9adc00014' 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
       - name: Persist remote barrier before any model or publication
         id: barrier
         uses: actions/upload-artifact@v4
@@ -116,13 +116,29 @@ jobs:
         env:
           CALCULATOR_REMOTE_BARRIER_UPLOADED: 'true'
           CALCULATOR_CLI_EXIT_CODE: ${{ steps.execute.outputs.exit_code || '10' }}
-        run: pnpm exec tsx orchestration/calculatorLaunchState.ts collect "$RUNNER_TEMP/calculator-one-cycle" 'd733e078800505534cd7c39f15406822416e7f24' 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+        run: pnpm exec tsx orchestration/calculatorLaunchState.ts collect "$RUNNER_TEMP/calculator-one-cycle" '9718f9564c0fa85257fe831a5e6108e9adc00014' 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
       - name: Preserve immutable validated state capsule
         if: ${{ always() && steps.collect.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.prepare.outputs.capsule_name }}
           path: ${{ runner.temp }}/calculator-one-cycle/capsule/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+      - name: Collect private execution evidence independently of metadata collection
+        if: ${{ always() && steps.barrier.outcome == 'success' && steps.prepare.outputs.mode == 'run' }}
+        id: collect_private
+        working-directory: runtime
+        env:
+          CALCULATOR_REMOTE_BARRIER_UPLOADED: 'true'
+        run: pnpm exec tsx orchestration/calculatorExecutionArtifact.ts "$RUNNER_TEMP/calculator-one-cycle" '9718f9564c0fa85257fe831a5e6108e9adc00014' 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Preserve immutable private execution evidence
+        if: ${{ always() && steps.collect_private.outcome == 'success' && steps.prepare.outputs.mode == 'run' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-cycle-execution-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-one-cycle/execution-artifact/
           if-no-files-found: error
           retention-days: 7
           overwrite: false
