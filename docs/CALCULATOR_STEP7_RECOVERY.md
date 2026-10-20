@@ -5,7 +5,10 @@ This operation is authorized by the owner after inspecting failed planning run
 requirements and exact task-CI pins. It does not erase, reopen or relabel the old
 blocked planning receipt. The original launcher remains terminal for that attempt.
 
-The dedicated recovery workflow may execute only as run number 1, attempt 1.
+The initial recovery uses run number 1, attempt 1. A separately reviewed JSON
+request correction uses only run number 2, attempt 1 of the SAME workflow, and
+only after verifying the exact failed first recovery and both of its artifacts.
+No third slot or arbitrary prior run is accepted.
 Both workflow histories and the original artifact IDs/digests must be complete.
 Missing/deleted/expired/altered or repeated history stops before model inference.
 The prior capsule is validated against its binding, manifest, state and report
@@ -37,3 +40,19 @@ merge, deployment, Codespaces start or legal agent.
 The recovery does not mark the whole app complete. Step 7 needs actual plan/task,
 proposal test, publication and exact-SHA CI evidence. Later UI tasks and browser
 acceptance remain separate.
+
+The first recovery (39446900969) stopped before a plan/task with provider HTTP 400.
+The error body was intentionally discarded, so the exact provider error message
+is unavailable. Local inspection proved that the newly enabled JSON object mode
+had no explicit JSON instruction in the Commander messages. Groq documents that
+instruction as required: https://console.groq.com/docs/structured-outputs#json-object-mode .
+The sender now adds that instruction and a regression checks the actual request.
+
+The reviewed correction preserves both terminal attempts and fixed artifact
+IDs/digests. It accepts only the known failed planning receipt with no plan/task
+or publication. It conservatively carries two requests, 48000 bytes, 12000 tokens
+and 60000 ms. Thus only 4000 of the original 16000 planning tokens remain; the
+same per-request/context/output ceilings and 429 terminal stop apply. The prior
+recovery capsule and old failed receipt remain immutable. This is an explicit
+host-reviewed request correction, not an automatic HTTP retry, new goal, or
+permission to repeat any execution task. On any further failure, stop and report.

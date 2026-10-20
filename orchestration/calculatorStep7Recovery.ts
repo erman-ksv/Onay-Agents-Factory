@@ -16,11 +16,13 @@ const PATH = ".github/workflows/calculator-step7-recovery.yml";
 const OLD_RUN = 39437299742, OLD_SHA = "08a2386f181cc615af58bf4f605ea8c4f1226fa1";
 const OLD_RUNTIME = "d733e078800505534cd7c39f15406822416e7f24";
 const CAPSULE = 12272791735, BARRIER = 12272402010;
+const PRIOR_RECOVERY_RUN = 39446900969, PRIOR_RECOVERY_SHA = "988bed450daf80e0e9602a0b8ddd3fb1f2771bd6";
 const BINDING = "3e960ac2f9771c75719df71a75cdcf6c63f1905ca10f32e4510c3f283a891aed";
 const ERROR = "Calculator step-7 recovery refused; preserve all state and do not replay.";
 // Prior usage was not recorded. Charge the full old request/context ceilings and
 // 30 seconds (the observed CLI took < 9 seconds), rather than claiming zero cost.
 export const CALCULATOR_RECOVERY_CHARGE = Object.freeze({ attemptedRequests: 1, totalRequestBytes: 24000, reservedRunTokens: 6000, elapsedMs: 30000 });
+export const CALCULATOR_JSON_CORRECTION_CHARGE = Object.freeze({ attemptedRequests: 2, totalRequestBytes: 48000, reservedRunTokens: 12000, elapsedMs: 60000 });
 function refuse(): never { throw Error(ERROR); }
 function hash(value: unknown): string { if (typeof value !== "string" || !/^[a-f0-9]{40}$/.test(value)) return refuse(); return value; }
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
@@ -35,8 +37,9 @@ function privateDirectory(path: string): void {
 }
 export function validateCalculatorRecoveryRequest(value: unknown, runtimeSha: string) {
   const raw = value as Record<string, unknown>;
-  if (!raw || Object.keys(raw).sort().join(",") !== "approval,priorRunId,request,runtimeSha,version" || raw.version !== 1 ||
-      raw.approval !== "ONE_REVIEWED_STEP7_RECOVERY" || raw.priorRunId !== OLD_RUN || raw.runtimeSha !== hash(runtimeSha)) return refuse();
+  const correction = raw?.approval === "ONE_JSON_REQUEST_CORRECTION";
+  if (!raw || Object.keys(raw).sort().join(",") !== (correction ? "approval,priorRecoveryRunId,priorRunId,request,runtimeSha,version" : "approval,priorRunId,request,runtimeSha,version") || raw.version !== 1 ||
+      (correction ? raw.priorRecoveryRunId !== PRIOR_RECOVERY_RUN : raw.approval !== "ONE_REVIEWED_STEP7_RECOVERY") || raw.priorRunId !== OLD_RUN || raw.runtimeSha !== hash(runtimeSha)) return refuse();
   const request = prepareCalculatorLaunchRequest(raw.request, OLD_RUNTIME);
   if (request.mode !== "plan" || request.goal.id !== "calculator-pilot-step7-v1" || request.goal.provider !== "groq" ||
       request.goal.baseSha !== "2c1218f2b020962ad93adf68d902a847271a7e72") return refuse();
@@ -67,12 +70,12 @@ export function validateCalculatorFailedPlanningCapsule(root: string, request: R
       JSON.stringify(completion.stateDigests) !== JSON.stringify({ [name]: createHash("sha256").update(data).digest("hex") })) return refuse();
   return { request, state, priorManifestDigest: digest(expected), priorStateDigest: digest(completion.stateDigests) };
 }
-export async function verifyCalculatorRecoveryHistory(env: NodeJS.ProcessEnv, transport: typeof fetch = globalThis.fetch): Promise<void> {
+export async function verifyCalculatorRecoveryHistory(env: NodeJS.ProcessEnv, transport: typeof fetch = globalThis.fetch, correction = false): Promise<void> {
   if (!env.GITHUB_TOKEN || env.GITHUB_REPOSITORY !== REPOSITORY || env.GITHUB_REF !== "refs/heads/" + BRANCH || env.GITHUB_EVENT_NAME !== "push" ||
-      env.GITHUB_RUN_ATTEMPT !== "1" || env.GITHUB_RUN_NUMBER !== "1" || !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ID ?? "")) return refuse();
+      env.GITHUB_RUN_ATTEMPT !== "1" || env.GITHUB_RUN_NUMBER !== (correction ? "2" : "1") || !/^[1-9][0-9]*$/.test(env.GITHUB_RUN_ID ?? "")) return refuse();
   let calls = 0;
   async function get(endpoint: string) {
-    if (++calls > 8) return refuse();
+    if (++calls > 10) return refuse();
     const response = await transport("https://api.github.com/repos/" + REPOSITORY + endpoint, { method: "GET", redirect: "error", signal: AbortSignal.timeout(10000),
       headers: { Authorization: "Bearer " + env.GITHUB_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } });
     if (!response.ok || !response.body) { void response.body?.cancel().catch(() => undefined); return refuse(); }
@@ -86,9 +89,11 @@ export async function verifyCalculatorRecoveryHistory(env: NodeJS.ProcessEnv, tr
         run.repository?.full_name !== REPOSITORY || run.head_repository?.full_name !== REPOSITORY) return refuse();
   }
   const current = await get("/actions/runs/" + env.GITHUB_RUN_ID); scope(current, PATH);
-  if (current.head_sha !== hash(env.GITHUB_SHA) || current.run_number !== 1 || current.id !== Number(env.GITHUB_RUN_ID)) return refuse();
+  if (current.head_sha !== hash(env.GITHUB_SHA) || current.run_number !== (correction ? 2 : 1) || current.id !== Number(env.GITHUB_RUN_ID)) return refuse();
   const listed = await get("/actions/workflows/" + current.workflow_id + "/runs?per_page=100");
-  if (listed.total_count !== 1 || listed.workflow_runs?.length !== 1 || listed.workflow_runs[0].id !== current.id) return refuse();
+  const expectedIds = correction ? [current.id, PRIOR_RECOVERY_RUN].sort() : [current.id];
+  if (listed.total_count !== expectedIds.length || listed.workflow_runs?.length !== expectedIds.length ||
+      JSON.stringify(listed.workflow_runs.map((item: { id: number }) => item.id).sort()) !== JSON.stringify(expectedIds)) return refuse();
   const old = await get("/actions/runs/" + OLD_RUN); scope(old, ".github/workflows/calculator-one-cycle.yml");
   if (old.id !== OLD_RUN || old.head_sha !== OLD_SHA || old.status !== "completed" || old.conclusion !== "failure" || old.run_number !== 1 ||
       !Number.isFinite(Date.parse(old.updated_at)) || Date.now() - Date.parse(old.updated_at) < 60000) return refuse();
@@ -101,36 +106,85 @@ export async function verifyCalculatorRecoveryHistory(env: NodeJS.ProcessEnv, tr
     if (!artifact || artifact.expired !== false || artifact.digest !== "sha256:" + checksum || artifact.size_in_bytes < 1 || artifact.size_in_bytes > 1048576 ||
         artifact.workflow_run?.id !== OLD_RUN || artifact.workflow_run?.head_sha !== OLD_SHA) return refuse();
   }
+  if (correction) {
+    const previous = await get("/actions/runs/" + PRIOR_RECOVERY_RUN); scope(previous, PATH);
+    if (previous.workflow_id !== current.workflow_id || previous.head_sha !== PRIOR_RECOVERY_SHA || previous.run_number !== 1 || previous.status !== "completed" || previous.conclusion !== "failure" ||
+        !Number.isFinite(Date.parse(previous.updated_at)) || Date.now() - Date.parse(previous.updated_at) < 60000) return refuse();
+    const evidence = await get("/actions/runs/" + PRIOR_RECOVERY_RUN + "/artifacts?per_page=100");
+    if (evidence.total_count !== 2 || evidence.artifacts?.length !== 2) return refuse();
+    for (const [id, checksum] of [[12277146675, "a3ac5116d2f202b6b37145e0ff4c38014c1d6d9b5a9bb7511f10e87af5786184"], [12275543477, "8f3fe587b24d85836458efc8dc08850b373b1acb39431fbc336446c148540ce1"]] as const) {
+      const artifact = evidence.artifacts.find((item: { id: number }) => item.id === id);
+      if (!artifact || artifact.expired !== false || artifact.digest !== "sha256:" + checksum || artifact.size_in_bytes < 1 || artifact.size_in_bytes > 1048576 ||
+          artifact.workflow_run?.id !== PRIOR_RECOVERY_RUN || artifact.workflow_run?.head_sha !== PRIOR_RECOVERY_SHA) return refuse();
+    }
+  }
   const after = await get("/actions/workflows/" + current.workflow_id + "/runs?per_page=100");
-  if (after.total_count !== 1 || after.workflow_runs?.length !== 1 || after.workflow_runs[0].id !== current.id) return refuse();
+  if (after.total_count !== expectedIds.length || after.workflow_runs?.length !== expectedIds.length ||
+      JSON.stringify(after.workflow_runs.map((item: { id: number }) => item.id).sort()) !== JSON.stringify(expectedIds)) return refuse();
 }
+
+/** The correction is tied to the already-inspected HTTP-400 attempt. No existing
+ * plan, task receipt, publication or changed identity can be replayed. */
+export function validateCalculatorPriorRecovery(root: string, request: ReturnType<typeof prepareCalculatorLaunchRequest>) {
+  const previous = join(root, "prior-recovery"), barrierRoot = join(root, "prior-recovery-barrier");
+  privateDirectory(previous); privateDirectory(barrierRoot);
+  if (readdirSync(previous).sort().join(",") !== "barrier,context.json,prior-barrier,prior-capsule,state" || readdirSync(barrierRoot).join(",") !== "recovery.json") return refuse();
+  const prior = validateCalculatorFailedPlanningCapsule(previous, request), state = join(previous, "state"); privateDirectory(state);
+  const context = read(join(previous, "context.json")) as Record<string, unknown>, barrier = read(join(previous, "barrier/recovery.json")) as Record<string, unknown>;
+  if (context.version !== 1 || context.runtimeSha !== "4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2" || context.eventSha !== PRIOR_RECOVERY_SHA || context.runId !== String(PRIOR_RECOVERY_RUN) ||
+      digest(context.request) !== digest(request) || digest(barrier) !== digest(read(join(barrierRoot, "recovery.json"))) ||
+      barrier.runtimeSha !== context.runtimeSha || barrier.eventSha !== context.eventSha || barrier.recoveryRunId !== context.runId || barrier.goalId !== request.goal.id ||
+      barrier.authorization !== "ONE_REVIEWED_STEP7_RECOVERY" || barrier.automaticReplay !== false || barrier.priorRunId !== OLD_RUN ||
+      barrier.priorManifestDigest !== prior.priorManifestDigest || barrier.priorStateDigest !== prior.priorStateDigest || digest(barrier.conservativePriorCharge) !== digest(CALCULATOR_RECOVERY_CHARGE)) return refuse();
+  const names = readdirSync(state).sort(), oldName = "calc-planning-" + request.goal.id + ".json", markerName = "calc-recovery-" + request.goal.id + ".json";
+  if (names.join(",") !== [oldName, markerName].sort().join(",")) return refuse();
+  for (const name of names) { read(join(state, name)); chmodSync(join(state, name), 0o600); }
+  if (!readFileSync(join(state, oldName)).equals(prior.state.get(oldName)!)) return refuse();
+  const marker = new TeamTaskStore(state, { id: "calc-recovery-" + request.goal.id, fingerprint: digest(barrier) });
+  try { const receipt = marker.inspectExisting();
+    if (!receipt || receipt.status !== "blocked" || receipt.reasonCode !== "recovery_stopped_no_replay" || receipt.publication ||
+        JSON.stringify(receipt.stages) !== '[{"stage":"recovery_plan","status":"running"}]') return refuse();
+  } finally { marker.close(); }
+  return { priorRecoveryBarrierDigest: digest(barrier), priorRecoveryReceiptDigest: createHash("sha256").update(readFileSync(join(state, markerName))).digest("hex") };
+}
+
 export async function runCalculatorStep7Recovery(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<void> {
   if (args.length !== 3 || !["prepare", "execute"].includes(args[0]) || !isAbsolute(args[1]) || resolve(args[1]) !== args[1]) return refuse();
   const [phase, root, runtimeSha] = args; hash(runtimeSha);
   if (phase === "prepare") {
-    await verifyCalculatorRecoveryHistory(env);
     privateDirectory(root);
     const raw = read(join(env.GITHUB_WORKSPACE!, "request/.factory/calculator-step7-recovery-request.json"));
-    const request = validateCalculatorRecoveryRequest(raw, runtimeSha), prior = validateCalculatorFailedPlanningCapsule(root, request);
+    const request = validateCalculatorRecoveryRequest(raw, runtimeSha), correction = (raw as { approval: string }).approval === "ONE_JSON_REQUEST_CORRECTION";
+    await verifyCalculatorRecoveryHistory(env, globalThis.fetch, correction);
+    const prior = validateCalculatorFailedPlanningCapsule(root, request), previous = correction ? validateCalculatorPriorRecovery(root, request) : undefined;
     mkdirSync(join(root, "state"), { mode: 0o700 }); mkdirSync(join(root, "barrier"), { mode: 0o700 });
     for (const [name, bytes] of prior.state) writeFileSync(join(root, "state", name), bytes, { mode: 0o600, flag: "wx" });
-    put(join(root, "context.json"), { version: 1, runtimeSha, eventSha: hash(env.GITHUB_SHA), runId: env.GITHUB_RUN_ID, request });
+    put(join(root, "context.json"), { version: 1, runtimeSha, eventSha: hash(env.GITHUB_SHA), runId: env.GITHUB_RUN_ID, correction, request });
     put(join(root, "barrier/recovery.json"), { version: 1, goalId: request.goal.id, priorRunId: OLD_RUN, recoveryRunId: env.GITHUB_RUN_ID,
       runtimeSha, eventSha: hash(env.GITHUB_SHA), priorManifestDigest: prior.priorManifestDigest, priorStateDigest: prior.priorStateDigest,
-      conservativePriorCharge: CALCULATOR_RECOVERY_CHARGE, authorization: "ONE_REVIEWED_STEP7_RECOVERY", automaticReplay: false });
+      conservativePriorCharge: correction ? CALCULATOR_JSON_CORRECTION_CHARGE : CALCULATOR_RECOVERY_CHARGE,
+      ...(previous ? { priorRecoveryRunId: PRIOR_RECOVERY_RUN, ...previous } : {}),
+      authorization: correction ? "ONE_JSON_REQUEST_CORRECTION" : "ONE_REVIEWED_STEP7_RECOVERY", automaticReplay: false });
     return;
   }
   privateDirectory(root);
-  const context = read(join(root, "context.json")) as { runtimeSha: string; eventSha: string; runId: string; request: unknown };
-  const barrier = read(join(root, "barrier/recovery.json")) as { conservativePriorCharge: unknown; recoveryRunId: string; eventSha: string; runtimeSha: string };
+  const context = read(join(root, "context.json")) as { runtimeSha: string; eventSha: string; runId: string; correction: boolean; request: unknown };
+  const barrier = read(join(root, "barrier/recovery.json")) as Record<string, unknown>;
+  if (typeof context.correction !== "boolean") return refuse();
+  const charge = context.correction ? CALCULATOR_JSON_CORRECTION_CHARGE : CALCULATOR_RECOVERY_CHARGE;
   if (env.CALCULATOR_RECOVERY_BARRIER_UPLOADED !== "true" || context.runtimeSha !== runtimeSha || context.eventSha !== env.GITHUB_SHA || context.runId !== env.GITHUB_RUN_ID ||
       barrier.runtimeSha !== runtimeSha || barrier.recoveryRunId !== env.GITHUB_RUN_ID || barrier.eventSha !== env.GITHUB_SHA ||
-      digest(barrier.conservativePriorCharge) !== digest(CALCULATOR_RECOVERY_CHARGE)) return refuse();
+      digest(barrier.conservativePriorCharge) !== digest(charge)) return refuse();
   const request = prepareCalculatorLaunchRequest(context.request, OLD_RUNTIME), owner = prepareCalculatorGoal(request.goal);
   const prior = validateCalculatorFailedPlanningCapsule(root, request), active = readCalculatorLaunchState(join(root, "state"), request);
   if (active.size !== 1 || [...active].some(([name, bytes]) => !bytes.equals(prior.state.get(name)!))) return refuse();
+  if (context.correction) {
+    const previous = validateCalculatorPriorRecovery(root, request);
+    if (barrier.authorization !== "ONE_JSON_REQUEST_CORRECTION" || barrier.priorRecoveryRunId !== PRIOR_RECOVERY_RUN ||
+        Object.entries(previous).some(([key, value]) => barrier[key] !== value)) return refuse();
+  }
   if (env.AGENT_FACTORY_PROVIDER !== "groq" || env.GROQ_MODEL || env.AGENT_FACTORY_LEGAL_ENABLED !== "false") return refuse();
-  const marker = new TeamTaskStore(join(root, "state"), { id: "calc-recovery-" + owner.id, fingerprint: digest(barrier) });
+  const marker = new TeamTaskStore(join(root, "state"), { id: (context.correction ? "calc-json-correction-" : "calc-recovery-") + owner.id, fingerprint: digest(barrier) });
   let team: ReturnType<typeof createCalculatorModelTeam> | undefined, failureStage = "recovery_claim_unverified";
   try {
     if (marker.claim() !== "claimed") return refuse();
@@ -138,7 +192,7 @@ export async function runCalculatorStep7Recovery(args: string[], env: NodeJS.Pro
     const readiness = await runCalculatorRuntime(request.goal, request.config, join(root, "state"), "preflight", env);
     if (readiness.status !== "ready-for-explicit-plan-or-run") return refuse();
     marker.recordStage("recovery_plan", "running");
-    team = createCalculatorModelTeam(request.goal, env, globalThis.fetch, {}, CALCULATOR_RECOVERY_CHARGE);
+    team = createCalculatorModelTeam(request.goal, env, globalThis.fetch, {}, charge);
     failureStage = "recovery_model_plan_failed";
     const plan = await team.plan(), checked = createCalculatorPlan(request.goal, plan.proposal), first = checked.tasks[0];
     failureStage = "recovery_plan_scope_or_coverage_unverified";
@@ -164,7 +218,10 @@ export async function runCalculatorStep7Recovery(args: string[], env: NodeJS.Pro
     put(join(root, "calculator-report.json"), result); console.log(JSON.stringify(result));
     if (result.status === "blocked") process.exitCode = 10;
   } catch {
-    console.error(JSON.stringify({ event: "calculator_recovery_stopped", stage: failureStage, ...(team ? team.diagnostic() : {}) }));
+    const diagnostic = { event: "calculator_recovery_stopped", stage: failureStage, ...(team ? team.diagnostic() : {}) };
+    console.error(JSON.stringify(diagnostic));
+    try { put(join(root, "failure-diagnostic.json"), diagnostic); } catch { /* Preserve existing metadata. */ }
+    if (team) try { put(join(root, "planning-accounting.json"), team.snapshot()); } catch { /* Preserve any prior accounting. */ }
     try { marker.finish("blocked", "recovery_stopped_no_replay"); } catch { /* Existing terminal marker remains intact. */ }
     throw Error(ERROR);
   } finally { marker.close(); }

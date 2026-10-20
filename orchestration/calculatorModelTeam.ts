@@ -62,7 +62,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
       const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
-        messages: [{ role: "system", content: instructions }, { role: "user", content: input }],
+        messages: [{ role: "system", content: instructions + (config.provider === "groq" && model === "openai/gpt-oss-120b" ? "\n\nReturn one JSON object matching the requested schema. No Markdown or surrounding text." : "") }, { role: "user", content: input }],
         ...(config.provider === "groq" && model === "openai/gpt-oss-120b" ? {
           reasoning_effort: "low", response_format: { type: "json_object" },
         } : {}) });

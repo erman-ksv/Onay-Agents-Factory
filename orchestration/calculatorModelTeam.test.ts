@@ -256,6 +256,7 @@ test("reviewed Groq JSON mode uses low reasoning without raising output or dropp
   });
   await assert.rejects(() => team.plan());
   assert.equal(body.reasoning_effort, "low"); assert.deepEqual(body.response_format, { type: "json_object" });
+  assert.match(body.messages[0].content, /Return one JSON object/);
   assert.equal(body.max_completion_tokens, 1200); assert.ok(body.messages[0].content.includes("No role may directly write GitHub"));
 });
 test("host recovery prior charge reduces remaining budgets, is visible, and 429 remains terminal", async () => {
@@ -273,4 +274,17 @@ test("host recovery prior charge reduces remaining budgets, is visible, and 429 
   assert.ok(!JSON.stringify(team.snapshot()).includes('private source'));
   for (const raw of [{ ...prior, elapsedMs: 120000 }, { ...prior, attemptedRequests: 16 }, { ...prior, totalRequestBytes: 192000 }, { ...prior, reservedRunTokens: -1 }])
     assert.throws(() => createCalculatorModelTeam(groqOwner, env, undefined, {}, raw));
+});
+
+test("two failed planning charges leave only the original remaining tokens/time and cannot reset them", async () => {
+  const groqOwner = { ...owner, provider: "groq" }, env = { ...environment, AGENT_FACTORY_PROVIDER: "groq", GROQ_API_KEY: "fixture-key" };
+  const prior = { attemptedRequests: 2, totalRequestBytes: 48000, reservedRunTokens: 12000, elapsedMs: 60000 }; let calls = 0;
+  const team = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return new Response("no echo", { status: 429 }); }, {}, prior);
+  await assert.rejects(() => team.plan()); assert.equal(calls, 1);
+  assert.equal(team.snapshot().aggregatePlanningCharge?.attemptedRequests, 3);
+  assert.ok(team.snapshot().aggregatePlanningCharge!.reservedRunTokens <= 16000);
+  let now = 0;
+  const expired = createCalculatorModelTeam(groqOwner, env, async () => { calls++; return response({}); }, { now: () => now }, prior);
+  now = 60001; await assert.rejects(() => expired.plan()); assert.equal(calls, 1);
+  assert.equal(expired.snapshot().modelBudget.failureCode, "task_timeout");
 });
