@@ -1,4 +1,4 @@
-name: Calculator failed plan read-only audit
+name: Calculator stopped task read-only audit
 on:
   push:
     branches: ['feat/onay-task-runner-20261019']
@@ -22,19 +22,10 @@ jobs:
           node-version: 24
       - uses: actions/download-artifact@v4
         with:
-          artifact-ids: '12272791735'
-          run-id: 39437299742
+          artifact-ids: '12276359076'
+          run-id: 39448498604
           github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/failed-plan-audit/capsule
+          path: ${{ runner.temp }}/stopped-task-audit
           merge-multiple: true
-      - uses: actions/download-artifact@v4
-        with:
-          artifact-ids: '12272402010'
-          run-id: 39437299742
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/failed-plan-audit/barrier
-          merge-multiple: true
-      - name: Validate fixed failure metadata without replay or inference
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: node scripts/calculator-failed-plan-audit.mjs "$RUNNER_TEMP/failed-plan-audit"
+      - name: Inspect only fixed task receipt and missing execution evidence
+        run: node scripts/calculator-failed-plan-audit.mjs "$RUNNER_TEMP/stopped-task-audit"
