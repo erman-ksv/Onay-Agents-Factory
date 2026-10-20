@@ -236,3 +236,14 @@ test("failure diagnostics expose only host codes, status and counts without upst
     await assert.rejects(() => team.plan(), refusal); assert.equal(calls, 1); assert.deepEqual(team.diagnostic(), diagnostic);
   });
 });
+test("a later transport failure never inherits the previous successful provider status", async () => {
+  let calls = 0;
+  const team = createCalculatorModelTeam(owner, environment, async () => {
+    calls++; if (calls === 1) return response(generated);
+    throw Error("PRIVATE_NETWORK_ERROR");
+  });
+  const changes = await team.generate(plan, task.id, await snapshot());
+  await assert.rejects(() => team.assess("security", plan, task.id, changes), refusal);
+  assert.equal(team.diagnostic().httpStatus, 502); assert.equal(team.diagnostic().providerHttpStatus, undefined);
+  assert.equal(team.diagnostic().finishReason, undefined); assert.equal(team.diagnostic().httpRequestsAttempted, 2);
+});

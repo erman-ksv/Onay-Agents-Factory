@@ -206,6 +206,7 @@ export function createTaskModelBudgetFetch(
 
     // No await between these checks, reservation and registering cancellation.
     attemptedRequests++;
+    providerHttpStatus = undefined;
     totalRequestBytes += bytes;
     const controller = new AbortController();
     active.add(controller);

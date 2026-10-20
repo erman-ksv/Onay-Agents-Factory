@@ -36,7 +36,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
   let stopped = false, planned = false;
-  let failureCode: string | undefined, httpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
+  let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   const generated = new Set<string>(), repaired = new Set<string>();
   const proposals = new WeakMap<PreparedCalculatorChanges, { taskId: string; planFingerprint: string; snapshot: CalculatorSnapshot; inspectionSha?: string }>();
   const assessed = new WeakMap<PreparedCalculatorChanges, Set<string>>();
@@ -45,6 +45,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     let phase = "request_preparation_failed";
     try {
       if (stopped) return refuse();
+      httpStatus = undefined; providerHttpStatus = undefined; finishReason = undefined;
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
       const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
@@ -54,10 +55,12 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       if (stopped || budget.failure) return refuse();
       const requestNumber = contextBudget ? contextBudget.snapshot().attemptedRequests + 1 : undefined;
       phase = "model_transport_failed";
+      const attemptsBefore = budget.snapshot().attemptedRequests;
       const response = await request(endpoint, { method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
         headers: { Authorization: "Bearer " + apiKey, "content-type": "application/json" },
         body });
       httpStatus = response.status;
+      if (budget.snapshot().attemptedRequests > attemptsBefore) providerHttpStatus = budget.providerHttpStatus;
       phase = response.status === 429 ? "model_rate_limited" : !response.ok ? "model_http_rejected" : "model_response_invalid";
       if (!response.ok || !response.body) { void response.body?.cancel().catch(() => undefined); return refuse(); }
       const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
@@ -191,7 +194,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       } catch { stopped = true; return refuse(); }
     },
     diagnostic: () => Object.freeze({ reasonCode: failureCode ?? "model_failure_unclassified", ...(httpStatus !== undefined ? { httpStatus } : {}),
-      ...(budget.providerHttpStatus !== undefined ? { providerHttpStatus: budget.providerHttpStatus } : {}),
+      ...(providerHttpStatus !== undefined ? { providerHttpStatus } : {}),
       ...(finishReason ? { finishReason } : {}), httpRequestsAttempted: budget.snapshot().attemptedRequests,
       ...(budget.failure ? { taskBudgetCode: budget.failure.code } : {}), ...(contextBudget?.failure ? { contextBudgetCode: contextBudget.failure.code } : {}) }),
     snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size, repairedTasks: repaired.size,
