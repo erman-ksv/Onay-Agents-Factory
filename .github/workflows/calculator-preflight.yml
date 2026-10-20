@@ -1,0 +1,147 @@
+name: Calculator read-only preflight
+
+on:
+  push:
+    branches: ['feat/onay-task-runner-20261019']
+    paths: ['.factory/calculator-preflight-request.json']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: calculator-read-only-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Inspect Calculator runtime readiness without models or writes
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout only the host request at the event SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-preflight-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate request and boolean readiness before runtime setup
+        id: prepare
+        shell: bash
+        env:
+          HAS_GROQ: ${{ secrets.GROQ_API_KEY != '' }}
+          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
+          HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && (secrets.CLOUDFLARE_ACCOUNT_ID != '' || vars.CLOUDFLARE_ACCOUNT_ID != '') }}
+          HAS_CALCULATOR_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN != '' }}
+          HAS_CONFIRMED_FREE_TIER: ${{ vars.ONAY_TEAM_FREE_TIER_CONFIRMED == 'true' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o077);
+          const root = join(process.env.RUNNER_TEMP, 'calculator-preflight');
+          mkdirSync(root, { mode: 0o700 });
+          for (const name of ['state', 'report']) mkdirSync(join(root, name), { mode: 0o700 });
+          const readiness = Object.fromEntries(['HAS_GROQ', 'HAS_GEMINI', 'HAS_CLOUDFLARE', 'HAS_CALCULATOR_TOKEN', 'HAS_CONFIRMED_FREE_TIER'].map(name => [name, process.env[name] === 'true']));
+          const invalid = () => { throw new Error('invalid'); };
+          const keys = (value, names) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).sort().join(',') === [...names].sort().join(',');
+          const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
+          let reasonCode = 'request_missing_or_invalid';
+          try {
+            for (const relative of ['request', 'request/.factory']) {
+              const stat = lstatSync(join(process.env.GITHUB_WORKSPACE, relative));
+              if (!stat.isDirectory() || stat.isSymbolicLink()) invalid();
+            }
+            const path = join(process.env.GITHUB_WORKSPACE, 'request/.factory/calculator-preflight-request.json');
+            const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+            let request;
+            try {
+              const stat = fstatSync(fd);
+              if (!stat.isFile() || stat.nlink !== 1 || stat.size < 2 || stat.size > 24576) invalid();
+              request = JSON.parse(readFileSync(fd, 'utf8'));
+            } finally { closeSync(fd); }
+            if (!keys(request, ['version', 'factorySha', 'goal', 'config']) || request.version !== 1 || request.factorySha !== '18f6408007f95720e0e534636e8f2a322db82294') invalid();
+            const { goal, config } = request;
+            if (!keys(goal, ['version', 'id', 'goal', 'baseRef', 'baseSha', 'provider']) || goal.version !== 1 ||
+                typeof goal.id !== 'string' || !/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(goal.id) ||
+                typeof goal.goal !== 'string' || goal.goal !== goal.goal.trim() || goal.goal.length < 12 || goal.goal.length > 4000 || /[\u0000-\u001f\u007f]|```/.test(goal.goal) ||
+                goal.baseRef !== 'feat/calculator-pilot-bootstrap' || !sha(goal.baseSha) || !['groq', 'gemini', 'cloudflare'].includes(goal.provider)) invalid();
+            if (!keys(config, ['version', 'sandboxImage', 'trustedWorkflows']) || config.version !== 1 ||
+                typeof config.sandboxImage !== 'string' || !/^node@sha256:[a-f0-9]{64}$/.test(config.sandboxImage) ||
+                !Array.isArray(config.trustedWorkflows) || config.trustedWorkflows.length < 1 || config.trustedWorkflows.length > 2) invalid();
+            for (const pin of config.trustedWorkflows) if (!keys(pin, ['id', 'path', 'blobSha']) || !Number.isSafeInteger(pin.id) || pin.id < 1 ||
+                !['.github/workflows/calculator-task-ci.yml', '.github/workflows/calculator-final-ci.yml'].includes(pin.path) || !sha(pin.blobSha)) invalid();
+            if (!config.trustedWorkflows.some(pin => pin.path === '.github/workflows/calculator-task-ci.yml') ||
+                new Set(config.trustedWorkflows.map(pin => pin.id)).size !== config.trustedWorkflows.length ||
+                new Set(config.trustedWorkflows.map(pin => pin.path)).size !== config.trustedWorkflows.length) invalid();
+            reasonCode = 'credentials_unavailable';
+            if (!readiness.HAS_CALCULATOR_TOKEN || !readiness[{ groq: 'HAS_GROQ', gemini: 'HAS_GEMINI', cloudflare: 'HAS_CLOUDFLARE' }[goal.provider]]) invalid();
+            reasonCode = 'free_tier_unconfirmed';
+            if (!readiness.HAS_CONFIRMED_FREE_TIER) invalid();
+            for (const [name, value] of [['goal', goal], ['config', config]]) writeFileSync(join(root, name + '.json'), JSON.stringify(value) + '\n', { mode: 0o600, flag: 'wx' });
+            writeFileSync(join(root, 'report/calculator-report.json'), JSON.stringify({ mode: 'preflight', status: 'blocked', reasonCode: 'runtime_preflight_not_executed', readiness, modelsRun: false, calculatorWrites: false, wholeAppCompleted: false, legalEnabled: false }) + '\n', { mode: 0o600, flag: 'wx' });
+            appendFileSync(process.env.GITHUB_OUTPUT, 'ready=true\nprovider=' + goal.provider + '\nimage=' + config.sandboxImage + '\n');
+          } catch {
+            const report = { mode: 'preflight', status: 'blocked', reasonCode, readiness, modelsRun: false, calculatorWrites: false, wholeAppCompleted: false, legalEnabled: false };
+            writeFileSync(join(root, 'report/calculator-report.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+            console.log(JSON.stringify(report));
+            process.exitCode = 10;
+          }
+          NODE
+      - name: Checkout the fixed trusted Factory runtime
+        if: ${{ steps.prepare.outputs.ready == 'true' }}
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: erman-ksv/Onay-Agents-Factory
+          ref: 18f6408007f95720e0e534636e8f2a322db82294
+          path: runtime
+          persist-credentials: false
+      - name: Setup pnpm
+        if: ${{ steps.prepare.outputs.ready == 'true' }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Setup Node
+        if: ${{ steps.prepare.outputs.ready == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install the locked trusted runtime dependencies
+        if: ${{ steps.prepare.outputs.ready == 'true' }}
+        working-directory: runtime
+        run: pnpm install --frozen-lockfile
+      - name: Prepare the exact approved Node image
+        if: ${{ steps.prepare.outputs.ready == 'true' }}
+        env:
+          PREFLIGHT_IMAGE: ${{ steps.prepare.outputs.image }}
+        run: docker --host=unix:///var/run/docker.sock pull "$PREFLIGHT_IMAGE"
+      - name: Execute only read-only preflight
+        if: ${{ steps.prepare.outputs.ready == 'true' }}
+        working-directory: runtime
+        env:
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: ${{ steps.prepare.outputs.provider }}
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'false'
+          CALCULATOR_EXECUTION_LIVE_APPROVED: ''
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          ONAY_TEAM_FREE_TIER_CONFIRMED: ${{ vars.ONAY_TEAM_FREE_TIER_CONFIRMED }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ steps.prepare.outputs.provider == 'groq' && secrets.GROQ_API_KEY || '' }}
+          GEMINI_API_KEY: ${{ steps.prepare.outputs.provider == 'gemini' && secrets.GEMINI_API_KEY || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.prepare.outputs.provider == 'cloudflare' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.prepare.outputs.provider == 'cloudflare' && (secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID) || '' }}
+        run: pnpm exec tsx orchestration/calculatorCli.ts --goal "$RUNNER_TEMP/calculator-preflight/goal.json" --config "$RUNNER_TEMP/calculator-preflight/config.json" --state-dir "$RUNNER_TEMP/calculator-preflight/state" --output-dir "$RUNNER_TEMP/calculator-preflight/report" --mode preflight
+      - name: Preserve only the source-free preflight report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-preflight-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/calculator-preflight/report/calculator-report.json
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: false

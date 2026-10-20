@@ -5,7 +5,7 @@ export function renderCalculatorTaskWorkflow(factorySha: string, image: string):
   return `name: Calculator task CI
 on:
   push:
-    branches: ['feat/calculator-agent/**']
+    branches: ['feat/calculator-pilot-bootstrap', 'feat/calculator-agent/**']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,8 +13,17 @@ concurrency:
   group: calculator-task-\${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  registration:
+    name: Workflow registration only
+    if: github.ref == 'refs/heads/feat/calculator-pilot-bootstrap'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Register trusted workflow without app execution
+        run: node -e 'console.log(JSON.stringify({workflowRegistrationOnly:true,modelsRun:false,testsExecuted:false,writesPerformed:false}))'
   task:
     name: Calculator task CI
+    if: startsWith(github.ref, 'refs/heads/feat/calculator-agent/')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:

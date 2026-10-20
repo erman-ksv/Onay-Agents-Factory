@@ -99,6 +99,24 @@ test("trusted CI entry refuses incomplete/symlink sources without running candid
     await assert.rejects(()=>runCalculatorTaskCi(join(directory,'link'),owner.baseSha,config.sandboxImage));
   } finally {rmSync(directory,{recursive:true,force:true});}
 });
+test("bootstrap workflow registration is separated from required candidate test jobs", async () => {
+  const {renderCalculatorTaskWorkflow}=await import('../config/calculatorTaskWorkflow.js');
+  const workflow=renderCalculatorTaskWorkflow('a'.repeat(40),'node@sha256:'+'b'.repeat(64));
+  const registration=workflow.split('  registration:\n')[1]?.split('  task:\n')[0];
+  assert.ok(registration?.includes("if: github.ref == 'refs/heads/feat/calculator-pilot-bootstrap'"));
+  assert.ok(registration?.includes('testsExecuted:false'));
+  for(const forbidden of ['secrets.', 'actions/checkout', 'pnpm', 'docker', 'name: Syntax', 'name: Task tests'])
+    assert.ok(!registration?.includes(forbidden));
+  const task=workflow.split('  task:\n')[1];
+  assert.ok(task.includes("if: startsWith(github.ref, 'refs/heads/feat/calculator-agent/')"));
+  assert.ok(task.includes('name: Syntax'));assert.ok(task.includes('name: Task tests'));
+  const {evaluateTestExecutionEvidence}=await import('../agents/tester/agent.js');
+  const run={id:1,name:'Calculator task CI',status:'completed',conclusion:'success',html_url:'https://github.com/erman-ksv/Onay-Factory-Calculator/actions/runs/1',head_sha:'a'.repeat(40),run_attempt:1};
+  const evidence=evaluateTestExecutionEvidence([run],[{name:'Workflow registration only',status:'completed',conclusion:'success',run_id:1,run_attempt:1,head_sha:'a'.repeat(40)},
+    {name:'Calculator task CI',status:'completed',conclusion:'skipped',run_id:1,run_attempt:1,head_sha:'a'.repeat(40),steps:[]}],
+    'a'.repeat(40),['Calculator task CI'],['Syntax','Task tests']);
+  assert.equal(evidence.testsExecuted,false);assert.notEqual(evidence.status,'passed');
+});
 test("dependency review sends a bounded diff and omits an unchanged private companion", async () => {
   const {createCalculatorModelTeam}=await import('./calculatorModelTeam.js');
   const {createCalculatorPlan,calculatorPlanTaskId,CALCULATOR_ACCEPTANCE}=await import('./calculatorPlan.js');
