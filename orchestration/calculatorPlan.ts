@@ -112,6 +112,10 @@ export function createCalculatorPlan(ownerRequest: unknown, modelResult: unknown
   for (const task of tasks.filter(task => task.paths.includes("src/app.mjs")))
     if (!core.some(producer => depends(task, producer.id))) return refuseCalculatorPlan();
   const blockers = [...modelResult.blockers];
+  const uiPaths = ["index.html", "styles.css", "src/app.mjs"];
+  for (const task of tasks.filter(item => item.role === "frontend"))
+    if (uiPaths.some(path => !tasks.some(producer => producer.paths.includes(path) && (producer.id === task.id || depends(task, producer.id)))))
+      blockers.push("Frontend task lacks a complete UI source group in its dependency base: " + task.id + ".");
   const missingCriteria = CALCULATOR_ACCEPTANCE.filter(item => !tasks.some(task => task.acceptanceIds.includes(item.id))).map(item => item.id);
   const missingFiles = CALCULATOR_PROFILE.writablePaths.filter(path => !tasks.some(task => task.paths.includes(path)));
   if (missingCriteria.length) blockers.push("Missing acceptance coverage: " + missingCriteria.join(", ") + ".");

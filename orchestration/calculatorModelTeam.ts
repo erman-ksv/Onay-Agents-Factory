@@ -34,7 +34,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
   let stopped = false, planned = false;
   const generated = new Set<string>(), repaired = new Set<string>();
-  const proposals = new WeakMap<PreparedCalculatorChanges, { taskId: string; planFingerprint: string; snapshot: CalculatorSnapshot }>();
+  const proposals = new WeakMap<PreparedCalculatorChanges, { taskId: string; planFingerprint: string; snapshot: CalculatorSnapshot; inspectionSha?: string }>();
   const assessed = new WeakMap<PreparedCalculatorChanges, Set<string>>();
 
   async function call(instructions: string, packet: unknown): Promise<unknown> {
@@ -116,6 +116,38 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     },
     generate: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot) => propose(plan, taskId, snapshot),
     repair: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest) => propose(plan, taskId, snapshot, request),
+    /** Host-only: evidence for fresh dependency review, not a generation/write.
+     * Compare committed current files to the immutable owner base; all changed
+     * text must fit the existing complete-change limits or inspection stops. */
+    observeCommitted(plan: CalculatorPlan, taskId: string, original: CalculatorSnapshot, current: CalculatorSnapshot): PreparedCalculatorChanges {
+      try {
+        const task = taskIn(plan, taskId);
+        if (stopped || original.repository !== owner.repository || current.repository !== owner.repository || original.baseSha !== owner.baseSha ||
+            [original, current].some(snapshot => snapshot.changePaths.length !== task.paths.length || task.paths.some(path => !snapshot.changePaths.includes(path)))) return refuse();
+        const before = calculatorSources(original), after = calculatorSources(current);
+        const changes: unknown[] = [];
+        for (const path of task.paths) {
+          const content = after.get(path); if (content === undefined) return refuse();
+          const old = before.get(path);
+          if (old === content) continue; // Metadata only; never resend unchanged originals.
+          if (old === undefined) { changes.push({ operation: "create", path, content, message: "Inspect committed task file" }); continue; }
+          let prefix = 0, suffix = 0;
+          while (prefix < old.length && prefix < content.length && old[prefix] === content[prefix]) prefix++;
+          while (suffix < old.length-prefix && suffix < content.length-prefix && old[old.length-1-suffix] === content[content.length-1-suffix]) suffix++;
+          let edit: {before:string;after:string} | undefined;
+          for (const context of [0,1,2,4,8,16,32,64,128]) {
+            const start = Math.max(0,prefix-context), end = Math.min(old.length,old.length-suffix+context);
+            const anchor = old.slice(start,end), replacement = content.slice(start,content.length-suffix+end-(old.length-suffix));
+            if (anchor && anchor !== old && old.indexOf(anchor) === old.lastIndexOf(anchor) && !replacement.includes(old)) { edit={before:anchor,after:replacement};break; }
+          }
+          if (!edit) return refuse(); // Complete private originals are never a fallback.
+          changes.push({ operation: "patch", path, sourceSha256: original.files.find(file => file.path === path)!.sourceSha256,
+            edits: [edit], message: "Inspect bounded committed changes from owner base" });
+        }
+        const prepared = prepareCalculatorRoleChanges(task.role, { summary: "Fresh committed task evidence at " + current.baseSha, changes }, original);
+        proposals.set(prepared, { taskId, planFingerprint: plan.fingerprint, snapshot: original, inspectionSha: current.baseSha }); return prepared;
+      } catch { stopped = true; return refuse(); }
+    },
     async assess(role: "security" | "reviewer" | "tester", plan: CalculatorPlan, taskId: string, changes: PreparedCalculatorChanges) {
       try {
         const task = taskIn(plan, taskId), identity = proposals.get(changes);
@@ -123,9 +155,9 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
             identity.planFingerprint !== plan.fingerprint) return refuse();
         const seen = assessed.get(changes) ?? new Set<string>();
         if (seen.has(role)) return refuse(); seen.add(role); assessed.set(changes, seen);
-        const evidenceId = "changes@" + changes.baseSha;
+        const evidenceId = "changes@" + (identity.inspectionSha ?? changes.baseSha);
         const result = await call(buildCalculatorRoleInstructions(role), { repository: owner.repository,
-          task, acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId, completeChangedText: JSON.parse(changes.reviewEvidence),
+          task, acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId, ...(identity.inspectionSha ? { inspectedCommitSha: identity.inspectionSha } : {}), completeChangedText: JSON.parse(changes.reviewEvidence),
           unverifiedAreas: ["Unshown unchanged source", "No runtime tests or browser checks have executed", "No publication or completion"] });
         return validateCalculatorAssessment(role, result, [evidenceId]);
       } catch { stopped = true; return refuse(); }

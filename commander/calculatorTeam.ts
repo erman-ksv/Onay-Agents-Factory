@@ -15,7 +15,7 @@ export const CALCULATOR_TEAM = Object.freeze({
   commander: definition("Coordinate the owner's whole calculator goal",
     "Owner requirements, inspected evidence, durable backlog and remaining host budget",
     "A dependency-aware plan, next bounded task or explicit blocked/needs-review report",
-    "Decompose the full goal into reviewable tasks. Preserve acceptance criteria and dependencies. Select the next task only from the saved host backlog. " +
+    "Decompose the full goal into reviewable tasks. Preserve acceptance criteria and dependencies. For a new calculator, first plan core plus arithmetic tests, then all three UI source paths together, then UI interaction tests; intermediate task checks require the complete UI source group when a frontend task executes. Select the next task only from the saved host backlog. " +
     "A Draft PR is not integrated code. Do not advance dependent tasks on an old SHA. Return failed checks as precise repair tasks, never replay the whole project. " +
     "The host owns budgets, durable state, retries, GitHub writes and completion decisions; a model report cannot mark the project completed."),
   product: definition("Translate the owner goal into acceptance criteria",
@@ -38,7 +38,7 @@ export const CALCULATOR_TEAM = Object.freeze({
     "One approved task, verified snapshot metadata, bounded source evidence and requested repair findings",
     "A bounded create/patch proposal and a short explanation of changed behavior",
     "Implement maintainable arithmetic separately from UI. Treat user input as data; do not execute it as source code. " +
-    "Preserve fixed acceptance answers and avoid exposing floating-point artifacts. Add meaningful tests for the task. " +
+    "Preserve fixed acceptance answers and avoid exposing floating-point artifacts. Add meaningful tests for the task. The agreed module interface is export calculate(left:number, operator:\"+\"|\"-\"|\"*\"|\"/\", right:number):number; return a finite normalized number (0.1+0.2 returns 0.3), and throw a nonempty Error on division by zero while subsequent calls work. " +
     "For create use only host-proven absent paths. For existing files return exact anchored patches with full-source SHA256, never rewrite unshown code.",
     ["src/calculator.mjs", "test/calculator.test.mjs"], ROLE_SKILLS.coder),
   frontend: definition("Implement the browser UI and interaction tests",
@@ -46,7 +46,7 @@ export const CALCULATOR_TEAM = Object.freeze({
     "A bounded create/patch proposal for HTML/CSS/browser JavaScript and relevant UI tests",
     "Use plain HTML, CSS and browser JavaScript ES modules. Keep arithmetic in its module and presentation in the UI. " +
     "Implement buttons, keyboard, visible error recovery and the responsive 360px layout with accessible controls. " +
-    "Preserve the agreed arithmetic interface. Do not introduce React, Expo, native APIs or external dependencies. " +
+    "Preserve the agreed calculate(left, operator, right):number arithmetic interface and nonempty division-by-zero Error. Include viewport meta, a visible output/status/live result, controls and a relative src/app.mjs module. Do not introduce React, Expo, native APIs or external dependencies. " +
     "For existing files use exact patches; for new files require host-proven absence.",
     ["index.html", "styles.css", "src/app.mjs", "test/ui.test.mjs"]),
   tester: definition("Check arithmetic, interaction and regressions independently",
