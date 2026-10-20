@@ -1,0 +1,58 @@
+name: Calculator runtime probe
+
+on:
+  push:
+    branches: ['feat/onay-task-runner-20261019']
+    paths:
+      - '.github/workflows/calculator-runtime-probe.yml'
+      - 'scripts/calculator-runtime-probe.mjs'
+      - 'orchestration/calculatorSandbox.ts'
+      - 'config/calculator-harness/check.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calculator-runtime-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Isolated calculator runtime probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted Factory
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resolve public Node image to exact digest
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker --host=unix:///var/run/docker.sock pull node:22-bookworm-slim
+          probe_node_image="$(docker --host=unix:///var/run/docker.sock image inspect node:22-bookworm-slim --format '{{index .RepoDigests 0}}')"
+          [[ "$probe_node_image" =~ ^node@sha256:[a-f0-9]{64}$ ]]
+          echo "image=$probe_node_image" >> "$GITHUB_OUTPUT"
+      - name: Verify real isolated execution without model calls
+        env:
+          PROBE_NODE_IMAGE: ${{ steps.image.outputs.image }}
+          HAS_GROQ: ${{ secrets.GROQ_API_KEY != '' }}
+          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
+          HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && (secrets.CLOUDFLARE_ACCOUNT_ID != '' || vars.CLOUDFLARE_ACCOUNT_ID != '') }}
+          HAS_CALCULATOR_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN != '' }}
+          HAS_FACTORY_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN != '' }}
+        run: node scripts/calculator-runtime-probe.mjs "$PROBE_NODE_IMAGE" "$RUNNER_TEMP/calculator-runtime-probe.json"
+      - name: Save source-free readiness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-runtime-readiness
+          path: ${{ runner.temp }}/calculator-runtime-probe.json
+          if-no-files-found: warn
+          retention-days: 7
