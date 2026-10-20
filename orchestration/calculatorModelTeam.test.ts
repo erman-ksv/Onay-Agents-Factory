@@ -208,3 +208,31 @@ test("a forged cross-owner plan is rejected before sending source to a model", a
   await assert.rejects(() => team.generate({ ...plan, fingerprint: "0".repeat(64) }, task.id, snap), refusal);
   assert.equal(calls, 0);
 });
+test("failure diagnostics expose only host codes, status and counts without upstream text or replay", async t => {
+  const cases = [
+    ["401", "model_http_rejected", 401], ["403", "model_http_rejected", 403], ["429", "model_rate_limited", 429],
+    ["500", "model_http_rejected", 500], ["length", "model_output_truncated", 200],
+    ["envelope", "model_response_invalid", 200], ["unsafe-finish", "model_response_invalid", 200],
+    ["json", "model_json_invalid", 200], ["plan", "model_plan_invalid", 200], ["network", "model_http_rejected", 502],
+  ] as const;
+  for (const [name, code, status] of cases) await t.test(name, async () => {
+    let calls = 0; const sentinel = "PRIVATE_UPSTREAM_SOURCE_AND_KEY";
+    const team = createCalculatorModelTeam(owner, environment, async () => {
+      calls++;
+      if (name === "network") throw Error(sentinel);
+      if (/^\d+$/.test(name)) return new Response(sentinel, { status: Number(name) });
+      if (name === "length") return response({ private: sentinel }, "length");
+      if (name === "envelope") return Response.json({ private: sentinel });
+      if (name === "unsafe-finish") return response({}, sentinel);
+      if (name === "json") return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: sentinel } }] });
+      return response({ tasks: sentinel });
+    });
+    await assert.rejects(() => team.plan(), refusal);
+    const diagnostic = team.diagnostic(); assert.equal(diagnostic.reasonCode, code);
+    assert.equal(diagnostic.httpStatus, name === "401" || name === "403" || name === "500" ? 502 : status);
+    assert.equal(diagnostic.providerHttpStatus, name === "network" ? undefined : status);
+    assert.equal(diagnostic.httpRequestsAttempted, 1); assert.ok(!JSON.stringify(diagnostic).includes(sentinel));
+    assert.ok(!JSON.stringify(diagnostic).includes("fixture-key"));
+    await assert.rejects(() => team.plan(), refusal); assert.equal(calls, 1); assert.deepEqual(team.diagnostic(), diagnostic);
+  });
+});

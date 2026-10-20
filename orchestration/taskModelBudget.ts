@@ -85,6 +85,7 @@ export function createTaskModelBudgetFetch(
   fetch: typeof fetch;
   snapshot(): TaskModelBudgetSnapshot;
   readonly failure: TaskModelBudgetFailure | undefined;
+  readonly providerHttpStatus: number | undefined;
 } {
   const { now = () => performance.now(), ...overrides } = options;
   const limits = { ...DEFAULT_TASK_MODEL_BUDGET, ...overrides };
@@ -102,6 +103,7 @@ export function createTaskModelBudgetFetch(
   let attemptedRequests = 0;
   let totalRequestBytes = 0;
   let stopped: TaskModelBudgetFailure | undefined;
+  let providerHttpStatus: number | undefined;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const active = new Set<AbortController>();
   const pendingReaders = new Set<() => void>();
@@ -229,6 +231,8 @@ export function createTaskModelBudgetFetch(
         if (stopped) return failureResponse(stopped);
         return underlyingFetch(input, { ...init, headers, body, signal: controller.signal });
       }).then((response) => {
+        if (!stopped && Number.isInteger(response.status) && response.status >= 100 && response.status <= 599)
+          providerHttpStatus = response.status;
         if (stopped) {
           void response.body?.cancel().catch(() => undefined);
           return failureResponse(stopped);
@@ -292,6 +296,7 @@ export function createTaskModelBudgetFetch(
 
   return {
     fetch: budgetedFetch,
+    get providerHttpStatus() { return providerHttpStatus; },
     get failure() { checkDeadline(); return stopped ? { ...stopped } : undefined; },
     snapshot() {
       checkDeadline();

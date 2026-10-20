@@ -70,14 +70,19 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     if (mode === "plan") {
       if (saved) return { mode, status: saved.status, planFingerprint: saved.fingerprint, reusedSavedPlan: true, wholeAppCompleted: false, legalEnabled: false };
       const claim = new TeamTaskStore(directory, { id: "calc-planning-" + owner.id, fingerprint: owner.ownerFingerprint });
+      let planningTeam: ReturnType<typeof createCalculatorModelTeam> | undefined;
       try {
         if (claim.claim() !== "claimed") return refuse();
         claim.recordStage("model_plan", "running");
-        const plan = await createCalculatorModelTeam(input, env).plan();
+        planningTeam = createCalculatorModelTeam(input, env);
+        const plan = await planningTeam.plan();
         claim.recordStage("model_plan", "passed"); store.initialize(plan.proposal);
         claim.finish("needs-review", "plan_saved_not_execution");
         return { mode, status: plan.status, planFingerprint: plan.fingerprint, wholeAppCompleted: false, legalEnabled: false };
-      } catch { try { claim.finish("blocked", "planning_interrupted_no_replay"); } catch { /* Preserve replay barrier. */ } return refuse(); }
+      } catch {
+        if (planningTeam) console.error(JSON.stringify({ event: "calculator_planning_failed", ...planningTeam.diagnostic() }));
+        try { claim.finish("blocked", "planning_interrupted_no_replay"); } catch { /* Preserve replay barrier. */ } return refuse();
+      }
       finally { claim.close(); }
     }
     if (!saved || saved.status !== "planned") return refuse();

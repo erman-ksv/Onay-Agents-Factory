@@ -36,23 +36,29 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
   let stopped = false, planned = false;
+  let failureCode: string | undefined, httpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   const generated = new Set<string>(), repaired = new Set<string>();
   const proposals = new WeakMap<PreparedCalculatorChanges, { taskId: string; planFingerprint: string; snapshot: CalculatorSnapshot; inspectionSha?: string }>();
   const assessed = new WeakMap<PreparedCalculatorChanges, Set<string>>();
 
   async function call(instructions: string, packet: unknown): Promise<unknown> {
+    let phase = "request_preparation_failed";
     try {
       if (stopped) return refuse();
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
       const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
         messages: [{ role: "system", content: instructions }, { role: "user", content: input }] });
+      phase = "model_admission_failed";
       if (admit) await admit(body);
       if (stopped || budget.failure) return refuse();
       const requestNumber = contextBudget ? contextBudget.snapshot().attemptedRequests + 1 : undefined;
+      phase = "model_transport_failed";
       const response = await request(endpoint, { method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
         headers: { Authorization: "Bearer " + apiKey, "content-type": "application/json" },
         body });
+      httpStatus = response.status;
+      phase = response.status === 429 ? "model_rate_limited" : !response.ok ? "model_http_rejected" : "model_response_invalid";
       if (!response.ok || !response.body) { void response.body?.cancel().catch(() => undefined); return refuse(); }
       const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
       try {
@@ -64,11 +70,14 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         }
       } finally { reader.releaseLock(); }
       const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      finishReason = data?.choices?.[0]?.finish_reason === "stop" ? "stop" : data?.choices?.[0]?.finish_reason === "length" ? "length" : "other";
+      phase = finishReason === "length" ? "model_output_truncated" : "model_response_invalid";
       if (!Array.isArray(data.choices) || data.choices.length !== 1 || data.choices[0]?.finish_reason !== "stop" ||
           data.choices[0]?.message?.role !== "assistant" || data.choices[0]?.message?.tool_calls ||
           data.choices[0]?.message?.function_call || typeof data.choices[0]?.message?.content !== "string") return refuse();
       const content: string = data.choices[0].message.content;
       if (Buffer.byteLength(content) > 16_000 || scanForSecrets(content).length) return refuse();
+      phase = "model_json_invalid";
       const parsed: unknown = JSON.parse(content);
       // Only transport-level provider usage is eligible, never model JSON.
       // Without complete bounded accounting the reservation remains charged.
@@ -82,7 +91,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
               usage.completion_tokens_details.reasoning_tokens <= usage.completion_tokens)))
         contextBudget.settleUsage(requestNumber, usage.prompt_tokens, usage.completion_tokens);
       return parsed;
-    } catch { stopped = true; return refuse(); }
+    } catch { failureCode ??= phase; stopped = true; return refuse(); }
   }
   function taskIn(plan: CalculatorPlan, taskId: string) {
     const actual = createCalculatorPlan(requestOwner, plan.proposal);
@@ -131,7 +140,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         return createCalculatorPlan(requestOwner, await call(buildCalculatorPlanningInstructions(requestOwner), {
           goal: owner.goal, repository: owner.repository, baseSha: owner.baseSha,
           requirementsSha256: owner.requirementsSha256, unverifiedAreas: ["Source has not been inspected; no task has executed."] }));
-      } catch { stopped = true; return refuse(); }
+      } catch { failureCode ??= "model_plan_invalid"; stopped = true; return refuse(); }
     },
     generate: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot) => propose(plan, taskId, snapshot),
     repair: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest) => propose(plan, taskId, snapshot, request),
@@ -181,6 +190,10 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         return validateCalculatorAssessment(role, result, [evidenceId]);
       } catch { stopped = true; return refuse(); }
     },
+    diagnostic: () => Object.freeze({ reasonCode: failureCode ?? "model_failure_unclassified", ...(httpStatus !== undefined ? { httpStatus } : {}),
+      ...(budget.providerHttpStatus !== undefined ? { providerHttpStatus: budget.providerHttpStatus } : {}),
+      ...(finishReason ? { finishReason } : {}), httpRequestsAttempted: budget.snapshot().attemptedRequests,
+      ...(budget.failure ? { taskBudgetCode: budget.failure.code } : {}), ...(contextBudget?.failure ? { contextBudgetCode: contextBudget.failure.code } : {}) }),
     snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size, repairedTasks: repaired.size,
       modelBudget: budget.snapshot(), ...(contextBudget ? { contextBudget: contextBudget.snapshot() } : {}),
       testsExecuted: false as const, publicationAuthorized: false as const, legalEnabled: false as const }),
