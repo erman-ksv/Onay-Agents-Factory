@@ -137,7 +137,7 @@ function validatePayload(value: unknown, identity: CalculatorExecutionCheckpoint
   if (!plain(value) || !exact(value, ["attempt", "stage", "status", "assessments", "modelState", "httpInFlight", "publicationStarted",
       ...(Object.hasOwn(value, "proposal") ? ["proposal"] : [])]) ||
       (value.attempt !== 1 && value.attempt !== 2) || typeof value.stage !== "string" || !STAGE.test(value.stage) ||
-      !["running", "passed", "blocked"].includes(value.status as string) || typeof value.httpInFlight !== "boolean" ||
+      (value.status !== "running" && value.status !== "passed" && value.status !== "blocked") || typeof value.httpInFlight !== "boolean" ||
       typeof value.publicationStarted !== "boolean" || !plain(value.modelState) ||
       !exact(value.modelState, ["attemptedRequests", "totalRequestBytes", "reservedRunTokens", "elapsedMs"]) ||
       !Object.values(value.modelState).every(number) || !Array.isArray(value.assessments) || value.assessments.length > 3 ||
@@ -145,9 +145,14 @@ function validatePayload(value: unknown, identity: CalculatorExecutionCheckpoint
   const proposal = Object.hasOwn(value, "proposal") ? validateProposal(value.proposal, identity) : undefined;
   if (!proposal && value.assessments.length) return refuse();
   const assessments = value.assessments.map((assessment, index) => validateAssessment(assessment, ROLES[index]!));
+  const state = value.modelState;
+  if (!number(state.attemptedRequests) || !number(state.totalRequestBytes) ||
+      !number(state.reservedRunTokens) || !number(state.elapsedMs)) return refuse();
   return clone({ attempt: value.attempt, stage: value.stage, status: value.status,
-    ...(proposal ? { proposal } : {}), assessments, modelState: value.modelState,
-    httpInFlight: value.httpInFlight, publicationStarted: value.publicationStarted }) as CalculatorExecutionCheckpointPayload;
+    ...(proposal ? { proposal } : {}), assessments, modelState: {
+      attemptedRequests: state.attemptedRequests, totalRequestBytes: state.totalRequestBytes,
+      reservedRunTokens: state.reservedRunTokens, elapsedMs: state.elapsedMs,
+    }, httpInFlight: value.httpInFlight, publicationStarted: value.publicationStarted });
 }
 function validateTransition(previous: CalculatorExecutionCheckpointPayload, payload: CalculatorExecutionCheckpointPayload,
   repairUsed: boolean): boolean {
