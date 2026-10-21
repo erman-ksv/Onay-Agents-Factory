@@ -4,7 +4,8 @@ import { createCloudflareCompatibleFetch } from "../commander/cloudflareCompatib
 import { createGroqBudgetedFetch, createProviderContextBudget } from "../commander/providerContextBudget.js";
 import { calculatorSources, type CalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import { scanForSecrets } from "../github/secretScanner.js";
-import { buildCalculatorRoleInstructions, prepareCalculatorRoleChanges, validateCalculatorAssessment } from "../commander/calculatorTeam.js";
+import { buildCalculatorRoleInstructions, prepareCalculatorRoleChanges, validateCalculatorAssessment,
+  CalculatorAssessmentValidationError, type CalculatorAssessmentValidationCode } from "../commander/calculatorTeam.js";
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
@@ -16,10 +17,28 @@ function refuse(): never { throw new Error(CALCULATOR_MODEL_ERROR); }
 /** Host-supplied conservative prior charge for a separately authorized recovery.
  * Never accepted from model output or environment variables. Unknown usage stays charged. */
 export type CalculatorPriorModelCharge = Readonly<{ attemptedRequests: number; totalRequestBytes: number; reservedRunTokens: number; elapsedMs: number }>;
+export const CALCULATOR_REJECTED_ASSESSMENT_MAX_BYTES = 96000;
+export type CalculatorRejectedAssessment = Readonly<{
+  role: "security" | "reviewer" | "tester"; result: unknown; validationCode: CalculatorAssessmentValidationCode;
+}>;
 export type CalculatorModelCheckpointHooks = Readonly<{
   /** Host persistence only. Both ledgers have reserved this request; no HTTP has been sent. */
   beforeRequest?: (state: CalculatorPriorModelCharge) => void | Promise<void>;
+  /** Private untrusted JSON DATA only. No return value can approve or retry it. */
+  afterAssessmentRejected?: (rejection: CalculatorRejectedAssessment) => void | Promise<void>;
 }>;
+function privateRejectedAssessment(result: unknown, providerKey: string): unknown {
+  const copy: unknown = structuredClone(result), pending: unknown[] = [copy];
+  while (pending.length) {
+    const value = pending.pop();
+    if (value && typeof value === "object") { pending.push(...Object.values(value)); Object.freeze(value); }
+    else if (typeof value === "number" && !Number.isFinite(value)) return refuse();
+  }
+  const encoded = JSON.stringify(copy);
+  if (encoded === undefined || Buffer.byteLength(encoded) > CALCULATOR_REJECTED_ASSESSMENT_MAX_BYTES || scanForSecrets(encoded).length ||
+      /(?:gsk_|gh[pousr]_)[A-Za-z0-9_-]{20,}/.test(encoded) || encoded.includes(providerKey)) return refuse();
+  return copy;
+}
 /** Real HTTP adapter. No SDK tools, arbitrary URLs, provider fallback, Git writes,
  * installs, automatic retries, or legal role. One instance owns one run's ledger. */
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
@@ -38,8 +57,9 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   // Capture identity/configuration once. No later process.env lookup can switch it.
   const endpoint = config.baseURL.replace(/\/$/, "") + "/chat/completions", model = config.model, apiKey = config.apiKey;
   const now = timing.now ?? (() => performance.now());
-  if (checkpointHooks && (Object.keys(checkpointHooks).some(key => key !== "beforeRequest") ||
-      (checkpointHooks.beforeRequest !== undefined && typeof checkpointHooks.beforeRequest !== "function"))) return refuse();
+  if (checkpointHooks && (Object.keys(checkpointHooks).some(key => !["beforeRequest", "afterAssessmentRejected"].includes(key)) ||
+      (checkpointHooks.beforeRequest !== undefined && typeof checkpointHooks.beforeRequest !== "function") ||
+      (checkpointHooks.afterAssessmentRejected !== undefined && typeof checkpointHooks.afterAssessmentRejected !== "function"))) return refuse();
   const prior = priorCharge ? Object.freeze({ ...priorCharge }) : undefined;
   if (prior && (config.provider !== "groq" || Object.keys(prior).sort().join(",") !== "attemptedRequests,elapsedMs,reservedRunTokens,totalRequestBytes" ||
       Object.values(prior).some(value => !Number.isSafeInteger(value) || value < 1) ||
@@ -49,6 +69,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   let stopped = false, planned = false, httpRequestsSent = 0;
   let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   let admissionDiagnostic: CalculatorModelAdmissionDiagnostic | undefined;
+  let assessmentDiagnostic: Readonly<{ assessmentRole: "security" | "reviewer" | "tester"; validationCode: CalculatorAssessmentValidationCode }> | undefined;
   const guardedTransport: typeof fetch = async (input, init) => {
     if (checkpointHooks?.beforeRequest) {
       try {
@@ -247,20 +268,36 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         const evidence = JSON.parse(changes.reviewEvidence);
         const result = await call(buildCalculatorRoleInstructions(role), { repository: owner.repository, baseSha: changes.baseSha,
           task: { id: task.id, role: task.role, goal: task.goal, paths: task.paths, acceptanceIds: task.acceptanceIds },
-          acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId,
+          acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId, allowedEvidenceRefs: [evidenceId],
           ...(identity.inspectionSha ? { inspectedCommitSha: identity.inspectionSha } : {}),
           // Preserve every changed byte and hash. Repository/base identity and
           // unknown areas already occur once in this packet, not in each layer.
           completeChangedText: { changes: evidence.changes },
           unverifiedAreas: [...new Set(["Unshown unchanged source", "No runtime tests or browser checks have executed", "No publication or completion",
             ...evidence.unverified])] });
-        return validateCalculatorAssessment(role, result, [evidenceId]);
+        try { return validateCalculatorAssessment(role, result, [evidenceId]); }
+        catch (error) {
+          if (!(error instanceof CalculatorAssessmentValidationError)) throw error;
+          // Latch before private I/O: an awaited/reentrant hook cannot call a
+          // fresh role, replace the rejected result or reopen this model team.
+          stopped = true; failureCode = "assessment_validation_failed";
+          assessmentDiagnostic = Object.freeze({ assessmentRole: role, validationCode: error.code });
+          if (checkpointHooks?.afterAssessmentRejected) {
+            try {
+              const rejection = Object.freeze({ role, validationCode: error.code, result: privateRejectedAssessment(result, apiKey) });
+              if (Buffer.byteLength(JSON.stringify(rejection)) > 100000) return refuse();
+              await checkpointHooks.afterAssessmentRejected(rejection);
+            } catch { failureCode = "assessment_rejection_persistence_failed"; }
+          }
+          return refuse();
+        }
       } catch { stopped = true; return refuse(); }
     },
     checkpointCharge,
     diagnostic: () => Object.freeze({ reasonCode: failureCode ?? "model_failure_unclassified", ...(httpStatus !== undefined ? { httpStatus } : {}),
       ...(providerHttpStatus !== undefined ? { providerHttpStatus } : {}),
       ...(finishReason ? { finishReason } : {}), ...(admissionDiagnostic ? { admission: admissionDiagnostic } : {}),
+      ...(assessmentDiagnostic ?? {}),
       httpRequestsAttempted: budget.snapshot().attemptedRequests, httpRequestsSent,
       ...(budget.failure ? { taskBudgetCode: budget.failure.code } : {}), ...(contextBudget?.failure ? { contextBudgetCode: contextBudget.failure.code } : {}) }),
     snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size, repairedTasks: repaired.size,

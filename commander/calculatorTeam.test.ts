@@ -4,7 +4,8 @@ import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import { ROLE_SKILLS } from "./skills.js";
 import { assertCalculatorHandoff, buildCalculatorRoleInstructions, calculatorRole, CALCULATOR_TEAM, CALCULATOR_TEAM_ERROR,
-  prepareCalculatorRoleChanges, validateCalculatorAssessment } from "./calculatorTeam.js";
+  prepareCalculatorRoleChanges, validateCalculatorAssessment, CalculatorAssessmentValidationError,
+  CALCULATOR_ASSESSMENT_LIMITS, buildCalculatorAssessmentResponseInstructions } from "./calculatorTeam.js";
 
 const roles = Object.keys(CALCULATOR_TEAM);
 const error = (value: unknown) => { assert.ok(value instanceof Error); assert.equal(value.message, CALCULATOR_TEAM_ERROR); return true; };
@@ -126,4 +127,60 @@ test("oversized, malformed, secret-bearing or cyclic reviews refuse without drop
   ];
   const circular = pass(); (circular.findings as unknown[]).push(circular); bad.push(circular);
   for (const input of bad) assert.throws(() => validateCalculatorAssessment("reviewer", input, ["criterion:addition"]), error);
+});
+
+test("assessment instructions expose every unchanged bound and exact supplied-ID contract", () => {
+  const instructions = buildCalculatorAssessmentResponseInstructions();
+  assert.ok(Object.isFrozen(CALCULATOR_ASSESSMENT_LIMITS));
+  for (const bound of Object.values(CALCULATOR_ASSESSMENT_LIMITS)) assert.ok(instructions.includes(String(bound)));
+  assert.match(instructions, /ONLY from packet\.allowedEvidenceRefs/);
+  assert.match(instructions, /no control characters or newlines/);
+  assert.match(instructions, /no extra fields/);
+  for (const role of ["security", "reviewer", "tester"]) assert.ok(buildCalculatorRoleInstructions(role).includes(instructions));
+});
+
+test("assessment failures expose only owned stable field codes without retaining rejected text", async t => {
+  const sentinel = "PRIVATE_REJECTED_ASSESSMENT";
+  const cases: Array<[string, unknown]> = [
+    ["schema_invalid", { ...pass(), secretExtra: sentinel }], ["ready_invalid", { ...pass(), ready: "true" }],
+    ["summary_invalid", { ...pass(), summary: sentinel + "\nnew line" }],
+    ["summary_character_limit", { ...pass(), summary: "x".repeat(601) }],
+    ["findings_invalid", { ...pass(), findings: {} }], ["findings_limit", { ...pass(), findings: Array.from({ length: 13 }, () => issue()) }],
+    ["unverified_areas_invalid", { ...pass(), unverifiedAreas: {} }],
+    ["unverified_areas_limit", { ...pass(), unverifiedAreas: Array.from({ length: 9 }, () => sentinel) }],
+    ["unverified_area_invalid", { ...pass(), unverifiedAreas: [sentinel + "\nnew line"] }],
+    ["unverified_area_character_limit", { ...pass(), unverifiedAreas: ["x".repeat(241)] }],
+    ["finding_schema_invalid", { ...pass(), findings: [{ ...issue(), extra: sentinel }] }],
+    ["finding_severity_invalid", { ...pass(), findings: [issue("critical")] }],
+    ["finding_message_invalid", { ...pass(), findings: [{ ...issue(), message: sentinel + "\nnew line" }] }],
+    ["finding_message_character_limit", { ...pass(), findings: [{ ...issue(), message: "x".repeat(401) }] }],
+    ["finding_refs_invalid", { ...pass(), findings: [issue("low", ["criterion:addition", "criterion:addition"])] }],
+    ["finding_refs_limit", { ...pass(), findings: [issue("low", Array.from({ length: 17 }, (_, i) => "source:" + i))] }],
+    ["finding_ref_character_limit", { ...pass(), findings: [issue("low", ["x".repeat(201)])] }],
+    ["finding_ref_not_supplied", { ...pass(), findings: [issue("low", ["src/calculator.mjs"])] }],
+  ];
+  const cyclic = pass(); (cyclic.findings as unknown[]).push(cyclic); cases.push(["json_invalid", cyclic]);
+  const unreadable = { ...pass() }; Object.defineProperty(unreadable, "summary", { enumerable: true, get: () => { throw Error(sentinel); } });
+  cases.push(["assessment_unreadable", unreadable]);
+  for (const [code, input] of cases) await t.test(code, () => {
+    assert.throws(() => validateCalculatorAssessment("reviewer", input, ["criterion:addition"]), failure => {
+      assert.ok(failure instanceof CalculatorAssessmentValidationError);
+      assert.equal(failure.message, CALCULATOR_TEAM_ERROR); assert.equal(failure.code, code);
+      assert.ok(Object.isFrozen(failure)); assert.ok(!JSON.stringify(failure).includes(sentinel));
+      return true;
+    });
+  });
+  assert.throws(() => validateCalculatorAssessment("coder", pass(), []), { code: "role_invalid" });
+  assert.throws(() => validateCalculatorAssessment("reviewer", pass(), ["not allowed reference"]), { code: "supplied_refs_invalid" });
+});
+
+test("JSON byte ceiling and exact text/ref boundaries remain enforced independently", () => {
+  const supplied = Array.from({ length: 16 }, (_, i) => "source:" + "x".repeat(175) + i);
+  const large = { ...pass(), findings: Array.from({ length: 4 }, () => ({ ...issue("low", supplied), message: "x".repeat(400) })) };
+  assert.ok(Buffer.byteLength(JSON.stringify(large)) > CALCULATOR_ASSESSMENT_LIMITS.jsonBytes);
+  assert.throws(() => validateCalculatorAssessment("reviewer", large, supplied), { code: "json_byte_limit" });
+  const reference = "x".repeat(200);
+  const boundary = { ready: true, summary: "x".repeat(600), findings: Array.from({ length: 12 }, () => ({ severity: "low",
+    message: "x".repeat(400), evidenceRefs: [reference] })), unverifiedAreas: Array.from({ length: 8 }, () => "x".repeat(240)) };
+  assert.equal(validateCalculatorAssessment("security", boundary, [reference]).ready, true);
 });
