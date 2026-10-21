@@ -326,11 +326,13 @@ async function runRegeneration(args: string[], env: NodeJS.ProcessEnv, dependenc
     const result = await (dependencies.runtime ?? runCalculatorRuntime)(request.request.goal, request.request.config, join(root, "state"), "run", env,
       { maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0 });
     const report = sanitizeCalculatorLaunchReport(result, { ...request.request, mode: "run" });
+    const status = report.status;
+    if (status !== "blocked" && status !== "needs-review" && status !== "candidate-verified") return refuse();
     if (report.taskId !== TASK || report.attempts !== 1 || report.repairs !== 0 || !same(existingContext(root, runtimeSha, env).barrier, barrier)) return refuse();
     marker.recordStage("one_regeneration", report.status === "blocked" ? "blocked" : "passed");
     marker.finish(report.status === "blocked" ? "blocked" : "needs-review", "one_regeneration_attempted_no_replay");
     put(join(root, "calculator-report.json"), report);
-    return Object.freeze({ ...report, priorReceiptPreserved: true, priorChargeErased: false });
+    return Object.freeze({ ...report, status, priorReceiptPreserved: true, priorChargeErased: false });
   } catch {
     try { marker.finish("blocked", "regeneration_stopped_no_replay"); } catch { /* Preserve any terminal barrier. */ }
     try { put(join(root, "calculator-report.json"), { status: "blocked", reasonCode: "regeneration_stopped_no_replay", taskId: TASK,
