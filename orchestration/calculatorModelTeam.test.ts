@@ -669,3 +669,104 @@ test("restored assessment roles cannot skip or repeat the pending strict prefix"
     assert.equal(calls, afterSecurity ? 1 : 0); assert.equal(team.snapshot().stopped, true);
   });
 });
+
+function savedAssessmentPrefix() {
+  return JSON.parse(JSON.stringify((["security", "reviewer"] as const).map(role => validateCalculatorAssessment(role, {
+    ready: true, summary: "The exact saved proposal is scoped.", findings: [], unverifiedAreas: ["Host tests remain unverified."],
+  }, ["changes@" + A]))));
+}
+
+test("a restored ready Security/Reviewer prefix is canonical private evidence and only Tester sends HTTP", async () => {
+  const f = await restoreFixture(), savedPrefix = savedAssessmentPrefix(), roles: string[] = [];
+  const team = createCalculatorModelTeam(owner, environment, async (_url, init) => {
+    const body = JSON.parse(String(init?.body)); roles.push(body.messages[0].content.match(/You are the (\w+) /)![1]);
+    return response({ ready: true, summary: "The scoped test design is covered.", findings: [], unverifiedAreas: ["Host tests are still required."] });
+  });
+  const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest, savedPrefix);
+  const prefix = team.restoredAssessmentPrefix(plan, task.id, restored);
+  assert.deepEqual(prefix, savedPrefix); assert.notEqual(prefix, savedPrefix); assert.notEqual(prefix[0], savedPrefix[0]);
+  assert.equal(team.restoredAssessmentPrefix(plan, task.id, restored), prefix);
+  assert.ok(Object.isFrozen(prefix));
+  for (const assessment of prefix) {
+    assert.ok(Object.isFrozen(assessment)); assert.ok(Object.isFrozen(assessment.findings)); assert.ok(Object.isFrozen(assessment.unverifiedAreas));
+    assert.equal(assessment.testsExecuted, false); assert.equal(assessment.publicationAuthorized, false);
+  }
+  savedPrefix[0].summary = "Untrusted later mutation.";
+  assert.notEqual(prefix[0].summary, savedPrefix[0].summary);
+  assert.equal(team.diagnostic().httpRequestsSent, 0); assert.equal(team.snapshot().generatedTasks, 0);
+  assert.equal(team.snapshot().restoredTasks, 1); assert.equal((await team.assess("tester", plan, task.id, restored)).ready, true);
+  assert.deepEqual(roles, ["tester"]); assert.equal(team.diagnostic().httpRequestsSent, 1);
+});
+
+test("restored enriched prefix rejects authority, evidence, disclosure and order tampering without partial registration", async t => {
+  const cases: Array<[string, (prefix: any[]) => unknown[]]> = [
+    ["one role", prefix => prefix.slice(0, 1)], ["three roles", prefix => [...prefix, prefix[1]]],
+    ["reverse order", prefix => prefix.reverse()], ["duplicate security", prefix => [prefix[0], prefix[0]]],
+    ["ready false", prefix => { prefix[0].ready = false; return prefix; }],
+    ["execution authority", prefix => { prefix[0].testsExecuted = true; return prefix; }],
+    ["publication authority", prefix => { prefix[1].publicationAuthorized = true; return prefix; }],
+    ["completion authority", prefix => { prefix[1].overallTaskCompletionVerified = true; return prefix; }],
+    ["extra field", prefix => { prefix[0].approved = true; return prefix; }],
+    ["missing field", prefix => { delete prefix[0].testsExecuted; return prefix; }],
+    ["unknown evidence", prefix => { prefix[0].findings = [{ severity: "low", message: "A scoped concern.", evidenceRefs: ["changes@" + B], evidenceStatus: "supplied" }]; return prefix; }],
+    ["wrong evidence status", prefix => { prefix[0].findings = [{ severity: "low", message: "A scoped concern.", evidenceRefs: ["changes@" + A], evidenceStatus: "missing" }]; return prefix; }],
+    ["blocker hidden by ready", prefix => { prefix[0].findings = [{ severity: "blocker", message: "An unresolved blocker.", evidenceRefs: ["changes@" + A], evidenceStatus: "supplied" }]; return prefix; }],
+    ["valid high decline", prefix => { prefix[0] = validateCalculatorAssessment("security", { ready: true, summary: "A serious concern remains.", findings: [{ severity: "high", message: "Required behavior is absent.", evidenceRefs: ["changes@" + A] }], unverifiedAreas: [] }, ["changes@" + A]); return prefix; }],
+    ["missing disclosure", prefix => { prefix[1].unverifiedAreas.pop(); return prefix; }],
+    ["changed disclosure", prefix => { prefix[1].unverifiedAreas[prefix[1].unverifiedAreas.length - 1] += " changed"; return prefix; }],
+    ["excess original areas", prefix => { prefix[0].unverifiedAreas = [...Array.from({ length: 9 }, () => "Unknown scope."), prefix[0].unverifiedAreas.at(-1)]; return prefix; }],
+    ["newline in original area", prefix => { prefix[0].unverifiedAreas[0] = "Unknown\nscope."; return prefix; }],
+    ["extra finding field", prefix => { prefix[0].findings = [{ severity: "low", message: "A scoped concern.", evidenceRefs: ["changes@" + A], evidenceStatus: "supplied", approved: true }]; return prefix; }],
+  ];
+  for (const [name, mutate] of cases) await t.test(name, async () => {
+    const f = await restoreFixture(); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({}); });
+    assert.throws(() => team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest, mutate(savedAssessmentPrefix())), refusal);
+    assert.equal(calls, 0); assert.equal(team.snapshot().restoredTasks, 0); assert.equal(team.snapshot().stopped, true);
+    assert.throws(() => team.restoredAssessmentPrefix(plan, task.id, f.prepared), refusal);
+  });
+});
+
+test("only the exact host-owned disclosure suffix is removed and original duplicate disclosures survive", async () => {
+  const f = await restoreFixture();
+  const raw = { ready: true, summary: "A low finding remains explicitly unverified.", findings: [{ severity: "low", message: "More evidence would help.", evidenceRefs: [] as string[] }], unverifiedAreas: [] as string[] };
+  const ownedTail = validateCalculatorAssessment("security", raw, ["changes@" + A]).unverifiedAreas;
+  assert.equal(ownedTail.length, 2);
+  const security = validateCalculatorAssessment("security", { ...raw, unverifiedAreas: [...ownedTail] }, ["changes@" + A]);
+  const saved = savedAssessmentPrefix(); saved[0] = JSON.parse(JSON.stringify(security));
+  const team = createCalculatorModelTeam(owner, environment, async () => response({ ready: true, summary: "Scoped checks covered.", findings: [], unverifiedAreas: [] }));
+  const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest, saved);
+  const prefix = team.restoredAssessmentPrefix(plan, task.id, restored);
+  assert.deepEqual(prefix[0].unverifiedAreas, [...ownedTail, ...ownedTail]);
+  assert.equal(prefix[0].findings[0].evidenceStatus, "missing"); assert.equal(prefix[0].ready, true);
+  assert.equal(team.diagnostic().httpRequestsSent, 0);
+});
+
+test("a cached assessment prefix belongs only to its exact restored proposal and plan/task identity", async t => {
+  for (const name of ["clone", "unregistered", "wrong task", "wrong plan"] as const) await t.test(name, async () => {
+    const f = await restoreFixture(); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({}); });
+    const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest, savedAssessmentPrefix());
+    assert.throws(() => team.restoredAssessmentPrefix(name === "wrong plan" ? { ...plan, fingerprint: "0".repeat(64) } : plan,
+      name === "wrong task" ? plan.tasks[1].id : task.id,
+      name === "clone" ? JSON.parse(JSON.stringify(restored)) : name === "unregistered" ? f.prepared : restored), refusal);
+    assert.equal(calls, 0); assert.equal(team.snapshot().stopped, true);
+  });
+});
+
+test("restored completed roles and Tester cannot be replayed, while empty-prefix legacy restore remains available", async t => {
+  for (const role of ["security", "reviewer", "tester"] as const) await t.test(role, async () => {
+    const f = await restoreFixture(); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({ ready: true, summary: "Scoped checks covered.", findings: [], unverifiedAreas: [] }); });
+    const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest, savedAssessmentPrefix());
+    if (role === "tester") await team.assess("tester", plan, task.id, restored);
+    await assert.rejects(() => team.assess(role, plan, task.id, restored), refusal);
+    assert.equal(calls, role === "tester" ? 1 : 0);
+  });
+  const f = await restoreFixture(); let calls = 0;
+  const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({ ready: true, summary: "Scoped checks covered.", findings: [], unverifiedAreas: [] }); });
+  const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest, []);
+  assert.deepEqual(team.restoredAssessmentPrefix(plan, task.id, restored), []);
+  assert.ok(Object.isFrozen(team.restoredAssessmentPrefix(plan, task.id, restored)));
+  await team.assess("security", plan, task.id, restored); assert.equal(calls, 1);
+});

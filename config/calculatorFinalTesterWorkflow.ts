@@ -1,0 +1,112 @@
+/** Trusted host-only renderer; request/model output never selects runtime code. */
+export function renderCalculatorFinalTesterWorkflow(runtimeSha: string, image: string): string {
+  if (!/^[a-f0-9]{40}$/.test(runtimeSha) || !/^node@sha256:[a-f0-9]{64}$/.test(image))
+    throw new Error("Calculator final-tester pins are invalid.");
+  return `name: Calculator final Tester and candidate gates
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.factory/calculator-step7-final-tester-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: calculator-one-cycle
+  cancel-in-progress: false
+jobs:
+  final-tester:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout only reviewed final-tester request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: \${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-step7-final-tester-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Checkout immutable reviewed final-tester runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${runtimeSha}
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install locked trusted runtime
+        working-directory: runtime
+        run: pnpm install --frozen-lockfile
+      - name: Download the fixed preserved proposal without executing it
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12334546968'
+          run-id: 39576151385
+          github-token: \${{ github.token }}
+          path: \${{ runner.temp }}/calculator-step7-final-tester/prior-evidence
+          merge-multiple: true
+      - name: Verify preserved proposal, historical charges and one-use final-tester
+        working-directory: runtime
+        env:
+          GITHUB_TOKEN: \${{ github.token }}
+        run: pnpm exec tsx orchestration/calculatorStep7FinalTester.ts prepare "$RUNNER_TEMP/calculator-step7-final-tester" '${runtimeSha}'
+      - name: Persist immutable final-tester barrier before any model call
+        id: barrier
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-step7-final-tester-barrier-\${{ github.run_id }}
+          path: \${{ runner.temp }}/calculator-step7-final-tester/barrier/final-tester.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+      - name: Prepare exact original sandbox image
+        run: docker --host=unix:///var/run/docker.sock pull '${image}'
+      - name: Finish Tester on the saved proposal and run candidate gates
+        id: execute
+        working-directory: runtime
+        env:
+          CALCULATOR_FINAL_TESTER_BARRIER_UPLOADED: 'true'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: groq
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          CALCULATOR_EXECUTION_LIVE_APPROVED: RUN_ONE_FREE_CALCULATOR_TASK
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
+          FACTORY_HISTORY_TOKEN: \${{ github.token }}
+          GITHUB_TOKEN: \${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GROQ_API_KEY: \${{ secrets.GROQ_API_KEY }}
+        run: pnpm exec tsx orchestration/calculatorStep7FinalTester.ts execute "$RUNNER_TEMP/calculator-step7-final-tester" '${runtimeSha}'
+      - name: Collect bounded private evidence even after blocked execution
+        if: \${{ always() && steps.barrier.outcome == 'success' }}
+        id: collect
+        working-directory: runtime
+        env:
+          CALCULATOR_FINAL_TESTER_BARRIER_UPLOADED: 'true'
+        run: pnpm exec tsx orchestration/calculatorStep7FinalTester.ts collect "$RUNNER_TEMP/calculator-step7-final-tester" '${runtimeSha}'
+      - name: Preserve immutable private final-tester evidence
+        if: \${{ always() && steps.collect.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-step7-final-tester-evidence-\${{ github.run_id }}
+          path: \${{ runner.temp }}/calculator-step7-final-tester/final-tester-artifact/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+      - name: Preserve source-free execution report
+        if: \${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-step7-final-tester-report-\${{ github.run_id }}
+          path: \${{ runner.temp }}/calculator-step7-final-tester/calculator-report.json
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: false
+`;
+}

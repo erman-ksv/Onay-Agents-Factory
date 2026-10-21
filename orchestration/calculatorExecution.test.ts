@@ -365,3 +365,43 @@ test("a restoration entry cannot enable repairs, claim invalid configuration or 
     } finally { f.cleanup(); }
   });
 });
+
+test("saved validated Security and Reviewer stages restore without HTTP and only Tester executes", async () => {
+  const f = await fixture();
+  try {
+    const task = f.plan.tasks[0], snapshot = await loadCalculatorWorkspaceTask(f.workspace, task.id);
+    const saved = await f.team.generate(f.plan, task.id, snapshot), prior = [];
+    for (const role of ["security", "reviewer"] as const) prior.push(await f.team.assess(role, f.plan, task.id, saved));
+    const roles: string[] = [], stages: string[] = [];
+    const team = createCalculatorModelTeam(owner, env, async (_url, init) => {
+      const instructions = JSON.parse(String(init?.body)).messages[0].content as string;
+      assert.ok(instructions.includes("You are the tester ")); roles.push("tester");
+      return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({
+        ready: true, summary: "Scoped test design reviewed; actual host tests are still required.", findings: [], unverifiedAreas: [] }) } }] });
+    });
+    const result = await runCalculatorExecution(f.workspace, { ...f, team, maxRepairs: 0,
+      restoreProposal: (plan, id, fresh) => team.restoreProposal(plan, id, fresh, saved, calculatorProposalDigest(saved), prior),
+      restoreAssessments: (plan, id, changes) => team.restoredAssessmentPrefix(plan, id, changes),
+      checkpoint: event => { if (event.status === "passed") stages.push(event.stage); } });
+    assert.equal(result.status, "candidate-verified"); assert.equal(result.proposalTestsExecuted, true);
+    assert.equal(result.candidateTestsExecuted, true); assert.equal(result.repairs, 0);
+    assert.deepEqual(roles, ["tester"]); assert.deepEqual(f.requests.map(value => value.role), ["coder", "security", "reviewer"]);
+    assert.ok(stages.includes("restore_security_1")); assert.ok(stages.includes("restore_reviewer_1"));
+    assert.ok(stages.includes("tester_1")); assert.ok(!stages.includes("security_1")); assert.ok(!stages.includes("reviewer_1"));
+    assert.deepEqual(f.counts(), { generations: 1, checks: 1, publishes: 1, ciReads: 1 });
+  } finally { f.cleanup(); }
+});
+
+test("restored assessments require an explicit proposal restore and cannot enable repairs", async t => {
+  for (const mode of ["missing-proposal", "repair-enabled", "non-function"]) await t.test(mode, async () => {
+    const f = await fixture();
+    try {
+      const callback = () => [];
+      const result = await runCalculatorExecution(f.workspace, { ...f, maxRepairs: mode === "repair-enabled" ? 1 : 0,
+        ...(mode !== "missing-proposal" ? { restoreProposal: async () => { throw Error("must not restore"); } } : {}),
+        restoreAssessments: mode === "non-function" ? 3 as unknown as typeof callback : callback });
+      assert.equal(result.status, "blocked"); assert.equal(f.receipt(), undefined);
+      assert.equal(f.requests.length, 0); assert.deepEqual(f.counts(), { generations: 0, checks: 0, publishes: 0, ciReads: 0 });
+    } finally { f.cleanup(); }
+  });
+});

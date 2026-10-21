@@ -50,6 +50,8 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   maxRepairs?: 0 | 1;
   /** Verified, explicit host continuation only; rebuilding calls no developer. */
   restoreProposal?: (plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot) => PreparedCalculatorChanges | Promise<PreparedCalculatorChanges>;
+  /** Only canonical assessments revalidated by the host team are eligible. */
+  restoreAssessments?: (plan: CalculatorPlan, id: string, changes: PreparedCalculatorChanges) => readonly CalculatorAssessment[] | Promise<readonly CalculatorAssessment[]>;
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
@@ -83,6 +85,8 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     // Configuration failures do not consume a task identity or invoke a model.
     if (options.maxRepairs !== undefined && options.maxRepairs !== 0 && options.maxRepairs !== 1) return refuseCalculatorExecution();
     if (options.restoreProposal !== undefined && (typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
+    if (options.restoreAssessments !== undefined && (typeof options.restoreAssessments !== "function" ||
+        typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
     const maxRepairs = options.maxRepairs ?? 1;
     const env = options.env ?? process.env;
     if ((options.execution ?? "live") === "live" && (env.CALCULATOR_EXECUTION_LIVE_APPROVED !== "RUN_ONE_FREE_CALCULATOR_TASK" ||
@@ -119,12 +123,16 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
       await assertCalculatorWorkspaceCurrent(workspace);
       checkpointProposal = validateChanges(result); return checkpointProposal;
     });
+    const restored = options.restoreAssessments ? await options.restoreAssessments(plan, task.id, changes) : [];
+    if (options.restoreAssessments && (!Array.isArray(restored) || restored.length !== 2 ||
+        restored.some((value, index) => value.role !== (["security", "reviewer"] as const)[index]))) return refuseCalculatorExecution();
     for (let attempt = 1; attempt <= 2; attempt++) {
       const issues: string[] = [];
       for (const role of ["security", "reviewer", "tester"] as const) {
-        const assessment = await stage(role + "_" + attempt, async () => {
+        const prior = restored.find(value => value.role === role);
+        const assessment = await stage((prior ? "restore_" : "") + role + "_" + attempt, async () => {
           await assertCalculatorWorkspaceCurrent(workspace);
-          const value = await options.team.assess(role, plan, task!.id, changes);
+          const value = prior ?? await options.team.assess(role, plan, task!.id, changes);
           await assertCalculatorWorkspaceCurrent(workspace);
           if (value.role !== role || typeof value.ready !== "boolean" || value.testsExecuted !== false ||
               value.publicationAuthorized !== false || value.overallTaskCompletionVerified !== false) return refuseCalculatorExecution();
