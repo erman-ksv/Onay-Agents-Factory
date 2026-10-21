@@ -220,7 +220,8 @@ test("all three host-only phases preserve the ready prefix and spend only the se
 test("ready specialist prefix and exact saved capsule identity are required before a new barrier", async t => {
   for (const form of ["missing", "one-role", "reordered", "not-ready", "finding", "claim-tests", "capsule-hash", "capsule-path"]) await t.test(form, async t => {
     const f = fixture(t); const restoredAssessments: unknown[] = clone(f.prior.restoredAssessments);
-    const prior = { ...clone(f.prior), restoredAssessments };
+    const prior = { ...clone(f.prior), restoredAssessments,
+      capsuleSha256: String(f.prior.capsuleSha256), capsulePath: String(f.prior.capsulePath) };
     if (form === "missing") prior.restoredAssessments = [];
     if (form === "one-role") prior.restoredAssessments.pop();
     if (form === "reordered") prior.restoredAssessments.reverse();

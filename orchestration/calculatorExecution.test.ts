@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
+import type { CalculatorAssessment } from "../commander/calculatorTeam.js";
 import { CALCULATOR_ACCEPTANCE, calculatorPlanTaskId } from "./calculatorPlan.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import { openCalculatorWorkspace, loadCalculatorWorkspaceTask } from "./calculatorWorkspace.js";
@@ -370,7 +371,7 @@ test("saved validated Security and Reviewer stages restore without HTTP and only
   const f = await fixture();
   try {
     const task = f.plan.tasks[0], snapshot = await loadCalculatorWorkspaceTask(f.workspace, task.id);
-    const saved = await f.team.generate(f.plan, task.id, snapshot), prior = [];
+    const saved = await f.team.generate(f.plan, task.id, snapshot), prior: CalculatorAssessment[] = [];
     for (const role of ["security", "reviewer"] as const) prior.push(await f.team.assess(role, f.plan, task.id, saved));
     const roles: string[] = [], stages: string[] = [];
     const team = createCalculatorModelTeam(owner, env, async (_url, init) => {

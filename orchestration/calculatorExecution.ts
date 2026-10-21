@@ -123,13 +123,13 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
       await assertCalculatorWorkspaceCurrent(workspace);
       checkpointProposal = validateChanges(result); return checkpointProposal;
     });
-    const restored = options.restoreAssessments ? await options.restoreAssessments(plan, task.id, changes) : [];
+    const restored: readonly CalculatorAssessment[] = options.restoreAssessments ? await options.restoreAssessments(plan, task.id, changes) : [];
     if (options.restoreAssessments && (!Array.isArray(restored) || restored.length !== 2 ||
         restored.some((value, index) => value.role !== (["security", "reviewer"] as const)[index]))) return refuseCalculatorExecution();
     for (let attempt = 1; attempt <= 2; attempt++) {
       const issues: string[] = [];
       for (const role of ["security", "reviewer", "tester"] as const) {
-        const prior = restored.find(value => value.role === role);
+        const prior: CalculatorAssessment | undefined = restored.find(value => value.role === role);
         const assessment = await stage((prior ? "restore_" : "") + role + "_" + attempt, async () => {
           await assertCalculatorWorkspaceCurrent(workspace);
           const value = prior ?? await options.team.assess(role, plan, task!.id, changes);
