@@ -137,7 +137,7 @@ export class CalculatorAssessmentValidationError extends Error {
   readonly code: CalculatorAssessmentValidationCode;
   constructor(code: CalculatorAssessmentValidationCode) {
     super(CALCULATOR_TEAM_ERROR);
-    if (!isCalculatorAssessmentValidationCode(code)) return refuse();
+    if (!isCalculatorAssessmentValidationCode(code)) throw new Error(CALCULATOR_TEAM_ERROR);
     this.name = "CalculatorAssessmentValidationError"; this.code = code; Object.freeze(this);
   }
 }
