@@ -12,8 +12,14 @@ import type { CalculatorPriorModelCharge } from "./calculatorModelTeam.js";
 
 const limits = { maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0 } as const;
 const continuationLimits = { maxRequests: 3, maxRunBytes: 72000, maxRepairs: 0 } as const;
+const testerLimits = { maxRequests: 1, maxRunBytes: 24000, maxRepairs: 0 } as const;
 const continuedProposal = { repository: "erman-ksv/Onay-Factory-Calculator", files: [{ path: "src/calculator.mjs", content: "export const value = 1;\n" }] };
 const continuation = () => ({ proposal: structuredClone(continuedProposal), proposalDigest: "a".repeat(64) });
+const restoredAssessment = (role: "security" | "reviewer") => ({ role, ready: true,
+  summary: "Stored independent assessment of the exact proposal.", findings: [], unverifiedAreas: ["Host tests remain unverified."],
+  testsExecuted: false, overallTaskCompletionVerified: false, publicationAuthorized: false });
+const restoredPrefix = () => [restoredAssessment("security"), restoredAssessment("reviewer")];
+const testerContinuation = () => ({ ...continuation(), restoredAssessments: restoredPrefix() });
 const owner = { version: 1, id: "bounded-continuation", goal: "Create the complete agreed static calculator with independent tests and responsive layout.",
   baseRef: "feat/calculator-pilot-bootstrap", baseSha: "b".repeat(40), provider: "groq" };
 const refusal = { message: CALCULATOR_RUNTIME_ERROR };
@@ -22,12 +28,15 @@ test("host execution limits accept only the reviewed lowering and refuse before 
   assert.equal(prepareCalculatorRuntimeHostLimits(undefined), undefined);
   assert.deepEqual(prepareCalculatorRuntimeHostLimits(limits), limits);
   assert.deepEqual(prepareCalculatorRuntimeHostLimits(continuationLimits), continuationLimits);
+  assert.deepEqual(prepareCalculatorRuntimeHostLimits(testerLimits), testerLimits);
   assert.ok(Object.isFrozen(prepareCalculatorRuntimeHostLimits(limits)));
   assert.ok(Object.isFrozen(prepareCalculatorRuntimeHostLimits(continuationLimits)));
+  assert.ok(Object.isFrozen(prepareCalculatorRuntimeHostLimits(testerLimits)));
   const directory = mkdtempSync(join(tmpdir(), "calculator-limit-input-")), state = join(directory, "never-created");
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const raw of [null, [], { ...limits, maxRequests: 5 }, { ...limits, maxRunBytes: 96001 },
     { ...limits, maxRequests: 3 }, { ...limits, maxRunBytes: 72000 }, { ...continuationLimits, maxRequests: 2 },
+    { ...testerLimits, maxRunBytes: 72000 }, { ...continuationLimits, maxRunBytes: 24000 }, { ...limits, maxRunBytes: 24000 },
     { ...limits, maxRepairs: 1 }, { maxRequests: 4, maxRepairs: 0 }, { ...limits, reset: true }]) {
     assert.throws(() => prepareCalculatorRuntimeHostLimits(raw), refusal);
     await assert.rejects(() => runCalculatorRuntime(undefined, undefined, state, "run", {}, raw as CalculatorRuntimeHostLimits), refusal);
@@ -37,8 +46,8 @@ test("host execution limits accept only the reviewed lowering and refuse before 
   assert.equal(existsSync(state), false);
 });
 
-test("the fifth or fourth reserved request is durably refused under the matching allowance before HTTP", async t => {
-  for (const cap of [limits, continuationLimits]) await t.test("maxRequests=" + cap.maxRequests, async context => {
+test("the fifth, fourth or second reserved request is durably refused under the matching allowance before HTTP", async t => {
+  for (const cap of [limits, continuationLimits, testerLimits]) await t.test("maxRequests=" + cap.maxRequests, async context => {
   const directory = mkdtempSync(join(tmpdir(), "calculator-limit-http-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   const store = createCalculatorExecutionCheckpointStore(directory, {
@@ -94,6 +103,28 @@ test("continuation envelope is detached, deeply frozen and retains only explicit
   assert.equal(prepareCalculatorRuntimeContinuation(undefined), undefined);
 });
 
+test("restored Security and Reviewer assessments retain an exact detached frozen prefix", () => {
+  const input = testerContinuation(), prepared = prepareCalculatorRuntimeContinuation(input)!;
+  assert.deepEqual(prepared, input); assert.notEqual(prepared.restoredAssessments, input.restoredAssessments);
+  assert.ok(Object.isFrozen(prepared.restoredAssessments));
+  assert.ok(prepared.restoredAssessments!.every(Object.isFrozen));
+  input.restoredAssessments[0].summary = "mutated caller text";
+  assert.equal((prepared.restoredAssessments![0] as ReturnType<typeof restoredAssessment>).summary,
+    "Stored independent assessment of the exact proposal.");
+  const legacy = { ...continuation(), restoredAssessments: [] };
+  assert.deepEqual(prepareCalculatorRuntimeContinuation(legacy), legacy);
+  assert.ok(Object.isFrozen(prepareCalculatorRuntimeContinuation(legacy)!.restoredAssessments));
+});
+
+test("restored assessment shape rejects partial, extra, reordered and foreign role prefixes", () => {
+  const prefix = restoredPrefix();
+  for (const restoredAssessments of [null, {}, "stored", [prefix[0]], [...prefix, prefix[1]],
+    [...prefix].reverse(), [prefix[0], prefix[0]], [{ ...prefix[0], role: "coder" }, prefix[1]],
+    [null, prefix[1]], [prefix[0], { ready: true }]]) {
+    assert.throws(() => prepareCalculatorRuntimeContinuation({ ...continuation(), restoredAssessments }), refusal);
+  }
+});
+
 test("continuation rejects unknown keys, invalid digests, nonplain data, cycles and accessors without invoking them", () => {
   let accesses = 0;
   const accessor = Object.defineProperty({}, "proposal", { enumerable: true, get() { accesses++; return continuedProposal; } });
@@ -111,15 +142,19 @@ test("continuation rejects unknown keys, invalid digests, nonplain data, cycles 
 });
 
 test("continuation envelope uses a UTF-8 byte ceiling rather than a character ceiling", () => {
-  const base = Buffer.byteLength(JSON.stringify({ proposal: { note: "" }, proposalDigest: "a".repeat(64) }));
+  for (const prefix of [undefined, restoredPrefix()]) {
+  const empty = { proposal: { note: "" }, proposalDigest: "a".repeat(64),
+    ...(prefix ? { restoredAssessments: prefix } : {}) };
+  const base = Buffer.byteLength(JSON.stringify(empty));
   const available = 100000 - base;
   const note = "я".repeat(Math.floor(available / 2)) + "A".repeat(available % 2);
-  const input = { proposal: { note }, proposalDigest: "a".repeat(64) };
+  const input = { ...empty, proposal: { note } };
   assert.equal(Buffer.byteLength(JSON.stringify(input)), 100000);
   const prepared = prepareCalculatorRuntimeContinuation(input);
   assert.equal((prepared!.proposal as { note: string }).note, note);
   assert.ok(Buffer.byteLength(JSON.stringify(prepared)) <= 100000);
   assert.throws(() => prepareCalculatorRuntimeContinuation({ ...input, proposal: { note: note + "я" } }), refusal);
+  }
 });
 
 test("invalid continuation/allowance pairs and non-run modes refuse before creating state", async t => {
@@ -133,6 +168,18 @@ test("invalid continuation/allowance pairs and non-run modes refuse before creat
     { cap: continuationLimits, proposal: continuation(), mode: "inspect" },
     { cap: continuationLimits, proposal: continuation(), mode: "preflight" },
     { cap: continuationLimits, proposal: { ...continuation(), unknown: true }, mode: "run" },
+    { cap: testerLimits, proposal: undefined, mode: "run" },
+    { cap: testerLimits, proposal: continuation(), mode: "run" },
+    { cap: testerLimits, proposal: { ...continuation(), restoredAssessments: [] }, mode: "run" },
+    { cap: continuationLimits, proposal: testerContinuation(), mode: "run" },
+    { cap: limits, proposal: testerContinuation(), mode: "run" },
+    { cap: testerLimits, proposal: testerContinuation(), mode: "plan" },
+    { cap: testerLimits, proposal: testerContinuation(), mode: "inspect" },
+    { cap: testerLimits, proposal: testerContinuation(), mode: "preflight" },
+    { cap: testerLimits, proposal: { ...continuation(), restoredAssessments: restoredPrefix().slice(0, 1) }, mode: "run" },
+    { cap: testerLimits, proposal: { ...continuation(), restoredAssessments: [...restoredPrefix(), restoredAssessment("reviewer")] }, mode: "run" },
+    { cap: testerLimits, proposal: { ...continuation(), restoredAssessments: restoredPrefix().reverse() }, mode: "run" },
+    { cap: testerLimits, proposal: { ...continuation(), restoredAssessments: [{ ...restoredAssessment("security"), role: "coder" }, restoredAssessment("reviewer")] }, mode: "run" },
   ];
   for (const entry of cases) {
     await assert.rejects(() => runCalculatorRuntime(owner, undefined, state,

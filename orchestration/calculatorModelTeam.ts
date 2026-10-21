@@ -5,7 +5,8 @@ import { createGroqBudgetedFetch, createProviderContextBudget } from "../command
 import { calculatorSources, type CalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import { scanForSecrets } from "../github/secretScanner.js";
 import { buildCalculatorRoleInstructions, prepareCalculatorRoleChanges, validateCalculatorAssessment,
-  CalculatorAssessmentValidationError, type CalculatorAssessmentValidationCode } from "../commander/calculatorTeam.js";
+  CalculatorAssessmentValidationError, CALCULATOR_ASSESSMENT_LIMITS, type CalculatorAssessment,
+  type CalculatorAssessmentValidationCode } from "../commander/calculatorTeam.js";
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { calculatorProposalDigest, validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
@@ -28,6 +29,41 @@ function samePrepared(saved: Record<string, unknown>, rebuilt: PreparedCalculato
         file[key] === rebuilt.files[index]![key as "path" | "content" | "message"])) &&
     plain(saved.gates) && exact(saved.gates, Object.keys(rebuilt.gates)) && Object.entries(rebuilt.gates).every(([key, value]) =>
       (saved.gates as Record<string, unknown>)[key] === value);
+}
+/** Reconstruct the original model schema, removing only fields/disclosures the
+ * host added. The authenticated capsule, not this data, supplies resume authority. */
+function restoreAssessmentPrefix(input: readonly unknown[], evidenceId: string): readonly CalculatorAssessment[] {
+  if (!input.length) return Object.freeze([]);
+  if (input.length !== 2) return refuse();
+  return Object.freeze(input.map((saved, index) => {
+    const role = index === 0 ? "security" : "reviewer";
+    if (!plain(saved) || !exact(saved, ["role", "ready", "summary", "findings", "unverifiedAreas", "testsExecuted",
+        "overallTaskCompletionVerified", "publicationAuthorized"]) || saved.role !== role || saved.ready !== true ||
+        saved.testsExecuted !== false || saved.overallTaskCompletionVerified !== false || saved.publicationAuthorized !== false ||
+        !Array.isArray(saved.findings) || saved.findings.length > CALCULATOR_ASSESSMENT_LIMITS.findings ||
+        !Array.isArray(saved.unverifiedAreas) || saved.unverifiedAreas.length > CALCULATOR_ASSESSMENT_LIMITS.unverifiedAreas + 2 ||
+        saved.unverifiedAreas.some(area => typeof area !== "string")) return refuse();
+    const storedFindings = saved.findings, storedUnknowns = saved.unverifiedAreas;
+    const findings = storedFindings.map(finding => {
+      if (!plain(finding) || !exact(finding, ["severity", "message", "evidenceRefs", "evidenceStatus"]) ||
+          !Array.isArray(finding.evidenceRefs) || finding.evidenceStatus !== (finding.evidenceRefs.length ? "supplied" : "missing")) return refuse();
+      return { severity: finding.severity, message: finding.message, evidenceRefs: finding.evidenceRefs };
+    });
+    // Derive the exact host-owned suffix through the current validator, rather
+    // than duplicating disclosure literals or dropping similarly worded originals.
+    const empty = { ready: saved.ready, summary: saved.summary, findings, unverifiedAreas: [] };
+    const suffix = validateCalculatorAssessment(role, empty, [evidenceId]).unverifiedAreas;
+    const originalCount = storedUnknowns.length - suffix.length;
+    if (originalCount < 0 || suffix.some((area, offset) => storedUnknowns[originalCount + offset] !== area)) return refuse();
+    const rebuilt = validateCalculatorAssessment(role, { ...empty, unverifiedAreas: storedUnknowns.slice(0, originalCount) }, [evidenceId]);
+    const canonical = { role: saved.role, ready: saved.ready, summary: saved.summary,
+      findings: storedFindings.map(finding => ({ severity: finding.severity, message: finding.message,
+        evidenceRefs: finding.evidenceRefs, evidenceStatus: finding.evidenceStatus })),
+      unverifiedAreas: storedUnknowns, testsExecuted: saved.testsExecuted,
+      overallTaskCompletionVerified: saved.overallTaskCompletionVerified, publicationAuthorized: saved.publicationAuthorized };
+    if (!rebuilt.ready || JSON.stringify(canonical) !== JSON.stringify(rebuilt)) return refuse();
+    return rebuilt;
+  }));
 }
 /** Host-supplied conservative prior charge for a separately authorized recovery.
  * Never accepted from model output or environment variables. Unknown usage stays charged. */
@@ -114,6 +150,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   const generated = new Set<string>(), repaired = new Set<string>(), restored = new Set<string>(), observed = new Set<string>();
   const proposals = new WeakMap<PreparedCalculatorChanges, { taskId: string; planFingerprint: string; snapshot: CalculatorSnapshot; inspectionSha?: string }>();
   const assessed = new WeakMap<PreparedCalculatorChanges, Set<string>>();
+  const restoredPrefixes = new WeakMap<PreparedCalculatorChanges, readonly CalculatorAssessment[]>();
 
   function checkpointCharge(): CalculatorPriorModelCharge | undefined {
     if (!contextBudget) return undefined;
@@ -243,12 +280,14 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     /** Explicit host entry point, never a model/environment argument. The host
      * must separately verify the one-use barrier and full private capsule digest;
      * proposalDigest authenticates file/base content, not arbitrary metadata.
-     * Rebuild only an unreviewed saved proposal; this grants no replay authority. */
+     * Rebuild an unreviewed proposal or an authenticated ready Security/Reviewer
+     * prefix. This data check grants no replay authority. */
     restoreProposal(plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, preparedInput: unknown,
       expectedProposalDigest: string, completedAssessments: readonly unknown[] = []): PreparedCalculatorChanges {
       try {
         if (stopped || planned || generated.size || repaired.size || restored.size || observed.size ||
-            budget.snapshot().attemptedRequests || budget.failure || !Array.isArray(completedAssessments) || completedAssessments.length ||
+            budget.snapshot().attemptedRequests || budget.failure || !Array.isArray(completedAssessments) ||
+            (completedAssessments.length !== 0 && completedAssessments.length !== 2) ||
             typeof expectedProposalDigest !== "string" || !/^[a-f0-9]{64}$/.test(expectedProposalDigest)) return refuse();
         const actualPlan = createCalculatorPlan(requestOwner, plan.proposal), task = taskIn(plan, taskId);
         calculatorSources(snapshot); // Only a fresh host-loaded branded snapshot is eligible.
@@ -278,11 +317,25 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         if (!samePrepared(preparedInput, rebuilt) || calculatorProposalDigest(preparedInput as PreparedCalculatorChanges) !== expectedProposalDigest ||
             calculatorProposalDigest(rebuilt) !== expectedProposalDigest ||
             task.paths.some(path => !rebuilt.files.some(file => file.path === path) && !snapshot.files.some(file => file.path === path && file.exists))) return refuse();
-        // Nothing is registered until every static gate, field and byte matches.
+        const prefix = restoreAssessmentPrefix(completedAssessments, "changes@" + rebuilt.baseSha);
+        // Nothing is registered until every static gate, field, byte and saved
+        // assessment passes. A rejected prefix cannot install a partial role set.
         proposals.set(rebuilt, { taskId, planFingerprint: actualPlan.fingerprint, snapshot });
-        assessed.set(rebuilt, new Set()); generated.add(taskId); restored.add(taskId); planned = true;
+        assessed.set(rebuilt, new Set(prefix.map(assessment => assessment.role))); restoredPrefixes.set(rebuilt, prefix);
+        generated.add(taskId); restored.add(taskId); planned = true;
         return rebuilt;
       } catch { failureCode ??= "proposal_restore_invalid"; stopped = true; return refuse(); }
+    },
+    /** Host-only canonical records belonging to this exact restored capability.
+     * Runtime must forward these records, never raw imported capsule JSON. */
+    restoredAssessmentPrefix(plan: CalculatorPlan, taskId: string, changes: PreparedCalculatorChanges): readonly CalculatorAssessment[] {
+      try {
+        taskIn(plan, taskId);
+        const identity = proposals.get(changes), prefix = restoredPrefixes.get(changes);
+        if (stopped || !restored.has(taskId) || !identity || identity.taskId !== taskId ||
+            identity.planFingerprint !== plan.fingerprint || !prefix) return refuse();
+        return prefix;
+      } catch { failureCode ??= "assessment_prefix_restore_invalid"; stopped = true; return refuse(); }
     },
     /** Host-only: evidence for fresh dependency review, not a generation/write.
      * Compare committed current files to the immutable owner base; all changed

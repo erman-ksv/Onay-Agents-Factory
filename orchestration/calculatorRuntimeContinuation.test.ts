@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCalculatorSnapshot, type CalculatorSnapshot } from "../github/calculatorSnapshot.js";
-import { prepareCalculatorRoleChanges } from "../commander/calculatorTeam.js";
+import { prepareCalculatorRoleChanges, validateCalculatorAssessment } from "../commander/calculatorTeam.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import { createCalculatorModelTeam } from "./calculatorModelTeam.js";
 import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
@@ -93,4 +93,81 @@ test("runtime restoration is restricted to one first task at the original base a
       assert.throws(() => restore(f.plan, f.task.id, f.snapshot), refusal); assert.equal(calls, 0);
     });
   } finally { f.cleanup(); }
+});
+
+function priorPrefix(baseSha: string) {
+  return ["security", "reviewer"].map(role => validateCalculatorAssessment(role,
+    { ready: true, summary: role + " reviewed the shown saved proposal.", findings: [], unverifiedAreas: ["Host tests remain unverified."] },
+    ["changes@" + baseSha]));
+}
+
+test("a revalidated saved prefix reaches only Tester and cannot bypass the host test gate", async () => {
+  const f = await fixture();
+  try {
+    const imported = JSON.parse(JSON.stringify(priorPrefix(f.plan.owner.baseSha)));
+    const expectedPrefix = structuredClone(imported), events: CalculatorExecutionCheckpointEvent[] = [], roles: string[] = [];
+    const admissions: number[] = []; let now = 0, checks = 0, publishes = 0;
+    const gate = createCalculatorRuntimeRequestCheckpoint({ maxRequests: 1, maxRunBytes: 24000, maxRepairs: 0 }, charge => {
+      admissions.push(charge.attemptedRequests);
+    });
+    const team = createCalculatorModelTeam(saved.request, env, async (_url, init) => {
+      const instructions = JSON.parse(String(init?.body)).messages[0].content as string;
+      assert.ok(instructions.includes("You are the tester ")); roles.push("tester");
+      return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({
+        ready: true, summary: "Tester reviewed the unchanged scoped proposal; host checks remain necessary.", findings: [], unverifiedAreas: [] }) } }],
+      usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 } });
+    }, { now: () => now, wait: async milliseconds => { now += milliseconds; } }, undefined, { beforeRequest: gate });
+    const restore = createCalculatorRuntimeContinuationRestorer({ ...f.continuation, restoredAssessments: imported }, f.plan, team);
+    imported[0].summary = "Caller mutation must not replace the saved evidence.";
+    const workspace = await openCalculatorWorkspace(f.store, f.reader, f.plan.branch, f.plan.owner.baseSha);
+    const report = await runCalculatorExecution(workspace, { team, maxRepairs: 0, execution: "offline-test", restoreProposal: restore,
+      restoreAssessments: (plan, id, proposal) => team.restoredAssessmentPrefix(plan, id, proposal),
+      checkpoint: event => { events.push(event); }, tools: {
+        checkProposal: async () => { checks++; throw Error("Host tests intentionally unavailable in this fixture."); },
+        publish: async () => { publishes++; throw Error("Must not publish without tests."); }, ci: async () => { throw Error("Unused CI."); },
+      } });
+    assert.equal(report.status, "blocked"); assert.equal(report.repairs, 0); assert.equal(checks, 1); assert.equal(publishes, 0);
+    assert.deepEqual(roles, ["tester"]); assert.deepEqual(admissions, [1]);
+    assert.equal(team.snapshot().generatedTasks, 0); assert.equal(team.snapshot().restoredTasks, 1);
+    assert.equal(team.checkpointCharge()!.attemptedRequests, 1);
+    assert.ok(events.some(event => event.stage === "restore_security_1" && event.status === "passed"));
+    assert.ok(events.some(event => event.stage === "restore_reviewer_1" && event.status === "passed"));
+    assert.ok(events.some(event => event.stage === "tester_1" && event.status === "passed"));
+    assert.ok(!events.some(event => ["generate_1", "security_1", "reviewer_1", "repair_2"].includes(event.stage)));
+    assert.deepEqual(events.at(-1)!.assessments.slice(0, 2), expectedPrefix);
+    assert.deepEqual(events.at(-1)!.assessments.map(value => value.role), ["security", "reviewer", "tester"]);
+    assert.equal(events.at(-1)!.publicationStarted, false);
+    assert.throws(() => restore(f.plan, f.task.id, f.snapshot), refusal);
+    await assert.rejects(() => team.assess("security", f.plan, f.task.id, events.at(-1)!.proposal!));
+    assert.deepEqual(roles, ["tester"]);
+  } finally { f.cleanup(); }
+});
+
+test("raw assessment JSON cannot grant restored stages before independent model-team validation", async t => {
+  for (const scenario of ["publication", "unready", "summary", "evidence"]) await t.test(scenario, async () => {
+    const f = await fixture();
+    try {
+      const prefix = JSON.parse(JSON.stringify(priorPrefix(f.plan.owner.baseSha)));
+      if (scenario === "publication") prefix[0].publicationAuthorized = true;
+      if (scenario === "unready") prefix[0].ready = false;
+      if (scenario === "summary") prefix[1].summary = "X".repeat(601);
+      if (scenario === "evidence") prefix[1].findings = [{ severity: "low", message: "Wrong base evidence.",
+        evidenceRefs: ["changes@" + "b".repeat(40)], evidenceStatus: "supplied" }];
+      let requests = 0, checks = 0;
+      const events: CalculatorExecutionCheckpointEvent[] = [];
+      const team = createCalculatorModelTeam(saved.request, env, async () => { requests++; throw Error("No HTTP is allowed."); });
+      const restore = createCalculatorRuntimeContinuationRestorer({ ...f.continuation, restoredAssessments: prefix }, f.plan, team);
+      const workspace = await openCalculatorWorkspace(f.store, f.reader, f.plan.branch, f.plan.owner.baseSha);
+      const report = await runCalculatorExecution(workspace, { team, maxRepairs: 0, execution: "offline-test", restoreProposal: restore,
+        restoreAssessments: (plan, id, proposal) => team.restoredAssessmentPrefix(plan, id, proposal),
+        checkpoint: event => { events.push(event); }, tools: {
+          checkProposal: async () => { checks++; throw Error("No checks before valid restoration."); },
+          publish: async () => { throw Error("No publication."); }, ci: async () => { throw Error("No CI."); },
+        } });
+      assert.equal(report.status, "blocked"); assert.equal(requests, 0); assert.equal(checks, 0);
+      assert.ok(!events.some(event => event.stage.startsWith("restore_security") || event.stage.startsWith("restore_reviewer")));
+      assert.ok(events.every(event => event.assessments.length === 0));
+      assert.equal(team.snapshot().restoredTasks, 0); assert.equal(team.checkpointCharge()!.attemptedRequests, 0);
+    } finally { f.cleanup(); }
+  });
 });
