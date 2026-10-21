@@ -75,7 +75,7 @@ function fixture(t: { after(callback: () => void): void }) {
 }
 function report(status: "blocked" | "needs-review" = "blocked") {
   return { status, reasonCode: "fixture_checks_complete", taskId: SOURCE.taskId, attempts: 1, repairs: 0,
-    proposalTestsExecuted: false, candidateTestsExecuted: false, wholeAppCompleted: false, finalCalculatorCiVerified: false, legalEnabled: false };
+    proposalTestsExecuted: false, candidateTestsExecuted: false, wholeAppCompleted: false, finalCalculatorCiVerified: false, legalEnabled: false } as const;
 }
 
 test("request preserves all historical charges and seals exactly three specialist calls without Coder or repair", () => {
@@ -134,7 +134,7 @@ test("execute forwards only the saved proposal to restored runtime with exact li
   const f = fixture(t); await f.prepare(); let calls = 0;
   const runtime: typeof runCalculatorRuntime = async (goal, config, state, mode, runtimeEnv, limits, continuation) => {
     calls++; assert.deepEqual(goal, f.prior.request.goal); assert.deepEqual(config, f.prior.request.config); assert.equal(state, join(f.root, "state"));
-    assert.equal(mode, "run"); assert.equal(runtimeEnv.FACTORY_HISTORY_TOKEN, f.runtimeEnv.FACTORY_HISTORY_TOKEN);
+    assert.equal(mode, "run"); assert.ok(runtimeEnv); assert.equal(runtimeEnv.FACTORY_HISTORY_TOKEN, f.runtimeEnv.FACTORY_HISTORY_TOKEN);
     assert.deepEqual(limits, { maxRequests: 3, maxRunBytes: 72000, maxRepairs: 0 }); assert.equal(continuation?.proposal, f.proposal); assert.equal(continuation?.proposalDigest, SOURCE.proposalDigest);
     return report();
   };
