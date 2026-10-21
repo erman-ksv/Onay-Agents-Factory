@@ -320,3 +320,48 @@ test("invalid host repair limits fail before a task claim or model call", async 
     } finally { f.cleanup(); }
   });
 });
+
+test("explicit restoration reuses the full existing gates without a new Coder call", async () => {
+  const f = await fixture();
+  try {
+    const task = f.plan.tasks[0], snapshot = await loadCalculatorWorkspaceTask(f.workspace, task.id);
+    const saved = await f.team.generate(f.plan, task.id, snapshot), roles: string[] = [];
+    const team = createCalculatorModelTeam(owner, env, async (_url, init) => {
+      const instructions = JSON.parse(String(init?.body)).messages[0].content as string;
+      const role = ["security", "reviewer", "tester"].find(value => instructions.includes("You are the " + value + " "));
+      assert.ok(role); roles.push(role);
+      return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({
+        ready: true, summary: "Scoped evidence reviewed; host tests remain necessary.", findings: [], unverifiedAreas: [] }) } }] });
+    });
+    const result = await runCalculatorExecution(f.workspace, { ...f, team, maxRepairs: 0,
+      restoreProposal: (plan, id, fresh) => team.restoreProposal(plan, id, fresh, saved, calculatorProposalDigest(saved)) });
+    assert.equal(result.status, "candidate-verified"); assert.equal(result.proposalTestsExecuted, true);
+    assert.equal(result.candidateTestsExecuted, true); assert.equal(result.repairs, 0);
+    assert.deepEqual(roles, ["security", "reviewer", "tester"]);
+    assert.equal(team.snapshot().generatedTasks, 0); assert.equal(team.snapshot().restoredTasks, 1);
+    assert.deepEqual(f.counts(), { generations: 1, checks: 1, publishes: 1, ciReads: 1 });
+    assert.ok(f.receipt()?.stages.some(stage => stage.stage === "restore_proposal_1" && stage.status === "passed"));
+    assert.ok(!f.receipt()?.stages.some(stage => stage.stage === "generate_1"));
+  } finally { f.cleanup(); }
+});
+
+test("a restoration entry cannot enable repairs, claim invalid configuration or bypass fresh validation", async t => {
+  for (const scenario of ["repair-enabled", "bad-callback", "restore-failed", "changed-base"]) await t.test(scenario, async () => {
+    const f = await fixture();
+    try {
+      const task = f.plan.tasks[0], saved = await f.team.generate(f.plan, task.id, await loadCalculatorWorkspaceTask(f.workspace, task.id));
+      const restore = () => {
+        if (scenario === "restore-failed") throw Error("PRIVATE_RESTORE_ERROR");
+        return scenario === "changed-base" ? { ...saved, baseSha: D } : saved;
+      };
+      const result = await runCalculatorExecution(f.workspace, { ...f, maxRepairs: scenario === "repair-enabled" ? 1 : 0,
+        restoreProposal: scenario === "bad-callback" ? 3 as unknown as typeof restore : restore });
+      assert.equal(result.status, "blocked"); assert.equal(result.proposalTestsExecuted, false);
+      assert.deepEqual(f.requests.map(request => request.role), ["coder"]);
+      assert.deepEqual(f.counts(), { generations: 1, checks: 0, publishes: 0, ciReads: 0 });
+      if (scenario === "repair-enabled" || scenario === "bad-callback") assert.equal(f.receipt(), undefined);
+      else assert.ok(f.receipt()?.stages.some(stage => stage.stage === "restore_proposal_1" && stage.status === "blocked"));
+      assert.ok(!JSON.stringify(result).includes("PRIVATE_RESTORE_ERROR"));
+    } finally { f.cleanup(); }
+  });
+});

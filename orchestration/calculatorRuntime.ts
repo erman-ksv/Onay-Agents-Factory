@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
-import { createCalculatorSnapshotReader, loadCalculatorSnapshot, calculatorSources, type CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
+import { createCalculatorSnapshotReader, loadCalculatorSnapshot, calculatorSources, type CalculatorSnapshot, type CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import { createCalculatorPublisher } from "../github/calculatorPublisher.js";
 import { createCalculatorCiReader, type CalculatorWorkflowPin } from "../github/calculatorCi.js";
 import { createCalculatorSandbox } from "./calculatorSandbox.js";
@@ -25,15 +25,78 @@ export const CALCULATOR_RUNTIME_ERROR = "Calculator live runtime is not ready. I
 function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
 /** Host-only additional allowance. These literals lower the normal limits;
  * neither owner/model JSON nor environment variables can select a larger cap. */
-export type CalculatorRuntimeHostLimits = Readonly<{ maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0 }>;
+export type CalculatorRuntimeHostLimits = Readonly<
+  { maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0 } |
+  { maxRequests: 3; maxRunBytes: 72000; maxRepairs: 0 }>;
 export function prepareCalculatorRuntimeHostLimits(value: unknown): CalculatorRuntimeHostLimits | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
       Object.keys(value).sort().join(",") !== "maxRepairs,maxRequests,maxRunBytes") return refuse();
   const raw = value as Record<string, unknown>;
-  if (raw.maxRequests !== 4 || raw.maxRunBytes !== 96000 || raw.maxRepairs !== 0) return refuse();
-  return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0 });
+  if (raw.maxRepairs !== 0) return refuse();
+  if (raw.maxRequests === 4 && raw.maxRunBytes === 96000) return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0 });
+  if (raw.maxRequests === 3 && raw.maxRunBytes === 72000) return Object.freeze({ maxRequests: 3, maxRunBytes: 72000, maxRepairs: 0 });
+  return refuse();
+}
+/** A host-verified private capsule supplies the whole prepared proposal. This
+ * envelope grants no authorization and never carries previous assessments. */
+export type CalculatorRuntimeContinuation = Readonly<{ proposal: unknown; proposalDigest: string }>;
+export function prepareCalculatorRuntimeContinuation(value: unknown): CalculatorRuntimeContinuation | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const parents = new Set<object>(); let bytes = 0, nodes = 0;
+    function copy(item: unknown, depth: number): unknown {
+      if (++nodes > 20000 || depth > 64) return refuse();
+      if (item === null || typeof item === "boolean" || typeof item === "string" || typeof item === "number") {
+        if (typeof item === "number" && !Number.isFinite(item)) return refuse();
+        if (typeof item === "string" && item.length > 100000) return refuse();
+        bytes += Buffer.byteLength(JSON.stringify(item)); if (bytes > 100000) return refuse(); return item;
+      }
+      if (!item || typeof item !== "object" || parents.has(item) ||
+          (Array.isArray(item) ? Object.getPrototypeOf(item) !== Array.prototype :
+            ![Object.prototype, null].includes(Object.getPrototypeOf(item)))) return refuse();
+      parents.add(item);
+      const properties = Object.getOwnPropertyDescriptors(item);
+      if (Object.getOwnPropertySymbols(item).length || Object.values(properties).some(property => !Object.hasOwn(property, "value") ||
+          (!property.enumerable && !(Array.isArray(item) && property === properties.length)))) return refuse();
+      const keys = Object.keys(item); bytes += 2 + Math.max(0, keys.length - 1);
+      if (bytes > 100000 || (Array.isArray(item) && (keys.length !== item.length || keys.some((key, index) => key !== String(index))))) return refuse();
+      let result: unknown;
+      if (Array.isArray(item)) result = Object.freeze(keys.map(key => copy(properties[key]!.value, depth + 1)));
+      else {
+        const target: Record<string, unknown> = {};
+        for (const key of keys.sort()) {
+          bytes += Buffer.byteLength(JSON.stringify(key)) + 1; if (bytes > 100000) return refuse();
+          Object.defineProperty(target, key, { value: copy(properties[key]!.value, depth + 1), enumerable: true });
+        }
+        result = Object.freeze(target);
+      }
+      parents.delete(item); return result;
+    }
+    const raw = copy(value, 0) as Record<string, unknown>;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).join(",") !== "proposal,proposalDigest" ||
+        typeof raw.proposalDigest !== "string" || !/^[a-f0-9]{64}$/.test(raw.proposalDigest) ||
+        !raw.proposal || typeof raw.proposal !== "object" || Array.isArray(raw.proposal)) return refuse();
+    return Object.freeze({ proposal: raw.proposal, proposalDigest: raw.proposalDigest });
+  } catch { return refuse(); }
+}
+/** The linked-artifact wrapper verifies authority before calling this host
+ * callback. Restrict restoration to the untouched first task and owner base. */
+export function createCalculatorRuntimeContinuationRestorer(continuationInput: CalculatorRuntimeContinuation,
+  expected: CalculatorPlan, team: Pick<ReturnType<typeof createCalculatorModelTeam>, "restoreProposal">) {
+  const continuation = prepareCalculatorRuntimeContinuation(continuationInput), first = expected.tasks[0];
+  if (!continuation || !first || first.dependsOn.length || typeof team?.restoreProposal !== "function") return refuse();
+  let used = false;
+  return (plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot): PreparedCalculatorChanges => {
+    if (used) return refuse(); used = true;
+    if (plan.fingerprint !== expected.fingerprint || plan.owner.ownerFingerprint !== expected.owner.ownerFingerprint ||
+        plan.branch !== expected.branch || plan.owner.baseSha !== expected.owner.baseSha ||
+        plan.tasks[0]?.id !== first.id || plan.tasks[0].dependsOn.length || id !== first.id || snapshot.repository !== expected.owner.repository ||
+        snapshot.baseRef !== expected.branch || snapshot.baseSha !== expected.owner.baseSha ||
+        snapshot.changePaths.length !== first.paths.length || first.paths.some(path => !snapshot.changePaths.includes(path))) return refuse();
+    return team.restoreProposal(plan, id, snapshot, continuation.proposal, continuation.proposalDigest, []);
+  };
 }
 /** Called only after the existing task/provider ledgers reserve a request.
  * Persist even a refused reservation, but never label local refusal as HTTP.
@@ -173,9 +236,10 @@ export async function loadCalculatorRuntimeSources(reader: CalculatorSnapshotRea
  * task; durable state survives failures and model HTTP budgets are never reset
  * inside a repair. Production adapters remain isolated from model arguments. */
 export async function runCalculatorRuntime(input: unknown, configInput: unknown, directory: string,
-  mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env, hostLimits?: CalculatorRuntimeHostLimits) {
-  const limits = prepareCalculatorRuntimeHostLimits(hostLimits);
-  if (limits && mode !== "run") return refuse();
+  mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env, hostLimits?: CalculatorRuntimeHostLimits,
+  continuationInput?: CalculatorRuntimeContinuation) {
+  const limits = prepareCalculatorRuntimeHostLimits(hostLimits), continuation = prepareCalculatorRuntimeContinuation(continuationInput);
+  if ((limits || continuation) && mode !== "run" || !!continuation !== (limits?.maxRequests === 3)) return refuse();
   const owner = prepareCalculatorGoal(input), store = new CalculatorPlanStore(directory, input);
   const saved = store.inspect();
   if (mode === "inspect") return { mode, status: saved?.status ?? "unplanned", planFingerprint: saved?.fingerprint,
@@ -229,9 +293,11 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       const receipt = store.taskReceipt(saved, task); try { if (receipt.inspectExisting()) started = true; } finally { receipt.close(); }
     }
     phase = "branch_bootstrap_unverified";
-    if (!started) await publisher.bootstrapProjectBranch();
+    if (continuation && (started || !saved.tasks[0] || saved.tasks[0].dependsOn.length)) return refuse();
+    if (!continuation && !started) await publisher.bootstrapProjectBranch();
     phase = "project_head_unverified";
     const currentSha = await reader.getHead(saved.branch);
+    if (continuation && currentSha !== owner.baseSha) return refuse();
     // Verify the pinned workflow itself before model calls and durable task claim.
     phase = "project_workflow_unverified";
     await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
@@ -244,6 +310,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     // digest binds evidence to policy/config/model; it grants no resume authority.
     const runtimeConfigDigest = digest({ policyVersion: "calculator-private-execution-v1", provider: provider.provider, model: provider.model,
       ...(limits ? { hostLimits: limits } : {}),
+      ...(continuation ? { continuationProposalDigest: continuation.proposalDigest } : {}),
       version: config.version, sandboxImage: config.sandboxImage,
       trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
     const checkpointIdentity = { repository: owner.repository,
@@ -291,6 +358,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     }
     function checkpoint(event: CalculatorExecutionCheckpointEvent): void {
       if (!saved!.tasks.some(task => task.id === event.taskId) ||
+          (continuation && event.taskId !== saved!.tasks[0]!.id) ||
           (activeId !== runtimeId && activeId !== event.taskId) || (activeId !== event.taskId && active.httpInFlight)) return refuse();
       const inFlight = activeId === event.taskId && active.httpInFlight;
       activeId = event.taskId;
@@ -302,6 +370,9 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     }
     try {
       const verifyDependencies: CalculatorCheckRunner = async evidence => {
+        // This entry may only review the untouched first task. A late receipt
+        // cannot turn it into dependency inference or selection of a next task.
+        if (continuation) return undefined;
         if (evidence.currentSha !== currentSha || await reader.getHead(saved.branch) !== currentSha) return undefined;
         const task = evidence.task, receipt = store.taskReceipt(saved, task);
         try {
@@ -338,6 +409,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       phase = "one_task_execution_failed";
       const result = await runCalculatorExecution(workspace, { team, env, verifyDependencies, checkpoint,
         ...(limits ? { maxRepairs: limits.maxRepairs } : {}),
+        ...(continuation ? { restoreProposal: createCalculatorRuntimeContinuationRestorer(continuation, saved, team) } : {}),
         tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } });
       if (active.httpInFlight || (active.status === "running" && writers.has(activeId)))
         save({ ...active, status: "blocked" }, charge());
