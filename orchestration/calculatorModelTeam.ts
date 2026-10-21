@@ -8,12 +8,27 @@ import { buildCalculatorRoleInstructions, prepareCalculatorRoleChanges, validate
   CalculatorAssessmentValidationError, type CalculatorAssessmentValidationCode } from "../commander/calculatorTeam.js";
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
-import { validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
+import { calculatorProposalDigest, validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
 import { DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
 import { CalculatorModelAdmissionError, createCalculatorGroqPacer, type CalculatorModelAdmissionDiagnostic, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
 
 export const CALCULATOR_MODEL_ERROR = "Calculator model team stopped: configuration, evidence, response or context budget is unverified. No retry or write is authorized.";
 function refuse(): never { throw new Error(CALCULATOR_MODEL_ERROR); }
+function plain(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(value));
+}
+function exact(value: Record<string, unknown>, names: readonly string[]): boolean {
+  return Object.keys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
+}
+function samePrepared(saved: Record<string, unknown>, rebuilt: PreparedCalculatorChanges): boolean {
+  return ["repository", "baseRef", "baseSha", "summary", "reviewEvidence"].every(key => saved[key] === rebuilt[key as keyof PreparedCalculatorChanges]) &&
+    Array.isArray(saved.files) && saved.files.length === rebuilt.files.length && saved.files.every((file, index) =>
+      plain(file) && exact(file, ["path", "content", "message"]) && ["path", "content", "message"].every(key =>
+        file[key] === rebuilt.files[index]![key as "path" | "content" | "message"])) &&
+    plain(saved.gates) && exact(saved.gates, Object.keys(rebuilt.gates)) && Object.entries(rebuilt.gates).every(([key, value]) =>
+      (saved.gates as Record<string, unknown>)[key] === value);
+}
 /** Host-supplied conservative prior charge for a separately authorized recovery.
  * Never accepted from model output or environment variables. Unknown usage stays charged. */
 export type CalculatorPriorModelCharge = Readonly<{ attemptedRequests: number; totalRequestBytes: number; reservedRunTokens: number; elapsedMs: number }>;
@@ -96,7 +111,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
-  const generated = new Set<string>(), repaired = new Set<string>();
+  const generated = new Set<string>(), repaired = new Set<string>(), restored = new Set<string>(), observed = new Set<string>();
   const proposals = new WeakMap<PreparedCalculatorChanges, { taskId: string; planFingerprint: string; snapshot: CalculatorSnapshot; inspectionSha?: string }>();
   const assessed = new WeakMap<PreparedCalculatorChanges, Set<string>>();
 
@@ -184,7 +199,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   async function propose(plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, repair?: CalculatorRepairRequest): Promise<PreparedCalculatorChanges> {
     try {
       const task = taskIn(plan, taskId);
-      if (stopped || (repair ? repaired.has(taskId) : generated.has(taskId)) || snapshot.repository !== CALCULATOR_PROFILE.repository ||
+      if (stopped || restored.size || (repair ? repaired.has(taskId) : generated.has(taskId)) || snapshot.repository !== CALCULATOR_PROFILE.repository ||
           snapshot.changePaths.length !== task.paths.length || task.paths.some(path => !snapshot.changePaths.includes(path))) return refuse();
       let repairEvidence: unknown;
       if (repair) {
@@ -225,13 +240,57 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     },
     generate: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot) => propose(plan, taskId, snapshot),
     repair: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest) => propose(plan, taskId, snapshot, request),
+    /** Explicit host entry point, never a model/environment argument. The host
+     * must separately verify the one-use barrier and full private capsule digest;
+     * proposalDigest authenticates file/base content, not arbitrary metadata.
+     * Rebuild only an unreviewed saved proposal; this grants no replay authority. */
+    restoreProposal(plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, preparedInput: unknown,
+      expectedProposalDigest: string, completedAssessments: readonly unknown[] = []): PreparedCalculatorChanges {
+      try {
+        if (stopped || planned || generated.size || repaired.size || restored.size || observed.size ||
+            budget.snapshot().attemptedRequests || budget.failure || !Array.isArray(completedAssessments) || completedAssessments.length ||
+            typeof expectedProposalDigest !== "string" || !/^[a-f0-9]{64}$/.test(expectedProposalDigest)) return refuse();
+        const actualPlan = createCalculatorPlan(requestOwner, plan.proposal), task = taskIn(plan, taskId);
+        calculatorSources(snapshot); // Only a fresh host-loaded branded snapshot is eligible.
+        if (actualPlan.branch !== plan.branch || plan.owner.ownerFingerprint !== owner.ownerFingerprint ||
+            snapshot.repository !== owner.repository || snapshot.baseRef !== actualPlan.branch ||
+            snapshot.changePaths.length !== task.paths.length || task.paths.some(path => !snapshot.changePaths.includes(path)) ||
+            !plain(preparedInput) || !exact(preparedInput, ["repository", "baseRef", "baseSha", "summary", "files", "reviewEvidence", "gates"]) ||
+            preparedInput.repository !== snapshot.repository || preparedInput.baseRef !== snapshot.baseRef || preparedInput.baseSha !== snapshot.baseSha ||
+            typeof preparedInput.summary !== "string" || typeof preparedInput.reviewEvidence !== "string" ||
+            Buffer.byteLength(preparedInput.reviewEvidence) > CALCULATOR_PROFILE.maxReviewBytes ||
+            !Array.isArray(preparedInput.files) || !preparedInput.files.length || preparedInput.files.length > CALCULATOR_PROFILE.maxFiles ||
+            preparedInput.files.some(file => !plain(file) || !exact(file, ["path", "content", "message"]) ||
+              typeof file.path !== "string" || typeof file.content !== "string" || typeof file.message !== "string")) return refuse();
+        const evidence: unknown = JSON.parse(preparedInput.reviewEvidence);
+        if (!plain(evidence) || !exact(evidence, ["repository", "baseSha", "changes", "unverified"]) ||
+            !Array.isArray(evidence.changes)) return refuse();
+        const files = preparedInput.files as Array<{ path: string; content: string; message: string }>;
+        const rawChanges = evidence.changes.map(change => {
+          if (!plain(change) || typeof change.path !== "string") return refuse();
+          const message = files.find(file => file.path === change.path)?.message;
+          if (change.operation === "create") return { operation: "create", path: change.path, content: change.content, message };
+          if (change.operation === "patch") return { operation: "patch", path: change.path, sourceSha256: change.sourceSha256,
+            edits: change.edits, message };
+          return refuse();
+        });
+        const rebuilt = prepareCalculatorRoleChanges(task.role, { summary: preparedInput.summary, changes: rawChanges }, snapshot);
+        if (!samePrepared(preparedInput, rebuilt) || calculatorProposalDigest(preparedInput as PreparedCalculatorChanges) !== expectedProposalDigest ||
+            calculatorProposalDigest(rebuilt) !== expectedProposalDigest ||
+            task.paths.some(path => !rebuilt.files.some(file => file.path === path) && !snapshot.files.some(file => file.path === path && file.exists))) return refuse();
+        // Nothing is registered until every static gate, field and byte matches.
+        proposals.set(rebuilt, { taskId, planFingerprint: actualPlan.fingerprint, snapshot });
+        assessed.set(rebuilt, new Set()); generated.add(taskId); restored.add(taskId); planned = true;
+        return rebuilt;
+      } catch { failureCode ??= "proposal_restore_invalid"; stopped = true; return refuse(); }
+    },
     /** Host-only: evidence for fresh dependency review, not a generation/write.
      * Compare committed current files to the immutable owner base; all changed
      * text must fit the existing complete-change limits or inspection stops. */
     observeCommitted(plan: CalculatorPlan, taskId: string, original: CalculatorSnapshot, current: CalculatorSnapshot): PreparedCalculatorChanges {
       try {
         const task = taskIn(plan, taskId);
-        if (stopped || original.repository !== owner.repository || current.repository !== owner.repository || original.baseSha !== owner.baseSha ||
+        if (stopped || restored.size || original.repository !== owner.repository || current.repository !== owner.repository || original.baseSha !== owner.baseSha ||
             [original, current].some(snapshot => snapshot.changePaths.length !== task.paths.length || task.paths.some(path => !snapshot.changePaths.includes(path)))) return refuse();
         const before = calculatorSources(original), after = calculatorSources(current);
         const changes: unknown[] = [];
@@ -254,7 +313,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
             edits: [edit], message: "Inspect bounded committed changes from owner base" });
         }
         const prepared = prepareCalculatorRoleChanges(task.role, { summary: "Fresh committed task evidence at " + current.baseSha, changes }, original);
-        proposals.set(prepared, { taskId, planFingerprint: plan.fingerprint, snapshot: original, inspectionSha: current.baseSha }); return prepared;
+        proposals.set(prepared, { taskId, planFingerprint: plan.fingerprint, snapshot: original, inspectionSha: current.baseSha }); observed.add(taskId); return prepared;
       } catch { stopped = true; return refuse(); }
     },
     async assess(role: "security" | "reviewer" | "tester", plan: CalculatorPlan, taskId: string, changes: PreparedCalculatorChanges) {
@@ -263,6 +322,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         if (stopped || !["security", "reviewer", "tester"].includes(role) || !identity || identity.taskId !== taskId ||
             identity.planFingerprint !== plan.fingerprint) return refuse();
         const seen = assessed.get(changes) ?? new Set<string>();
+        if (restored.has(taskId) && role !== ["security", "reviewer", "tester"][seen.size]) return refuse();
         if (seen.has(role)) return refuse(); seen.add(role); assessed.set(changes, seen);
         const evidenceId = "changes@" + (identity.inspectionSha ?? changes.baseSha);
         const evidence = JSON.parse(changes.reviewEvidence);
@@ -300,7 +360,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       ...(assessmentDiagnostic ?? {}),
       httpRequestsAttempted: budget.snapshot().attemptedRequests, httpRequestsSent,
       ...(budget.failure ? { taskBudgetCode: budget.failure.code } : {}), ...(contextBudget?.failure ? { contextBudgetCode: contextBudget.failure.code } : {}) }),
-    snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size, repairedTasks: repaired.size,
+    snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size - restored.size, repairedTasks: repaired.size, restoredTasks: restored.size,
       modelBudget: budget.snapshot(), ...(contextBudget ? { contextBudget: contextBudget.snapshot() } : {}),
       ...(prior ? { carriedPriorCharge: prior, aggregatePlanningCharge: {
         attemptedRequests: prior.attemptedRequests + budget.snapshot().attemptedRequests,

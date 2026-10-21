@@ -48,6 +48,8 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   checkpoint?: (event: CalculatorExecutionCheckpointEvent) => void | Promise<void>;
   /** Trusted host may remove the single repair allowance, never increase it. */
   maxRepairs?: 0 | 1;
+  /** Verified, explicit host continuation only; rebuilding calls no developer. */
+  restoreProposal?: (plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot) => PreparedCalculatorChanges | Promise<PreparedCalculatorChanges>;
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
@@ -80,6 +82,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   try {
     // Configuration failures do not consume a task identity or invoke a model.
     if (options.maxRepairs !== undefined && options.maxRepairs !== 0 && options.maxRepairs !== 1) return refuseCalculatorExecution();
+    if (options.restoreProposal !== undefined && (typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
     const maxRepairs = options.maxRepairs ?? 1;
     const env = options.env ?? process.env;
     if ((options.execution ?? "live") === "live" && (env.CALCULATOR_EXECUTION_LIVE_APPROVED !== "RUN_ONE_FREE_CALCULATOR_TASK" ||
@@ -110,9 +113,9 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         return refuseCalculatorExecution();
       return changes;
     }
-    let changes = await stage("generate_1", async () => {
+    let changes = await stage(options.restoreProposal ? "restore_proposal_1" : "generate_1", async () => {
       await assertCalculatorWorkspaceCurrent(workspace); attempts++;
-      const result = await options.team.generate(plan, task!.id, snapshot);
+      const result = options.restoreProposal ? await options.restoreProposal(plan, task!.id, snapshot) : await options.team.generate(plan, task!.id, snapshot);
       await assertCalculatorWorkspaceCurrent(workspace);
       checkpointProposal = validateChanges(result); return checkpointProposal;
     });

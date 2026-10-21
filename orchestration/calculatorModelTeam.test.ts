@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
+import { prepareCalculatorRoleChanges, validateCalculatorAssessment } from "../commander/calculatorTeam.js";
+import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
 import { loadCalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import { CALCULATOR_ACCEPTANCE, calculatorPlanTaskId, createCalculatorPlan } from "./calculatorPlan.js";
 import { CALCULATOR_MODEL_ERROR, createCalculatorModelTeam, type CalculatorPriorModelCharge,
@@ -545,5 +547,125 @@ test("private capture refuses raw or escaped provider/Actions credentials withou
     assert.ok(!JSON.stringify(diagnostic).includes(secret)); assert.ok(!JSON.stringify(diagnostic).includes(content));
     if (prefix !== "ghp_" || escaped) assert.equal(diagnostic.reasonCode, "assessment_rejection_persistence_failed");
     await assert.rejects(() => team.assess("reviewer", plan, task.id, changes), refusal); assert.equal(calls, 2);
+  });
+});
+
+const restoreOutput = { summary: "Restore arithmetic and its required tests", changes: [
+  ...generated.changes,
+  { operation: "create", path: "test/calculator.test.mjs", content: "import test from 'node:test'; test('addition', () => {});", message: "Add scoped module tests" },
+] };
+async function restoreFixture() {
+  const fresh = await snapshot(), prepared = prepareCalculatorRoleChanges(task.role, restoreOutput, fresh);
+  return { fresh, prepared, saved: JSON.parse(JSON.stringify(prepared)), digest: calculatorProposalDigest(prepared) };
+}
+
+test("host restore rebuilds a branded saved proposal without Coder HTTP and preserves all three independent reviews", async () => {
+  const f = await restoreFixture(), seen: string[] = [];
+  const team = createCalculatorModelTeam(owner, environment, async (_url, init) => {
+    const body = JSON.parse(String(init?.body)), packet = JSON.parse(body.messages[1].content);
+    const role = body.messages[0].content.match(/You are the (security|reviewer|tester) /)?.[1];
+    assert.ok(role); seen.push(role);
+    assert.deepEqual(packet.allowedEvidenceRefs, ["changes@" + A]);
+    assert.deepEqual(packet.completeChangedText.changes, JSON.parse(f.prepared.reviewEvidence).changes);
+    return response({ ready: true, summary: "The supplied saved proposal is scoped.", findings: [], unverifiedAreas: ["Host tests remain unverified."] });
+  });
+  const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest);
+  assert.equal(seen.length, 0); assert.equal(team.snapshot().modelBudget.attemptedRequests, 0);
+  assert.equal(team.diagnostic().httpRequestsSent, 0);
+  assert.equal(team.snapshot().generatedTasks, 0); assert.equal(team.snapshot().restoredTasks, 1);
+  assert.notEqual(restored, f.saved); assert.notEqual(restored, f.prepared);
+  assert.deepEqual(restored, f.prepared); assert.equal(calculatorProposalDigest(restored), f.digest);
+  assert.ok(Object.isFrozen(restored)); assert.ok(Object.isFrozen(restored.files));
+  assert.ok(restored.files.every(file => Object.isFrozen(file))); assert.ok(Object.isFrozen(restored.gates));
+  f.saved.files[0].content = "Mutated only after the private artifact was verified.";
+  assert.equal(restored.files[0].content, f.prepared.files[0].content);
+  for (const role of ["security", "reviewer", "tester"] as const)
+    assert.equal((await team.assess(role, plan, task.id, restored)).ready, true);
+  assert.deepEqual(seen, ["security", "reviewer", "tester"]);
+  assert.equal(team.diagnostic().httpRequestsSent, 3);
+  assert.equal(team.snapshot().testsExecuted, false); assert.equal(team.snapshot().publicationAuthorized, false);
+});
+
+test("restore rejects unbranded snapshots and tampered private evidence before HTTP with a terminal latch", async t => {
+  const mutations: Array<[string, (saved: any) => void]> = [
+    ["file-content", saved => { saved.files[0].content += " changed"; }],
+    ["evidence-content", saved => { const evidence = JSON.parse(saved.reviewEvidence); evidence.changes[0].content += " changed"; saved.reviewEvidence = JSON.stringify(evidence); }],
+    ["evidence-metadata", saved => { const evidence = JSON.parse(saved.reviewEvidence); evidence.baseSha = B; saved.reviewEvidence = JSON.stringify(evidence); }],
+    ["evidence-unknown-fields", saved => { const evidence = JSON.parse(saved.reviewEvidence); evidence.approved = true; saved.reviewEvidence = JSON.stringify(evidence); }],
+    ["gates", saved => { saved.gates.publicationAuthorized = true; }],
+    ["repository", saved => { saved.repository = "someone/else"; }],
+    ["branch", saved => { saved.baseRef = owner.baseRef; }],
+    ["sha", saved => { saved.baseSha = B; }],
+    ["path", saved => { saved.files[0].path = "outside.mjs"; }],
+    ["message-type", saved => { saved.files[0].message = 123; }],
+    ["message-secret", saved => { saved.files[0].message = "ghp_" + "A".repeat(32); }],
+    ["unknown-fields", saved => { saved.approved = true; }],
+  ];
+  for (const [name, mutate] of mutations) await t.test(name, async () => {
+    const f = await restoreFixture(); mutate(f.saved); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({}); });
+    assert.throws(() => team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest), refusal);
+    assert.equal(calls, 0); assert.equal(team.snapshot().stopped, true);
+    assert.throws(() => team.restoreProposal(plan, task.id, f.fresh, f.prepared, f.digest), refusal);
+    await assert.rejects(() => team.plan(), refusal); assert.equal(calls, 0);
+  });
+  for (const name of ["snapshot-brand", "digest", "plan", "completed-prefix"] as const) await t.test(name, async () => {
+    const f = await restoreFixture(); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({}); });
+    const complete = validateCalculatorAssessment("security", { ready: true, summary: "A previously returned assessment.", findings: [], unverifiedAreas: [] }, ["changes@" + A]);
+    assert.throws(() => team.restoreProposal(name === "plan" ? { ...plan, fingerprint: "0".repeat(64) } : plan, task.id,
+      name === "snapshot-brand" ? JSON.parse(JSON.stringify(f.fresh)) : f.fresh, f.saved,
+      name === "digest" ? "0".repeat(64) : f.digest, name === "completed-prefix" ? [complete] : []), refusal);
+    assert.equal(calls, 0); assert.equal(team.snapshot().stopped, true);
+  });
+});
+
+test("restore requires every absent task file and reconstructs patches against the fresh branded source", async t => {
+  await t.test("missing required absent companion", async () => {
+    const fresh = await snapshot(), partial = prepareCalculatorRoleChanges(task.role, generated, fresh); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({}); });
+    assert.throws(() => team.restoreProposal(plan, task.id, fresh, partial, calculatorProposalDigest(partial)), refusal);
+    assert.equal(calls, 0);
+  });
+  await t.test("fresh source hash differs", async () => {
+    const old = "export const value = 1;\n// Original private companion source.\n";
+    const original = await snapshot(old), fresh = await snapshot(old.replace("value = 1", "value = 9"));
+    const prepared = prepareCalculatorRoleChanges(task.role, { summary: "Adjust arithmetic and add required tests", changes: [
+      { operation: "patch", path: "src/calculator.mjs", sourceSha256: createHash("sha256").update(old).digest("hex"),
+        edits: [{ before: "value = 1", after: "value = 2" }], message: "Adjust arithmetic" }, restoreOutput.changes[1],
+    ] }, original);
+    let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({}); });
+    assert.throws(() => team.restoreProposal(plan, task.id, fresh, JSON.parse(JSON.stringify(prepared)), calculatorProposalDigest(prepared)), refusal);
+    assert.equal(calls, 0);
+  });
+});
+
+test("a restored capability rejects Coder, repair, plan, observation and another restore before HTTP", async t => {
+  for (const action of ["generate", "repair", "plan", "observe", "restore"] as const) await t.test(action, async () => {
+    const f = await restoreFixture(); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => { calls++; return response({}); });
+    const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest);
+    if (action === "generate") await assert.rejects(() => team.generate(plan, task.id, f.fresh), refusal);
+    if (action === "repair") await assert.rejects(() => team.repair(plan, task.id, f.fresh,
+      { previous: restored, proposalDigest: f.digest, issues: ["A host-observed task concern."] }), refusal);
+    if (action === "plan") await assert.rejects(() => team.plan(), refusal);
+    if (action === "observe") assert.throws(() => team.observeCommitted(plan, task.id, f.fresh, f.fresh), refusal);
+    if (action === "restore") assert.throws(() => team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest), refusal);
+    assert.equal(calls, 0); assert.equal(team.snapshot().stopped, true);
+    await assert.rejects(() => team.assess("security", plan, task.id, restored), refusal); assert.equal(calls, 0);
+  });
+});
+
+test("restored assessment roles cannot skip or repeat the pending strict prefix", async t => {
+  for (const afterSecurity of [false, true]) await t.test(afterSecurity ? "cannot skip reviewer" : "cannot skip security", async () => {
+    const f = await restoreFixture(); let calls = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => {
+      calls++; return response({ ready: true, summary: "The supplied saved proposal is scoped.", findings: [], unverifiedAreas: [] });
+    });
+    const restored = team.restoreProposal(plan, task.id, f.fresh, f.saved, f.digest);
+    if (afterSecurity) await team.assess("security", plan, task.id, restored);
+    await assert.rejects(() => team.assess(afterSecurity ? "tester" : "reviewer", plan, task.id, restored), refusal);
+    assert.equal(calls, afterSecurity ? 1 : 0); assert.equal(team.snapshot().stopped, true);
   });
 });
