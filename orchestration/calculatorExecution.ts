@@ -46,6 +46,8 @@ export type CalculatorExecutionCheckpointEvent = Readonly<{
 export async function runCalculatorExecution(workspace: CalculatorWorkspace, options: {
   team: CalculatorExecutionTeam; tools: CalculatorExecutionTools; verifyDependencies?: CalculatorCheckRunner;
   checkpoint?: (event: CalculatorExecutionCheckpointEvent) => void | Promise<void>;
+  /** Trusted host may remove the single repair allowance, never increase it. */
+  maxRepairs?: 0 | 1;
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
@@ -77,6 +79,8 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   }
   try {
     // Configuration failures do not consume a task identity or invoke a model.
+    if (options.maxRepairs !== undefined && options.maxRepairs !== 0 && options.maxRepairs !== 1) return refuseCalculatorExecution();
+    const maxRepairs = options.maxRepairs ?? 1;
     const env = options.env ?? process.env;
     if ((options.execution ?? "live") === "live" && (env.CALCULATOR_EXECUTION_LIVE_APPROVED !== "RUN_ONE_FREE_CALCULATOR_TASK" ||
         env.AGENT_FACTORY_ENABLE_GITHUB_WRITES !== "true" || env.AGENT_FACTORY_LEGAL_ENABLED !== "false" ||
@@ -141,7 +145,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         const failed = "checks_failed_" + attempt;
         activeStage = failed; receipt.recordStage(failed, "running");
         await checkpoint(failed, "blocked"); receipt.recordStage(failed, "blocked"); activeStage = undefined;
-        if (attempt === 2) return await finish("blocked", "repair_limit_reached");
+        if (repairs >= maxRepairs) return await finish("blocked", "repair_limit_reached");
         activeAttempt = 2; attempts++; repairs++;
         changes = await stage("repair_2", async () => {
           await assertCalculatorWorkspaceCurrent(workspace);
