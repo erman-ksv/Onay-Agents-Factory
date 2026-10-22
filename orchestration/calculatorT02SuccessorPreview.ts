@@ -94,7 +94,7 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
     const candidate = await reader.readCommit(PIN.candidateSha);
     const parent = await reader.readCommit(BASE);
     if (candidate.sha !== PIN.candidateSha || !SHA.test(candidate.treeSha) ||
-        candidate.parents.length !== 1 || candidate.parents[0] !== BASE ||
+        !Array.isArray(candidate.parents) || candidate.parents.length !== 1 || candidate.parents[0] !== BASE ||
         parent.sha !== BASE || !SHA.test(parent.treeSha)) return refuse();
     const [now, before] = await Promise.all([reader.readTree(candidate.treeSha),reader.readTree(parent.treeSha)]);
     if (now.truncated !== false || before.truncated !== false ||
