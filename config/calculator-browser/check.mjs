@@ -48,7 +48,8 @@ async function run(){
  await rpc('Page.enable');await rpc('Runtime.enable');
  await rpc('Page.navigate',{url:'chrome://sandbox'});
  let sandbox='';for(let i=0;i<40;i++){try{await isolatedWorld();sandbox=await evaluate('document.body?.innerText||""');}catch{}if(/Seccomp-BPF sandbox\s+Yes/i.test(sandbox))break;await pause(100);}
- assert.match(sandbox,/Namespace sandbox\s+Yes/i);assert.match(sandbox,/Seccomp-BPF sandbox\s+Yes/i);
+ const namespaces=/Namespace sandbox\s+Yes/i.test(sandbox)||(/PID namespaces\s+Yes/i.test(sandbox)&&/Network namespaces\s+Yes/i.test(sandbox));
+ if(!namespaces||!/Seccomp-BPF sandbox\s+Yes/i.test(sandbox))throw Error('browser_sandbox_unavailable');
  const security={ready:true,sandboxDisabled:false,networkIsolated:true,credentialsExcluded:true};
  if(input.mode==='preflight')return {version:1,mode:'preflight',...security,browser:version.product.replace(/^HeadlessChrome\//,'Chrome/')};
  server=createServer((req,res)=>{let path;try{path=new URL(req.url,'http://localhost').pathname;}catch{res.writeHead(400).end();return;}
