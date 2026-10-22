@@ -22,10 +22,12 @@ declare const brand: unique symbol;
 export type CalculatorAssessmentEvidence = Readonly<{ [brand]: true }>;
 export type CalculatorAssessmentEvidenceProvider = (task: CalculatorPlanTask, changes: PreparedCalculatorChanges) =>
   CalculatorAssessmentEvidence | undefined | Promise<CalculatorAssessmentEvidence | undefined>;
-type Record = { taskId: string; changes: PreparedCalculatorChanges; digest: string; packet: Readonly<{
+type Record = { taskId: string; changes: PreparedCalculatorChanges; digest: string;
+  proposalChecks: CalculatorProposalTests; browserChecks: CalculatorBrowserChecks; packet: Readonly<{
   evidenceId: string; proposalDigest: string; baseSha: string;
   dependencyContract: Readonly<{ path: string; blobSha: string; sourceSha256: string; signature: string }>;
-  proposalChecks: CalculatorProposalTests; browserChecks: CalculatorBrowserChecks;
+  proposalChecks: Pick<CalculatorProposalTests, "status" | "testsExecuted" | "failures">;
+  browserChecks: Pick<CalculatorBrowserChecks, "status" | "testsExecuted" | "browser" | "sandboxDisabled" | "pageErrors" | "blockedRequests" | "scenarios">;
   unverifiedAreas: readonly string[]; publicationAuthorized: false;
 }> };
 const records = new WeakMap<CalculatorAssessmentEvidence, Record>();
@@ -67,15 +69,21 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
         calculatorProposalDigest(changes) !== digest) return refuse();
     const packet = Object.freeze({ evidenceId: "host-checks@" + digest, proposalDigest: digest, baseSha: changes.baseSha,
       dependencyContract: Object.freeze({ path, blobSha: metadata.blobSha, sourceSha256: metadata.sourceSha256,
-        signature: "calculate(left, operator, right)" }), proposalChecks,
-      browserChecks: Object.freeze({ ...browser, scenarios: Object.freeze([...browser.scenarios]) }),
+        signature: "calculate(left, operator, right)" }),
+      // Identity occurs once above and in the outer task packet. Retain full
+      // canonical checks privately; do not charge Groq for duplicate bindings.
+      proposalChecks: Object.freeze({ status: proposalChecks.status, testsExecuted: proposalChecks.testsExecuted, failures: proposalChecks.failures }),
+      browserChecks: Object.freeze({ status: browser.status, testsExecuted: browser.testsExecuted, browser: browser.browser,
+        sandboxDisabled: browser.sandboxDisabled, pageErrors: browser.pageErrors, blockedRequests: browser.blockedRequests,
+        scenarios: Object.freeze([...browser.scenarios]) }),
       unverifiedAreas: Object.freeze(["Unshown unchanged source beyond the verified arithmetic export signature",
         "Keyboard, narrow-screen layout, chained expressions, other browsers and phones",
         "Independent model verdicts, publication, exact-candidate CI and overall completion"]), publicationAuthorized: false as const });
     const text = JSON.stringify(packet);
     if (Buffer.byteLength(text) > 3000 || scanForSecrets(text).length) return refuse();
     const token = Object.freeze({}) as CalculatorAssessmentEvidence;
-    records.set(token, { taskId: task.id, changes, digest, packet }); return token;
+    records.set(token, { taskId: task.id, changes, digest, proposalChecks,
+      browserChecks: Object.freeze({ ...browser, scenarios: Object.freeze([...browser.scenarios]) }), packet }); return token;
   } catch { return refuse(); }
 }
 

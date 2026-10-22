@@ -27,10 +27,10 @@ async function snapshot(paths: readonly string[], source = core, baseSha = A) {
     ] }), readBlob: async () => ({ sha: blob, encoding: "base64", content: Buffer.from(source).toString("base64") }),
   });
 }
-async function setup() {
+async function setup(savedUiSized = false) {
   const snap = await snapshot(task.paths), dependency = await snapshot(["src/calculator.mjs"]);
   const changes = prepareCalculatorRoleChanges("frontend", { summary: "Restore scoped UI", changes: task.paths.map(path => ({
-    operation: "create", path, content: path === "index.html" ? "<output>0</output>" : path === "styles.css" ? "output{display:block}" : "export const initial=0;",
+    operation: "create", path, content: (path === "index.html" ? "<output>0</output>" : path === "styles.css" ? "output{display:block}" : "export const initial=0;").padEnd(savedUiSized ? (path === "styles.css" ? 600 : 1400) : 0),
     message: "Restore reviewed task scope",
   })) }, snap);
   const digest = calculatorProposalDigest(changes);
@@ -51,6 +51,9 @@ test("real host callbacks produce bounded, exact-proposal evidence without uncha
   assert.ok(Buffer.byteLength(serialized) <= 3000); assert.ok(!serialized.includes(core)); assert.ok(!serialized.includes("PRIVATE_SOURCE"));
   assert.ok(p.unverifiedAreas.some(area => area.includes("Keyboard"))); assert.equal(p.publicationAuthorized, false);
   assert.ok(Object.isFrozen(p)); assert.ok(Object.isFrozen(p.browserChecks.scenarios));
+  assert.deepEqual(Object.keys(p.proposalChecks).sort(), ["failures", "status", "testsExecuted"]);
+  for (const key of ["repository", "taskId", "baseSha", "proposalDigest", "dependencySha256"])
+    assert.equal(Object.hasOwn(p.browserChecks, key), false);
 });
 test("serialized claims, a cloned proposal and another task cannot reuse a capability", async () => {
   const f = await setup(), token = await collectCalculatorAssessmentEvidence(task, f.changes, f.dependency, f.runners);
@@ -118,4 +121,16 @@ test("a JSON evidence provider fails before HTTP and before any byte or token ch
   assert.equal(calls, 0); assert.equal(team.checkpointCharge()!.attemptedRequests, 0); assert.equal(team.checkpointCharge()!.reservedRunTokens, 0);
   assert.throws(() => createCalculatorModelTeam(saved.request, env, undefined, {}, undefined, undefined, undefined,
     {} as never));
+});
+test("three saved-UI-sized review packets fit unchanged Groq per-request and run token limits", async () => {
+  const f = await setup(true); let cap: CalculatorAssessmentEvidence; let clock = 0; let calls = 0;
+  const team = createCalculatorModelTeam(saved.request, env, async () => {
+    calls++; return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({
+      ready: true, summary: "Budget fixture only", findings: [], unverifiedAreas: ["No real model review"] }) } }] });
+  }, { now: () => clock, wait: async ms => { clock += ms; } }, undefined, undefined, "calculator-successor-four-roles", () => cap);
+  const changes = team.restoreProposal(plan, task.id, f.snap, f.changes, calculatorProposalDigest(f.changes));
+  cap = await collectCalculatorAssessmentEvidence(task, changes, f.dependency, f.runners);
+  for (const role of ["security", "reviewer", "tester"] as const) await team.assess(role, plan, task.id, changes);
+  assert.equal(calls, 3); assert.ok(team.checkpointCharge()!.reservedRunTokens <= 16000);
+  assert.ok(team.checkpointCharge()!.totalRequestBytes <= 72000); assert.equal(team.diagnostic().contextBudgetCode, undefined);
 });
