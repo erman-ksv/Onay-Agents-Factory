@@ -45,9 +45,10 @@ export function prepareCalculatorRuntimeAfterCi(value: unknown): CalculatorRunti
     persistBarrier: descriptors.persistBarrier.value as CalculatorAfterCiBarrierPersistence }); }
   catch { return refuse(); }
 }
-/** Host-only additional allowance. These literals lower the normal limits;
- * neither owner/model JSON nor environment variables can select a larger cap. */
+/** Host-only limits. The named successor preset changes waiting time only,
+ * with four requests, fixed byte/output ceilings and no repair. */
 export type CalculatorRuntimeHostLimits = Readonly<
+  { maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0; hostPreset: "calculator-successor-four-roles" } |
   { maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0 } |
   { maxRequests: 3; maxRunBytes: 72000; maxRepairs: 0 } |
   { maxRequests: 1; maxRunBytes: 24000; maxRepairs: 0 }>;
@@ -55,9 +56,13 @@ export function prepareCalculatorRuntimeHostLimits(value: unknown): CalculatorRu
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
-      Object.keys(value).sort().join(",") !== "maxRepairs,maxRequests,maxRunBytes") return refuse();
+      !["maxRepairs,maxRequests,maxRunBytes", "hostPreset,maxRepairs,maxRequests,maxRunBytes"].includes(Object.keys(value).sort().join(","))) return refuse();
   const raw = value as Record<string, unknown>;
   if (raw.maxRepairs !== 0) return refuse();
+  if (Object.hasOwn(raw, "hostPreset")) {
+    if (raw.hostPreset !== "calculator-successor-four-roles" || raw.maxRequests !== 4 || raw.maxRunBytes !== 96000) return refuse();
+    return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0, hostPreset: "calculator-successor-four-roles" });
+  }
   if (raw.maxRequests === 4 && raw.maxRunBytes === 96000) return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0 });
   if (raw.maxRequests === 3 && raw.maxRunBytes === 72000) return Object.freeze({ maxRequests: 3, maxRunBytes: 72000, maxRepairs: 0 });
   if (raw.maxRequests === 1 && raw.maxRunBytes === 24000) return Object.freeze({ maxRequests: 1, maxRunBytes: 24000, maxRepairs: 0 });
@@ -283,6 +288,8 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
   continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi) {
   const limits = prepareCalculatorRuntimeHostLimits(hostLimits), continuation = prepareCalculatorRuntimeContinuation(continuationInput);
   const afterCi = prepareCalculatorRuntimeAfterCi(afterCiInput);
+  const hostPreset = limits && "hostPreset" in limits ? limits.hostPreset : undefined;
+  if (hostPreset && (!afterCi || continuation)) return refuse();
   if (afterCi && (mode !== "run" || continuation || limits?.maxRequests !== 4 || limits.maxRepairs !== 0)) return refuse();
   if ((limits || continuation) && mode !== "run") return refuse();
   if (continuation ? limits?.maxRequests !== (continuation.restoredAssessments?.length === 2 ? 1 : 3) :
@@ -403,7 +410,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
           status: active.status, httpInFlight: active.httpInFlight };
       }, charge: () => charge(), persistReturned: returnedCharge => save({ ...active, status: "blocked", httpInFlight: false }, returnedCharge),
     });
-    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected });
+    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected }, hostPreset);
     function charge(): CalculatorPriorModelCharge {
       const result = team.checkpointCharge(); if (!result) return refuse(); return result;
     }

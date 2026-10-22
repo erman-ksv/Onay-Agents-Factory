@@ -1,5 +1,5 @@
 import type { ProviderContextBudget, ProviderFailureCode } from "../commander/providerContextBudget.js";
-import { DEFAULT_TASK_MODEL_BUDGET, type createTaskModelBudgetFetch, type TaskModelBudgetFailureCode } from "./taskModelBudget.js";
+import { CALCULATOR_SUCCESSOR_TASK_BUDGET, DEFAULT_TASK_MODEL_BUDGET, type createTaskModelBudgetFetch, type TaskModelBudgetFailureCode } from "./taskModelBudget.js";
 
 export type CalculatorModelTiming = { now?: () => number; wait?: (milliseconds: number) => Promise<void> };
 const ERROR = "Calculator Groq admission unavailable within the existing task budget. No retry.";
@@ -45,10 +45,12 @@ export class CalculatorModelAdmissionError extends Error {
  * reservations, deadlines and terminal failures. No failed request is replayed. */
 export function createCalculatorGroqPacer(context: ProviderContextBudget,
   task: Pick<ReturnType<typeof createTaskModelBudgetFetch>, "failure" | "snapshot">,
-  timing: CalculatorModelTiming = {}, wallTimeMs: number = DEFAULT_TASK_MODEL_BUDGET.wallTimeMs) {
+  timing: CalculatorModelTiming = {}, wallTimeMs: number = DEFAULT_TASK_MODEL_BUDGET.wallTimeMs,
+  hostPreset?: "calculator-successor-four-roles") {
   const now = timing.now ?? (() => performance.now()), wait = timing.wait ?? (milliseconds => new Promise<void>(resolve => setTimeout(resolve, milliseconds)));
   if (typeof now !== "function" || typeof wait !== "function" || !Number.isSafeInteger(wallTimeMs) ||
-      wallTimeMs < 1 || wallTimeMs > DEFAULT_TASK_MODEL_BUDGET.wallTimeMs) throw Error(ERROR);
+      wallTimeMs < 1 || wallTimeMs > (hostPreset === "calculator-successor-four-roles" ? CALCULATOR_SUCCESSOR_TASK_BUDGET.wallTimeMs : DEFAULT_TASK_MODEL_BUDGET.wallTimeMs) ||
+      (hostPreset !== undefined && (hostPreset !== "calculator-successor-four-roles" || wallTimeMs !== CALCULATOR_SUCCESSOR_TASK_BUDGET.wallTimeMs))) throw Error(ERROR);
   return async (body: string): Promise<void> => {
     const bytes = typeof body === "string" ? Buffer.byteLength(body, "utf8") : 0;
     const input = Math.ceil(bytes / 3) + 256;

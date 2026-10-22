@@ -45,7 +45,8 @@ export const CALCULATOR_TEAM = Object.freeze({
     "Approved UI task, UX criteria, arithmetic interface and bounded source evidence",
     "A bounded create/patch proposal for HTML/CSS/browser JavaScript and relevant UI tests",
     "Use plain HTML, CSS and browser JavaScript ES modules. Keep arithmetic in its module and presentation in the UI. " +
-    "Implement buttons, keyboard, visible error recovery and the responsive 360px layout with accessible controls. " +
+    "Implement only the current task.paths and task.acceptanceIds. Keyboard support, responsive polish and integration tests belong to their saved tasks; do not pull them into an earlier UI task. Keep accessible controls and visible error recovery within the selected scope. " +
+    "The response allowance is 1200 output tokens including model reasoning. Return concise working code, short summary/messages, no commentary or decorative extras; aim for at most 2200 UTF-8 bytes of new source across the selected files. Do not truncate code or omit required files to meet that target. " +
     "Preserve the agreed calculate(left, operator, right):number arithmetic interface and nonempty division-by-zero Error. Include viewport meta, a visible output/status/live result, controls and a relative src/app.mjs module. Do not introduce React, Expo, native APIs or external dependencies. " +
     "For existing files use exact patches; for new files require host-proven absence.",
     ["index.html", "styles.css", "src/app.mjs", "test/ui.test.mjs"]),

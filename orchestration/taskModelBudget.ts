@@ -9,6 +9,8 @@ export type TaskModelBudgetOptions = {
   wallTimeMs?: number;
   /** Monotonic clock injection for offline tests. Real deadlines still apply. */
   now?: () => number;
+  /** Exact host-only preset for a new four-role successor, never a retry. */
+  hostPreset?: "calculator-successor-four-roles";
 };
 
 export const DEFAULT_TASK_MODEL_BUDGET = Object.freeze({
@@ -26,6 +28,8 @@ export const HARD_TASK_MODEL_BUDGET = Object.freeze({
   maxOutputTokens: 2_048,
   wallTimeMs: 180_000,
 });
+export const CALCULATOR_SUCCESSOR_TASK_BUDGET = Object.freeze({ maxRequests: 4, maxRequestBytes: 24000,
+  maxRunBytes: 96000, maxOutputTokens: 1200, wallTimeMs: 300000 });
 
 export type TaskModelBudgetFailureCode = "request_limit" | "request_bytes_limit" |
   "run_bytes_limit" | "task_timeout" | "invalid_request" | "rate_limited" |
@@ -87,10 +91,14 @@ export function createTaskModelBudgetFetch(
   readonly failure: TaskModelBudgetFailure | undefined;
   readonly providerHttpStatus: number | undefined;
 } {
-  const { now = () => performance.now(), ...overrides } = options;
+  const { now = () => performance.now(), hostPreset, ...overrides } = options;
   const limits = { ...DEFAULT_TASK_MODEL_BUDGET, ...overrides };
+  if (hostPreset !== undefined && (hostPreset !== "calculator-successor-four-roles" ||
+      Object.entries(CALCULATOR_SUCCESSOR_TASK_BUDGET).some(([key, value]) => limits[key as keyof typeof limits] !== value)))
+    throw Error("Invalid host successor budget preset.");
   for (const key of Object.keys(DEFAULT_TASK_MODEL_BUDGET) as (keyof typeof DEFAULT_TASK_MODEL_BUDGET)[]) {
-    if (!isPositiveInteger(limits[key]) || limits[key] > HARD_TASK_MODEL_BUDGET[key]) {
+    const ceiling = hostPreset && key === "wallTimeMs" ? CALCULATOR_SUCCESSOR_TASK_BUDGET.wallTimeMs : HARD_TASK_MODEL_BUDGET[key];
+    if (!isPositiveInteger(limits[key]) || limits[key] > ceiling) {
       throw new Error("Task model limits must be positive safe integers within the host ceilings.");
     }
   }

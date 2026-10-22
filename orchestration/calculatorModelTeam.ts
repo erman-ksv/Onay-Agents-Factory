@@ -10,7 +10,7 @@ import { buildCalculatorRoleInstructions, prepareCalculatorRoleChanges, validate
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { calculatorProposalDigest, validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
-import { DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
+import { CALCULATOR_SUCCESSOR_TASK_BUDGET, DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
 import { CalculatorModelAdmissionError, createCalculatorGroqPacer, type CalculatorModelAdmissionDiagnostic, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
 
 export const CALCULATOR_MODEL_ERROR = "Calculator model team stopped: configuration, evidence, response or context budget is unverified. No retry or write is authorized.";
@@ -94,7 +94,7 @@ function privateRejectedAssessment(result: unknown, providerKey: string): unknow
  * installs, automatic retries, or legal role. One instance owns one run's ledger. */
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
   transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}, priorCharge?: CalculatorPriorModelCharge,
-  checkpointHooks?: CalculatorModelCheckpointHooks) {
+  checkpointHooks?: CalculatorModelCheckpointHooks, hostPreset?: "calculator-successor-four-roles") {
   const owner = prepareCalculatorGoal(ownerRequest);
   const requestOwner = Object.freeze({ version: 1 as const, id: owner.id, goal: owner.goal,
     baseRef: owner.baseRef, baseSha: owner.baseSha, provider: owner.provider });
@@ -116,7 +116,8 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       Object.values(prior).some(value => !Number.isSafeInteger(value) || value < 1) ||
       prior.attemptedRequests >= DEFAULT_TASK_MODEL_BUDGET.maxRequests || prior.totalRequestBytes >= DEFAULT_TASK_MODEL_BUDGET.maxRunBytes ||
       prior.elapsedMs >= DEFAULT_TASK_MODEL_BUDGET.wallTimeMs || prior.reservedRunTokens >= 16000 - 1200)) return refuse();
-  const wallTimeMs = DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - (prior?.elapsedMs ?? 0);
+  if (hostPreset !== undefined && (hostPreset !== "calculator-successor-four-roles" || prior || config.provider !== "groq")) return refuse();
+  const wallTimeMs = (hostPreset ? CALCULATOR_SUCCESSOR_TASK_BUDGET.wallTimeMs : DEFAULT_TASK_MODEL_BUDGET.wallTimeMs) - (prior?.elapsedMs ?? 0);
   let stopped = false, planned = false, httpRequestsSent = 0;
   let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   let admissionDiagnostic: CalculatorModelAdmissionDiagnostic | undefined;
@@ -137,14 +138,14 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     httpRequestsSent++;
     return transport(input, init);
   };
-  const budget = createTaskModelBudgetFetch({ now, ...(prior ? {
+  const budget = createTaskModelBudgetFetch({ now, ...(hostPreset ? { ...CALCULATOR_SUCCESSOR_TASK_BUDGET, hostPreset } : {}), ...(prior ? {
     maxRequests: DEFAULT_TASK_MODEL_BUDGET.maxRequests - prior.attemptedRequests,
     maxRunBytes: DEFAULT_TASK_MODEL_BUDGET.maxRunBytes - prior.totalRequestBytes,
     wallTimeMs: DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - prior.elapsedMs,
   } : {}) }, guardedTransport);
   const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: 1200, now,
     ...(prior ? { maxRunTokens: 16000 - prior.reservedRunTokens } : {}) }) : undefined;
-  const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs) : undefined;
+  const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs, hostPreset) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
     config.provider === "cloudflare" ? createCloudflareCompatibleFetch(budget.fetch) : budget.fetch;
   const generated = new Set<string>(), repaired = new Set<string>(), restored = new Set<string>(), observed = new Set<string>();
