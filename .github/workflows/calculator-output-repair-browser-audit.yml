@@ -88,7 +88,7 @@ jobs:
            await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const address=server.address();assert.ok(address&&typeof address==='object');const origin='http://127.0.0.1:'+address.port;
            const child=spawn(chrome,['--headless=new','--disable-gpu','--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run','--no-default-browser-check','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore',shell:false});
            let ws:WebSocket|undefined;let sequence=0,session:string|undefined;const pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
-           let pageErrors=0,blockedRequests=0;const blockedPaths:string[]=[],steps:any[]=[];
+           let pageErrors=0,blockedRequests=0,lastDisplay:any;const blockedPaths:string[]=[],steps:any[]=[];
            try{
             const portFile=join(profile,'DevToolsActivePort');for(let i=0;i<100&&!existsSync(portFile);i++){assert.equal(child.exitCode,null,'Chrome sandbox startup failed');await sleep(100);}assert.ok(existsSync(portFile),'Chrome startup timeout');
             const [port,endpoint]=readFileSync(portFile,'utf8').trim().split('\n');ws=new WebSocket('ws://127.0.0.1:'+port+endpoint);
@@ -104,7 +104,7 @@ jobs:
             const evaluate=async(expression:string)=>{const r=await rpc('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});assert.equal(r.exceptionDetails,undefined,'Browser evaluation failed');return r.result.value;};
             await rpc('Page.navigate',{url:origin+'/index.html'});let ready=false;for(let i=0;i<100;i++){ready=await evaluate("document.readyState==='complete'&&document.querySelectorAll('button').length>0");if(ready)break;await sleep(100);}assert.ok(ready,'UI did not load');
             const labels=await evaluate("Array.from(document.querySelectorAll('button')).map(b=>(b.getAttribute('aria-label')||b.textContent||'').trim()).slice(0,30)");
-            const display=()=>evaluate("(()=>{const e=document.querySelector('output')||document.getElementById('display')||document.getElementById('result')||document.querySelector('input[readonly]')||document.querySelector('[role=status]');return e?String('value' in e?e.value:e.textContent).trim():null})()");
+            const display=async()=>{const value=await evaluate("(()=>{const e=document.querySelector('output')||document.getElementById('display')||document.getElementById('result')||document.querySelector('input[readonly]')||document.querySelector('[role=status]');return e?String('value' in e?e.value:e.textContent).trim():null})()");lastDisplay=value;return value;};
             const click=async(kind:string)=>{const expression=`(()=>{const kind=${JSON.stringify(kind)},buttons=Array.from(document.querySelectorAll('button'));const b=buttons.find(b=>{const texts=[b.textContent||'',b.getAttribute('aria-label')||''].map(x=>x.trim());return texts.some(t=>kind==='clear'?/^(C|AC|Clear|Очистить)$/i.test(t):kind==='backspace'?/backspace|delete|удал|⌫|←|⌦|back/i.test(t):t===kind)});if(!b)return false;b.click();return true})()`;assert.equal(await evaluate(expression),true,'Required button missing: '+kind);await sleep(25);};
             const screenshot=async(name:string)=>{const r=await rpc('Page.captureScreenshot',{format:'png'});writeFileSync(join(outputDirectory,name+'.png'),Buffer.from(r.data,'base64'),{mode:0o600});};
             await screenshot('initial');await click('1');await click('2');await click('3');assert.equal(await display(),'123');await click('backspace');assert.equal(await display(),'12');steps.push({scenario:'Entering 123 then deleting the last digit displays 12',status:'passed'});await screenshot('backspace-12');
@@ -113,7 +113,9 @@ jobs:
             assert.equal(pageErrors,0);assert.equal(blockedRequests,0);const proof={status:'passed',testsExecuted:true,browser:version.product,browserSandboxDisabled:false,dependencyInstallationPerformed:false,steps,buttonLabels:labels,pageErrors,blockedRequests,proposalDigest:calculatorProposalDigest(currentProposal),publicationAuthorized:false};writeFileSync(join(outputDirectory,'browser-proof.json'),JSON.stringify(proof,null,2)+'\n',{mode:0o600});return proof;
            }catch(error){
            const app=sourceMap.get('/src/app.mjs')??'',html=sourceMap.get('/index.html')??'';
-           const diagnostic={status:'saved-proposal-browser-failed',testsExecuted:true,steps,pageErrors,blockedRequests,blockedPaths,
+           const calls:string[]=[];for(const m of app.matchAll(/\bcalculate\s*\(/g)){let i=m.index!+m[0].length,depth=1,end=i;for(;end<app.length&&end-i<200;end++){if(app[end]==='(')depth++;if(app[end]===')'&&!--depth)break;}if(depth===0)calls.push(app.slice(i,end));}
+           const core=sourceMap.get('/src/calculator.mjs')??'',signature=/\bcalculate\s*(?:=\s*)?\(([^)]{1,100})\)/.exec(core)?.[1];
+           const diagnostic={status:'saved-proposal-browser-failed',testsExecuted:true,steps,pageErrors,blockedRequests,blockedPaths,lastDisplay,calculateCallArguments:calls,coreCalculateParameters:signature,
             moduleImports:[...app.matchAll(/(?:from\s*|import\s*)['"]([^'"]{1,200})['"]/g)].map(m=>m[1]),
             htmlScriptSources:[...html.matchAll(/<script\b[^>]*\bsrc=['"]([^'"]{1,200})['"]/g)].map(m=>m[1]),
             htmlIds:[...html.matchAll(/\bid=['"]([^'"]{1,100})['"]/g)].map(m=>m[1]),
