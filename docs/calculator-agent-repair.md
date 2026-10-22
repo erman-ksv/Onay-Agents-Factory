@@ -30,6 +30,11 @@ the stopped data. Serialized state by itself does not grant resume authority.
 All old receipts, artifacts and consumed barriers must remain intact. The
 adapter preserves the supplied prior charge and exposes the new/aggregate
 charge, but cannot authenticate an artifact or fund a new phase by itself.
+Both `checkpointCharge()` and the pre-HTTP persistence hook receive cumulative
+old-plus-new charges, including the reservation for the imminent request. A
+failed persistence hook stops before transport; it cannot refund the reservation
+or let a restart forget the earlier phase. Phase budget diagnostics remain
+separate. An unrepresentable cumulative charge stops instead of rounding it.
 
 `verifyRepairedProposal` must execute/verify actual checks of the agent's NEW
 digest and return the existing branded host-evidence capability. JSON assertions

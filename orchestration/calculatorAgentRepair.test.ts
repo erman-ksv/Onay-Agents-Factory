@@ -265,3 +265,48 @@ test("full private dependency source quoted in a finding stays out of the model 
   const request = team.importRepairFeedback(plan, task.id, previous, feedback, undefined, f.dependency);
   await assert.rejects(() => team.repair(plan, task.id, f.snapshot, request)); assert.equal(calls, 0);
 });
+test("pre-HTTP persistence and exported checkpoints retain old plus newly reserved costs", async () => {
+  const f = await fixture(); let calls = 0;
+  const persisted: Readonly<Record<string, number>>[] = [];
+  const team = createCalculatorAgentRepairTeam(saved.request, env, f.host, {
+    checkpoints: { beforeRequest: state => {
+      assert.equal(calls, 0); assert.equal(state.attemptedRequests, priorCharge.attemptedRequests + 1);
+      assert.ok(state.totalRequestBytes > priorCharge.totalRequestBytes);
+      assert.ok(state.reservedRunTokens > priorCharge.reservedRunTokens);
+      assert.ok(Object.isFrozen(state)); persisted.push(state);
+    } },
+    transport: async () => { calls++; return result(f.proposal(true)); },
+  });
+  await team.generate(plan, task.id, f.snapshot);
+  assert.equal(calls, 1); assert.equal(persisted.length, 1);
+  assert.equal(team.checkpointCharge()!.attemptedRequests, priorCharge.attemptedRequests + 1);
+  assert.deepEqual(team.checkpointCharge(), team.snapshot().aggregateCharge);
+  assert.equal(team.snapshot().modelBudget.attemptedRequests, 1);
+});
+test("a failed cumulative checkpoint write prevents HTTP without refunding old or new charges", async () => {
+  const f = await fixture(); let calls = 0, writes = 0;
+  const team = createCalculatorAgentRepairTeam(saved.request, env, f.host, {
+    checkpoints: { beforeRequest: state => {
+      writes++; assert.equal(state.attemptedRequests, priorCharge.attemptedRequests + 1); throw Error("fixture disk failure");
+    } }, transport: async () => { calls++; return result(f.proposal(true)); },
+  });
+  await assert.rejects(() => team.generate(plan, task.id, f.snapshot));
+  assert.equal(calls, 0); assert.equal(writes, 1);
+  assert.equal(team.diagnostic().reasonCode, "model_checkpoint_persistence_failed");
+  assert.equal(team.checkpointCharge()!.attemptedRequests, priorCharge.attemptedRequests + 1);
+  assert.deepEqual(team.snapshot().carriedPriorCharge, priorCharge);
+  await assert.rejects(() => team.generate(plan, task.id, f.snapshot)); assert.equal(writes, 1);
+});
+test("unsafe cumulative arithmetic or a non-function persistence hook cannot reach HTTP", async () => {
+  const f = await fixture(); let calls = 0;
+  assert.throws(() => createCalculatorAgentRepairTeam(saved.request, env, f.host, {
+    checkpoints: { beforeRequest: "not a function" } as never,
+  }));
+  const team = createCalculatorAgentRepairTeam(saved.request, env, {
+    ...f.host, loadAuthenticatedFailure: async () => ({ ...f.source, priorCharge: { ...priorCharge, attemptedRequests: Number.MAX_SAFE_INTEGER } }),
+  }, {
+    checkpoints: { beforeRequest: () => { throw Error("overflow must fail before persistence"); } },
+    transport: async () => { calls++; return result(f.proposal(true)); },
+  });
+  await assert.rejects(() => team.generate(plan, task.id, f.snapshot)); assert.equal(calls, 0);
+});

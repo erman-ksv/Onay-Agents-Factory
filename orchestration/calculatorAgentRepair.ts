@@ -36,8 +36,33 @@ export function createCalculatorAgentRepairTeam(ownerRequest: unknown, env: Node
   const load = host.loadAuthenticatedFailure, verify = host.verifyRepairedProposal;
   let started = false, failed = false, repairedProposal: PreparedCalculatorChanges | undefined;
   let evidence: CalculatorAssessmentEvidence | undefined, priorCharge: CalculatorPriorModelCharge | undefined, sourceManifestSha256: string | undefined;
-  const team = createCalculatorModelTeam(ownerRequest, env, options.transport, options.timing, undefined, options.checkpoints,
+  function aggregate(current: CalculatorPriorModelCharge): CalculatorPriorModelCharge {
+    const total = Object.freeze({
+      attemptedRequests: (priorCharge?.attemptedRequests ?? 0) + current.attemptedRequests,
+      totalRequestBytes: (priorCharge?.totalRequestBytes ?? 0) + current.totalRequestBytes,
+      reservedRunTokens: (priorCharge?.reservedRunTokens ?? 0) + current.reservedRunTokens,
+      elapsedMs: (priorCharge?.elapsedMs ?? 0) + current.elapsedMs,
+    });
+    if (Object.values(total).some(value => !Number.isSafeInteger(value) || value < 0)) return refuse();
+    return total;
+  }
+  const beforeRequest = options.checkpoints?.beforeRequest;
+  if (beforeRequest !== undefined && typeof beforeRequest !== "function") return refuse();
+  const checkpoints = { ...options.checkpoints,
+    beforeRequest: async (current: CalculatorPriorModelCharge) => {
+      if (!priorCharge) return refuse();
+      const total = aggregate(current);
+      if (beforeRequest) await beforeRequest(total);
+    },
+  };
+  const team = createCalculatorModelTeam(ownerRequest, env, options.transport, options.timing, undefined, checkpoints,
     "calculator-restored-repair-four-roles", () => evidence);
+  // The new phase has its own bounded allowance, but persisted accounting must
+  // include every old charge. Never expose a reset ledger to the executor/host.
+  const checkpointCharge = () => {
+    const current = team.checkpointCharge();
+    return current ? aggregate(current) : undefined;
+  };
   return Object.freeze({
     async generate(plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot): Promise<PreparedCalculatorChanges> {
       if (started || failed) return refuse(); started = true;
@@ -67,15 +92,9 @@ export function createCalculatorAgentRepairTeam(ownerRequest: unknown, env: Node
      * assessment remains blocked; it cannot silently buy another attempt. */
     repair: async (): Promise<PreparedCalculatorChanges> => refuse(),
     diagnostic: team.diagnostic,
-    checkpointCharge: team.checkpointCharge,
+    checkpointCharge,
     snapshot() {
-      const current = team.checkpointCharge();
-      const aggregateCharge = priorCharge && current ? Object.freeze({
-        attemptedRequests: priorCharge.attemptedRequests + current.attemptedRequests,
-        totalRequestBytes: priorCharge.totalRequestBytes + current.totalRequestBytes,
-        reservedRunTokens: priorCharge.reservedRunTokens + current.reservedRunTokens,
-        elapsedMs: priorCharge.elapsedMs + current.elapsedMs,
-      }) : undefined;
+      const aggregateCharge = priorCharge ? checkpointCharge() : undefined;
       return Object.freeze({ ...team.snapshot(), correctionAttempted: started, stopped: failed || team.snapshot().stopped,
         ...(priorCharge ? { carriedPriorCharge: priorCharge } : {}), ...(aggregateCharge ? { aggregateCharge } : {}),
         ...(sourceManifestSha256 ? { sourceManifestSha256 } : {}),
