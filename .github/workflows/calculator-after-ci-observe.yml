@@ -1,0 +1,27 @@
+name: Calculator after-CI read-only observation
+on:
+  push:
+    branches: ['feat/**']
+    paths: ['scripts/calculator-after-ci-observe.mjs', '.github/workflows/calculator-after-ci-observe.yml']
+permissions:
+  contents: read
+jobs:
+  observe:
+    name: Observe exact prior candidate CI without execution
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout only reviewed observation script
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/calculator-after-ci-observe.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Read pinned Calculator provenance without model credentials
+        env:
+          CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: node scripts/calculator-after-ci-observe.mjs

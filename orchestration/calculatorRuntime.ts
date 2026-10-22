@@ -12,7 +12,7 @@ import { writeCalculatorAssessmentRejection } from "./calculatorAssessmentReject
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import { prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { openCalculatorWorkspace } from "./calculatorWorkspace.js";
-import { runCalculatorExecution, type CalculatorExecutionCheckpointEvent } from "./calculatorExecution.js";
+import { runCalculatorExecution, type CalculatorExecutionCheckpointEvent, type CalculatorExecutionReport } from "./calculatorExecution.js";
 import { createCalculatorExecutionCheckpointStore, type CalculatorExecutionCheckpointPayload,
   type CalculatorExecutionCheckpointStore, type CalculatorExecutionCheckpointIdentity } from "./calculatorExecutionCheckpoint.js";
 import { TeamTaskStore } from "./teamTaskStore.js";
@@ -20,9 +20,28 @@ import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
 import { calculatorProposalDigest, validateCalculatorProposalTests } from "./calculatorExecutionEvidence.js";
 import { selectProviderConfig } from "../commander/providerConfig.js";
 import { evaluateTestExecutionEvidence } from "../agents/tester/agent.js";
+import { prepareCalculatorAfterCiRequest, runCalculatorAfterCi, type CalculatorAfterCiRequest } from "./calculatorAfterCi.js";
 
 export const CALCULATOR_RUNTIME_ERROR = "Calculator live runtime is not ready. Inspect private state, provider, sandbox, workflow pins and GitHub access; no replay.";
 function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
+/** A trusted host may supply a separately authenticated dependency checker.
+ * JSON, model output and old receipt status cannot provide this capability.
+ * The checker must verify archived approvals and actual current host tests. */
+export type CalculatorRuntimeAfterCi = Readonly<{
+  request: CalculatorAfterCiRequest; verifyDependencies: CalculatorCheckRunner;
+}>;
+export function prepareCalculatorRuntimeAfterCi(value: unknown): CalculatorRuntimeAfterCi | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return refuse();
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Reflect.ownKeys(value).length !== 2 || !Object.hasOwn(descriptors, "request") || !Object.hasOwn(descriptors, "verifyDependencies") ||
+      !Object.values(descriptors).every(item => Object.hasOwn(item, "value")) ||
+      typeof descriptors.verifyDependencies.value !== "function") return refuse();
+  try { return Object.freeze({ request: prepareCalculatorAfterCiRequest(descriptors.request.value),
+    verifyDependencies: descriptors.verifyDependencies.value as CalculatorCheckRunner }); }
+  catch { return refuse(); }
+}
 /** Host-only additional allowance. These literals lower the normal limits;
  * neither owner/model JSON nor environment variables can select a larger cap. */
 export type CalculatorRuntimeHostLimits = Readonly<
@@ -247,11 +266,15 @@ export async function loadCalculatorRuntimeSources(reader: CalculatorSnapshotRea
 }
 /** No automatic plan/run chaining or event loop. One call plans or executes one
  * task; durable state survives failures and model HTTP budgets are never reset
- * inside a repair. Production adapters remain isolated from model arguments. */
+ * inside a repair. A host-only after-CI entry admits one fresh successor; its
+ * event barrier is separate from consumed task receipts and historic charges.
+ * Production adapters remain isolated from model arguments. */
 export async function runCalculatorRuntime(input: unknown, configInput: unknown, directory: string,
   mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env, hostLimits?: CalculatorRuntimeHostLimits,
-  continuationInput?: CalculatorRuntimeContinuation) {
+  continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi) {
   const limits = prepareCalculatorRuntimeHostLimits(hostLimits), continuation = prepareCalculatorRuntimeContinuation(continuationInput);
+  const afterCi = prepareCalculatorRuntimeAfterCi(afterCiInput);
+  if (afterCi && (mode !== "run" || continuation || limits?.maxRequests !== 4 || limits.maxRepairs !== 0)) return refuse();
   if ((limits || continuation) && mode !== "run") return refuse();
   if (continuation ? limits?.maxRequests !== (continuation.restoredAssessments?.length === 2 ? 1 : 3) :
       limits?.maxRequests === 3 || limits?.maxRequests === 1) return refuse();
@@ -298,6 +321,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     }
     phase = "saved_plan_unverified";
     if (!saved || saved.status !== "planned") return refuse();
+    if (afterCi && saved.fingerprint !== afterCi.request.planFingerprint) return refuse();
     // Only the reviewed Groq adapter can export a provable aggregate ledger.
     // Planning, inspect/preflight and injected offline executor teams are unchanged.
     phase = "execution_checkpoint_accounting_unavailable";
@@ -313,6 +337,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     phase = "project_head_unverified";
     const currentSha = await reader.getHead(saved.branch);
     if (continuation && currentSha !== owner.baseSha) return refuse();
+    if (afterCi && (!started || currentSha !== afterCi.request.candidateSha)) return refuse();
     // Verify the pinned workflow itself before model calls and durable task claim.
     phase = "project_workflow_unverified";
     await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
@@ -327,6 +352,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       ...(limits ? { hostLimits: limits } : {}),
       ...(continuation ? { continuationProposalDigest: continuation.proposalDigest } : {}),
       ...(continuation?.restoredAssessments?.length ? { restoredAssessmentsDigest: digest(continuation.restoredAssessments) } : {}),
+      ...(afterCi ? { afterCiRequest: afterCi.request } : {}),
       version: config.version, sandboxImage: config.sandboxImage,
       trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
     const checkpointIdentity = { repository: owner.repository,
@@ -423,13 +449,29 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       phase = "workspace_unverified";
       const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
       phase = "one_task_execution_failed";
-      const result = await runCalculatorExecution(workspace, { team, env, verifyDependencies, checkpoint,
+      const executionOptions = { team, env, checkpoint,
         ...(limits ? { maxRepairs: limits.maxRepairs } : {}),
         ...(continuation ? { restoreProposal: createCalculatorRuntimeContinuationRestorer(continuation, saved, team) } : {}),
         ...(continuation?.restoredAssessments?.length ? {
           restoreAssessments: (plan: CalculatorPlan, id: string, proposal: PreparedCalculatorChanges) => team.restoredAssessmentPrefix(plan, id, proposal),
         } : {}),
-        tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } });
+        tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } };
+      let result: CalculatorExecutionReport;
+      if (afterCi) {
+        // This directory survives with private evidence. It never sits inside
+        // the strict source-free task metadata capsule or replaces old state.
+        const eventDirectory = join(privateDirectory, "after-ci-events");
+        try { mkdirSync(eventDirectory, { mode: 0o700 }); }
+        catch (error) { if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") return refuse(); }
+        const stat = lstatSync(eventDirectory);
+        if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700 ||
+            (process.getuid && stat.uid !== process.getuid())) return refuse();
+        const transition = await runCalculatorAfterCi(store, reader, afterCi.request, { eventDirectory, ci,
+          verifyDependencies: afterCi.verifyDependencies, execution: executionOptions });
+        result = transition.execution ?? { status: transition.status === "blocked" ? "blocked" as const : "needs-review" as const,
+          reasonCode: transition.reasonCode, attempts: 0, repairs: 0, proposalTestsExecuted: false,
+          candidateTestsExecuted: false, wholeAppCompleted: false as const, finalCalculatorCiVerified: false as const, legalEnabled: false as const };
+      } else result = await runCalculatorExecution(workspace, { ...executionOptions, verifyDependencies });
       if (active.httpInFlight || (active.status === "running" && writers.has(activeId)))
         save({ ...active, status: "blocked" }, charge());
       if (team.snapshot().stopped) console.error(JSON.stringify({ event: "calculator_execution_model_failed", ...team.diagnostic() }));
