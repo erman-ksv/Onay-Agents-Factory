@@ -86,6 +86,11 @@ function json(file: File): unknown { return JSON.parse(new TextDecoder("utf-8", 
 function privateState(capability: CalculatorPublishedState): PrivateState {
   const state = verified.get(capability); if (!state) return refuse(); return state;
 }
+/** Authenticated host configuration only; source and mutable private buffers
+ * remain inaccessible. The caller still needs independent execution authority. */
+export function calculatorPublishedTaskLaunch(capability: CalculatorPublishedState): ReturnType<typeof prepareCalculatorLaunchRequest> {
+  return prepareCalculatorLaunchRequest(structuredClone(privateState(capability).launch));
+}
 
 /** Host pins only. The CLI always uses the fixed reviewed pin, never argv/env
  * expectations. A valid digest establishes archive bytes, not live CI authority. */

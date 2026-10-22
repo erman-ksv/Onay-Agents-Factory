@@ -1,0 +1,11 @@
+# One saved-plan successor after verified CI
+
+The production wrapper runs only saved task t02 after the independently verified published t01. It authenticates the genuine step-7 private artifact, restores its plan and receipts without replaying t01, checks the current Calculator branch and exact CI steps, and reruns the actual dependency tests in the fixed sandbox. Historical request, byte, token and elapsed-time charges remain in the evidence archive.
+
+The workflow has one request path and one permitted first push run. Attempts, additional workflow runs, altered request bytes, altered runtime pins and foreign archives are rejected. There is no automatic retry or budget reset.
+
+Before models receive credentials, the prepare phase exports the deterministic consumed-event admission receipt and crash lock into a private Actions artifact. Execution authenticates the remote artifact ID, digest and run provenance. The runtime persistence callback exports its actual claimed event, requires the manifest to match the already uploaded intent byte for byte, and verifies the remote acknowledgement again. A failed barrier stops before successor models. The final artifact retains the original archive, restored receipts, both admissions, checkpoints, costs and failures.
+
+The host-only `calculator-successor-four-roles` preset allows 300 seconds to accommodate sequential Groq minute-window admission. Its exact limits are four requests, 24,000 bytes per request, 96,000 cumulative bytes, 1,200 output tokens and no repairs. Groq's 16,000 cumulative token allowance remains enforced. The original 120-second default and 180-second general hard ceiling remain unchanged. The preset is refused for prior charged tasks, another provider, or runtime operations without after-CI execution. Waiting never refunds charges or repeats a failed request.
+
+This is one bounded successor admission, not cross-repository asynchronous event delivery. Full unattended progression still requires authenticated delivery of future Calculator CI events and the project-wide budget in the following stage. Calculator pilot UI is separate from the Onay app frontend, which awaits owner mockups. No main merge or deployment is performed by this wrapper.
