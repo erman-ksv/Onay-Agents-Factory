@@ -124,7 +124,7 @@ jobs:
            }
            finally{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Browser closed'));}pending.clear();ws?.close();child.kill('SIGTERM');server.close();setTimeout(()=>child.kill('SIGKILL'),1000).unref();}
           }
-          
+
           const browserSources=new Map<string,string>(currentProposal.files.map((f:any)=>['/'+f.path,f.content]));browserSources.set('/src/calculator.mjs',baseSources.get('src/calculator.mjs')!);
           const browserProof=await verifyBrowser(browserSources,join(process.env.RUNNER_TEMP!,'calculator-browser-evidence'));
           const result={status:'output-recovery-real-browser-verified',runId:39756457942,artifactId:12415777866,manifestSha256:hash(b),fileCount:seen,totalBytes:total,priorChargesPreserved:true,previousCharge:previous.aggregateT02Charge,newCapsules:capsules,aggregateT02Charge:aggregate,hostProof,browserProof,barrierPersistedAndAcknowledged:true,realConsumedEventRestored:true,duplicateRefused:true,restartRefused:true,toolsCalled,modelsRun:false,githubWritesPerformed:false,privateCopiesCreated:true,resumeAuthorized:false,budgetResetAuthorized:false};

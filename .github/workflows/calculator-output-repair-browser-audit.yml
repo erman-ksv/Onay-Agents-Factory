@@ -126,7 +126,7 @@ jobs:
            }
            finally{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Browser closed'));}pending.clear();ws?.close();child.kill('SIGTERM');server.close();setTimeout(()=>child.kill('SIGKILL'),1000).unref();}
           }
-          
+
           const originalProposalDigest=calculatorProposalDigest(currentProposal),originalApp=currentProposal.files.find((f:any)=>f.path==='src/app.mjs');
           assert.equal(hash(originalApp.content),'2e1a2ece731726c2762e655ab2bfa14f69e79825391bcfa1c9f0f6b1dcd49096');assert.equal(originalApp.content.split('./calc.mjs').length-1,1);
           const repairedFiles=currentProposal.files.map((f:any)=>({...f,content:f.path==='src/app.mjs'?f.content.replace('./calc.mjs','./calculator.mjs'):f.content}));
