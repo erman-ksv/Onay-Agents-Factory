@@ -100,3 +100,60 @@ adapter using fake HTTP. No live control ref or model request was created by
 these tests. The production archive loader and actual isolated host runners
 still need to be wired into a reviewed live workflow; this module does not
 silently activate one or revive a consumed/stale historical run.
+
+## Pinned failure loader and real host-check composition
+
+`inspectCalculatorRepairArchive` validates every file against an independently
+reviewed manifest pin using the existing forensic reader (bounded files/bytes,
+UTF-8/JSON, ownership, permissions, links, secrets and full tree membership).
+Each reviewed phase pin identifies an exact checkpoint path, SHA-256 and full
+execution identity. The existing checkpoint parser verifies its internal
+history, proposal digest, assessments and monotonic charge records. Repeated
+phases, substituted identities, missing source phase and an incorrect reviewed
+total charge refuse inspection. Incremental phase costs are added; cumulative
+high-water checkpoints may replace the running total only without reducing any
+component. The final total must match the separately reviewed expected charge.
+Old uncertain phases remain charged and archived; they are not resumed.
+
+The source phase must be last, stopped at execution_complete, contain a proposal
+and all three canonical assessments with an actual rejection, and have neither
+uncertain HTTP nor publication started. Inspection returns source-free metadata
+with resumeAuthorized:false. Proposal and findings remain in private host memory.
+A JSON copy cannot become a loader. Source pins must come from reviewed host
+configuration and independently verified GitHub artifact provenance, NEVER from
+the imported manifest itself, a model, CLI or environment-supplied expectations.
+Local content integrity does not by itself prove a GitHub run's origin or grant
+execution authority. The live workflow still needs that provenance boundary.
+
+`createCalculatorRepairArchiveLoader` rechecks the archive before and after
+loading a fresh branded snapshot of src/calculator.mjs and the existing arithmetic
+tests. It binds the saved owner, goal, plan, task, branch, base and bootstrap SHA
+to the executor's current branded snapshot. Stale/serialized state refuses before
+remote admission. The loader is one-use and never edits/restores old task receipts
+or clears locks, costs, uncertainty or publication markers.
+
+`createCalculatorRepairHost` connects this loader to the EXISTING Docker task
+checker and an independently configured isolated browser runner. The immutable
+arithmetic dependency and existing tests are taken from the verified snapshot;
+the proposal files passed to checks are exactly the new agent output. Docker
+uses its unchanged pinned-image, no-pull, no-network, read-only, nonprivileged,
+resource-limited checks and fixed acceptance harness. No expected answer or
+reference scenario is modified. Both Docker readiness and browser isolation,
+credential exclusion and sandbox readiness must pass before model HTTP or remote
+admission. Missing readiness stops; there is no direct-host execution fallback.
+
+The trusted browser runner must implement actual execution of the unchanged
+clear/backspace scenarios and bind the resulting proof to the new proposal and
+dependency hashes. This change supplies the composition, NOT a new browser binary
+or a default-success browser implementation. Existing evidence validation still
+rejects stale/JSON proof and unexecuted/mismatched checks. Failed Docker checks
+stop before browser proof and fresh specialist calls. The current binding remains
+deliberately limited to the supported clear/backspace task; other tasks must not
+be falsely reported as verified through it.
+
+Regression tests exercise real filesystem checkpoint/archive validation and the
+actual Docker adapter's command/mount protocol with injected process responses.
+No Docker container, browser, model or target write is run by those local tests.
+The production GitHub artifact-provenance checks, reviewed pin selection and
+isolated browser implementation still need wiring into a live workflow. The
+stale historical task remains blocked even though these host components exist.

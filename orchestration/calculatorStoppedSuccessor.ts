@@ -105,6 +105,20 @@ function inspectArchive(root: string, pin: ArchivePin, kind: string) {
   } catch { return refuse(); }
 }
 
+/** Trusted host access only. Keep archive bytes behind functions so serializing
+ * the handle cannot send private proposals to a model. Pins must be reviewed
+ * independently of the imported archive; this grants no replay authority. */
+export function openCalculatorStoppedArchiveForHost(root: string, pin: ArchivePin, kind: string) {
+  const archive = inspectArchive(root, pin, kind);
+  return Object.freeze({
+    read(path: string): Buffer {
+      archive.recheck(); const bytes = archive.files.get(path);
+      if (!bytes) return refuse(); return Buffer.from(bytes);
+    },
+    assertUnchanged(): void { inspectArchive(root, pin, kind); },
+  });
+}
+
 export function inspectCalculatorStoppedSuccessor(root: string, pin: ArchivePin = CALCULATOR_STOPPED_SUCCESSOR_PIN) {
   try {
     const { files, manifest, json, recheck } = inspectArchive(root, pin, "calculator-one-successor-forensic");
