@@ -1,0 +1,69 @@
+name: Calculator after-CI barrier transfer between workers
+on:
+  push:
+    branches: ['feat/calculator-event-state-20261022']
+    paths: ['.github/workflows/calculator-event-state-audit.yml', 'orchestration/calculatorEventStateAudit.ts', 'orchestration/calculatorAfterCiEventState.ts']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      manifest_sha256: ${{ steps.export.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Export consumed audit barrier without any model credentials
+        id: export
+        run: |
+          pnpm exec tsx orchestration/calculatorEventStateAudit.ts export "$RUNNER_TEMP/calculator-event-state"
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const report = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/calculator-event-state/report.json', 'utf8'));
+          if (!/^[a-f0-9]{64}$/.test(report.manifestSha256) || report.consumed !== true || report.resumeAuthorized !== false) throw Error('Invalid audit manifest');
+          appendFileSync(process.env.GITHUB_OUTPUT, 'manifest_sha256=' + report.manifestSha256 + '\n');
+          NODE
+      - name: Preserve immutable consumed audit state
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-event-state-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-event-state/artifact/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+  restore:
+    needs: preserve
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Download prior job state as data on a separate worker
+        uses: actions/download-artifact@v4
+        with:
+          name: calculator-event-state-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-event-state/incoming
+      - name: Verify host-pinned digest, restore state and prove replay is blocked
+        env:
+          EXPECTED_EVENT_MANIFEST_SHA256: ${{ needs.preserve.outputs.manifest_sha256 }}
+        run: pnpm exec tsx orchestration/calculatorEventStateAudit.ts restore "$RUNNER_TEMP/calculator-event-state"

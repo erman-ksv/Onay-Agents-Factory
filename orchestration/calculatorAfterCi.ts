@@ -27,7 +27,13 @@ export type CalculatorAfterCiOptions = Readonly<{
    * tests. Receipt stage labels alone never establish this evidence. */
   verifyDependencies: CalculatorCheckRunner;
   execution: Execution;
+  /** Must durably preserve the consumed barrier outside the current worker.
+   * Live hosts supply this tool; model/owner JSON cannot provide it. */
+  persistBarrier?: CalculatorAfterCiBarrierPersistence;
 }>;
+export type CalculatorAfterCiBarrierPersistence = (input: Readonly<{
+  eventDirectory: string; request: CalculatorAfterCiRequest; eventKey: Readonly<{ id: string; fingerprint: string }>;
+}>) => void | Promise<void>;
 const SHA = /^[a-f0-9]{40}$/, DIGEST = /^[a-f0-9]{64}$/, ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function refuse(): never { throw Error(CALCULATOR_AFTER_CI_ERROR); }
@@ -45,6 +51,11 @@ export function prepareCalculatorAfterCiRequest(value: unknown): CalculatorAfter
       value.previousTaskId === value.expectedNextTaskId || typeof value.candidateSha !== "string" || !SHA.test(value.candidateSha)) return refuse();
   return Object.freeze({ version: 1, planFingerprint: value.planFingerprint, previousTaskId: value.previousTaskId,
     candidateSha: value.candidateSha, expectedNextTaskId: value.expectedNextTaskId });
+}
+export function calculatorAfterCiEventIdentity(input: unknown): Readonly<{ id: string; fingerprint: string }> {
+  const request = prepareCalculatorAfterCiRequest(input);
+  const identity = { planFingerprint: request.planFingerprint, previousTaskId: request.previousTaskId, candidateSha: request.candidateSha };
+  return Object.freeze({ id: "calc-after-ci-" + digest(identity).slice(0, 48), fingerprint: digest(request) });
 }
 function validPrevious(receipt: TeamTaskSnapshot | undefined, branch: string, repository: string, candidate: string): boolean {
   if (!receipt || receipt.status !== "needs-review" ||
@@ -92,12 +103,15 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
         !plan.tasks.some(task => task.id === request.expectedNextTaskId) || !options ||
         typeof options.ci !== "function" || typeof options.verifyDependencies !== "function" || !plain(options.execution) ||
         ["restoreProposal", "restoreAssessments", "verifyDependencies"].some(key => Object.hasOwn(options.execution, key)) ||
-        options.execution.maxRepairs !== 0) return answer("blocked", "after_ci_configuration_unverified");
-    const identity = { planFingerprint: plan.fingerprint, previousTaskId: request.previousTaskId, candidateSha: request.candidateSha };
-    barrier = new TeamTaskStore(options.eventDirectory, { id: "calc-after-ci-" + digest(identity).slice(0, 48), fingerprint: digest(request) });
+        options.execution.maxRepairs !== 0 ||
+        (options.persistBarrier !== undefined && typeof options.persistBarrier !== "function") ||
+        (options.execution.execution !== "offline-test" && typeof options.persistBarrier !== "function"))
+      return answer("blocked", "after_ci_configuration_unverified");
+    const eventKey = calculatorAfterCiEventIdentity(request);
+    barrier = new TeamTaskStore(options.eventDirectory, eventKey);
     // A duplicate stops before CI/dependency/model callbacks. An interrupted
     // running event is also consumed; no receipt is overwritten or removed.
-    if (barrier.inspectExisting()) return answer("needs-review", "after_ci_event_already_recorded_no_replay");
+    if (barrier.inspectExisting() || barrier.inspectExistingLock()) return answer("needs-review", "after_ci_event_already_recorded_no_replay");
     const previousTask = plan.tasks.find(task => task.id === request.previousTaskId)!;
     const previous = (): TeamTaskSnapshot | undefined => {
       const receipt = store.taskReceipt(plan, previousTask);
@@ -140,6 +154,14 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
     if (digest(previous()) !== digest(prior)) return answer("blocked", "after_ci_previous_receipt_changed");
     if (barrier.claim() !== "claimed") return answer("needs-review", "after_ci_event_already_recorded_no_replay");
     claimed = true; barrier.recordStage("execute_next_task", "running");
+    if (options.persistBarrier) {
+      await options.persistBarrier(Object.freeze({ eventDirectory: options.eventDirectory, request, eventKey }));
+      // Uploading state may take time. Refuse a changed CI/head/receipt before
+      // claiming the successor or letting its first model request leave.
+      if (!positiveCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha)) return refuse();
+      await assertCalculatorWorkspaceCurrent(workspace);
+      if (digest(previous()) !== digest(prior)) return refuse();
+    }
     const execution = options.execution, assertTask = (id: string) => { if (id !== request.expectedNextTaskId) return refuse(); };
     const result = await runCalculatorExecution(workspace, { ...execution, verifyDependencies: verify,
       team: {
