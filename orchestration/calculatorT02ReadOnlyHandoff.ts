@@ -3,6 +3,7 @@
  * source of execution authority. No receipts/locks/state are mutated here. */
 import { createHash } from "node:crypto";
 import { parseTeamTaskSnapshotBytes } from "./teamTaskStore.js";
+import type { CalculatorPriorModelCharge } from "./calculatorModelTeam.js";
 import { calculatorPlanDigest } from "./calculatorPlan.js";
 import { CALCULATOR_T02_CHARGE_PIN, inspectCalculatorT02ConservativeCharge,
   type CalculatorT02ChargeObservation } from "./calculatorT02ChargeReconciliation.js";
@@ -37,7 +38,7 @@ export type CalculatorT02ReadOnlyVerifier = Readonly<{
 export type CalculatorT02ReadOnlyHandoff = Readonly<{
   taskId: typeof TASK; planFingerprint: typeof PLAN; candidateSha: string;
   originalReceiptSha256: string; sourceManifestSha256: string;
-  priorCharge: typeof CALCULATOR_T02_CHARGE_PIN.conservative;
+  priorCharge: CalculatorPriorModelCharge;
   ciRunId: typeof CI_RUN; auditClaimsArchiveVerified: true;
   historicalReceiptPreserved: true; readOnly: true;
   resumeAuthorized: false; budgetResetAuthorized: false;
