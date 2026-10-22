@@ -11,6 +11,8 @@ export const CALCULATOR_T02_CHARGE_RECONCILIATION_ERROR =
   "Historical Calculator t02 charge reconciliation refused; preserve archive, locks and all costs. No replay or refund.";
 export const CALCULATOR_T02_CHARGE_PIN = Object.freeze({
   manifestSha256: "68f3854c9df47e48219e206df977dc0f68d2cfe4cdcfeaaa0b5380fc013ce71c",
+  artifactSha256: "6c62eb1a42182975101d5de306cf716249887f98fb117f7bb477ef69810abbb6",
+  originalReceiptSha256: "eb920ca04fead67298f7443102ee118c0f9300fc623ef36af1aa42cd00cd375b",
   candidateSha: "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
   sourceRunId: 39790544926,
   artifactId: 12431481505,
