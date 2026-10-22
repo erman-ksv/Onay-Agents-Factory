@@ -20,6 +20,10 @@ const ORIGINAL_RECEIPT_SHA256 = "eb920ca04fead67298f7443102ee118c0f9300fc623ef36
 const PROPOSAL = "bc1e0790d5d4c54c06ea1abe8b6f5d8f6eca767a9a477f4146947d59f3fd6f5b";
 const CI_RUN = 39791054276;
 const refuse = (): never => { throw Error(CALCULATOR_T02_HANDOFF_ERROR); };
+/** A serialized JSON copy cannot recreate a verified host observation. This
+ * mark is not permission to advance execution; it only marks this process's
+ * fully checked, read-only handoff preflight. */
+const verifiedReadOnlyHandoffs = new WeakSet<object>();
 const sha = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 function plain(value: unknown): value is Record<string, any> {
   return !!value && typeof value === "object" && !Array.isArray(value) &&
@@ -112,7 +116,7 @@ export async function inspectCalculatorT02ReadOnlyHandoff(input: Readonly<{
         remote.completed !== true || remote.passed !== true ||
         remote.syntaxPassed !== true || remote.taskTestsPassed !== true ||
         await host.getCurrentHead() !== candidate.sha) return refuse();
-    return Object.freeze({
+    const result = Object.freeze({
       taskId: TASK, planFingerprint: PLAN, candidateSha: candidate.sha,
       originalReceiptSha256: sha(input.archivedReceiptBytes), sourceManifestSha256: archive.manifestSha256,
       priorCharge: prior.priorCharge, ciRunId: CI_RUN,
@@ -120,5 +124,14 @@ export async function inspectCalculatorT02ReadOnlyHandoff(input: Readonly<{
       readOnly: true as const, resumeAuthorized: false as const, budgetResetAuthorized: false as const,
       publicationAuthorized: false as const, nextTaskAuthorized: false as const,
     });
+    verifiedReadOnlyHandoffs.add(result);
+    return result;
   } catch { return refuse(); }
+}
+
+/** Only checks in-process read-only provenance; MUST NOT be used as a model,
+ * publication, replay, CI continuation or budget authorization. */
+export function assertCalculatorT02InspectedReadOnlyHandoff(value: unknown): CalculatorT02ReadOnlyHandoff {
+  if (!value || typeof value !== "object" || !verifiedReadOnlyHandoffs.has(value)) return refuse();
+  return value as CalculatorT02ReadOnlyHandoff;
 }
