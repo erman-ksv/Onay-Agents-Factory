@@ -41,9 +41,14 @@ try{
  report.capsule={sha256:sha(capsuleBytes),proposalDigest:capsule.proposalDigest,publicationStarted:true,httpInFlight:false,
   assessments:p.assessments.map(a=>({role:a.role,ready:a.ready,findings:a.findings.length,unverifiedAreas:a.unverifiedAreas.length})),oldReceiptReason:savedReport.reasonCode};
  phase='charges';const charge=json('model-charge-final.json'),keys=['attemptedRequests','totalRequestBytes','reservedRunTokens','elapsedMs'];
- for(const item of [charge.carried,charge.newCharge,savedReport.aggregateT02Charge,p.modelState])assert.ok(keys.every(k=>Number.isSafeInteger(item[k])&&item[k]>=0));
+ phase='charges_shape';for(const item of [charge.carried,charge.newCharge,savedReport.newCharge,savedReport.aggregateT02Charge,p.modelState])assert.ok(item&&keys.every(k=>Number.isSafeInteger(item[k])&&item[k]>=0));
+ report.chargeObserved={carried:charge.carried,finalNew:charge.newCharge,reportNew:savedReport.newCharge,recordedAggregate:savedReport.aggregateT02Charge,capsuleHighWater:p.modelState};
+ phase='charges_report_aggregate';
  assert.equal(charge.carried.attemptedRequests,9);assert.equal(charge.newCharge.attemptedRequests,3);
- assert.ok(keys.every(k=>charge.carried[k]+charge.newCharge[k]===savedReport.aggregateT02Charge[k]));
+ assert.ok(keys.every(k=>charge.carried[k]+savedReport.newCharge[k]===savedReport.aggregateT02Charge[k]));
+ // The finally writer samples elapsed wall time after the report was written.
+ // Preserve both readings and carry the greater value; never discard time.
+ assert.ok(keys.every(k=>k==='elapsedMs'?charge.newCharge[k]>=savedReport.newCharge[k]:charge.newCharge[k]===savedReport.newCharge[k]));
  assert.equal(savedReport.aggregateT02Charge.attemptedRequests,12);
  const phases=[
   {runId:39747322491,settled:{attemptedRequests:1,totalRequestBytes:4840,reservedRunTokens:3070,elapsedMs:23206}},
@@ -52,14 +57,15 @@ try{
   {runId:39765383540,settled:{attemptedRequests:3,totalRequestBytes:33296,reservedRunTokens:9071,elapsedMs:129638}},
   {runId:39790544926,settled:{attemptedRequests:3,totalRequestBytes:33299,reservedRunTokens:9036,elapsedMs:138709}},
  ];
- const observations=new Map();for(const [path,b] of files){if(!path.endsWith('.execution.json'))continue;const item=JSON.parse(b.toString('utf8'));if(item.identity?.taskId!==TASK)continue;const validated=parseCalculatorExecutionCheckpointBytes(b,item.identity,sha(b)).data;
+ phase='charges_checkpoint_origins';const observations=new Map();for(const [path,b] of files){if(!path.endsWith('.execution.json'))continue;const item=JSON.parse(b.toString('utf8'));if(item.identity?.taskId!==TASK)continue;const validated=parseCalculatorExecutionCheckpointBytes(b,item.identity,sha(b)).data;
   assert.equal(validated.identity.baseSha,BASE);assert.equal(validated.identity.repository,TARGET);
   const value=validated.payload.modelState,key=value.attemptedRequests+':'+value.totalRequestBytes;
+  report.checkpointChargeObserved={path,modelState:value};
   assert.ok(phases.some(p=>p.settled.attemptedRequests+':'+p.settled.totalRequestBytes===key));
   const old=observations.get(key);observations.set(key,old?Object.fromEntries(keys.map(k=>[k,Math.max(old[k],value[k])])):value);
  }
- const phaseCosts=phases.map(item=>{const high=observations.get(item.settled.attemptedRequests+':'+item.settled.totalRequestBytes);assert.ok(high);return {...item,checkpointHighWater:high,conservative:Object.fromEntries(keys.map(k=>[k,Math.max(item.settled[k],high[k])]))};});
- const recorded=Object.fromEntries(keys.map(k=>[k,phases.reduce((n,p)=>n+p.settled[k],0)]));assert.equal(canonical(recorded),canonical(savedReport.aggregateT02Charge));
+ phase='charges_all_phases';const phaseCosts=phases.map(item=>{const high=observations.get(item.settled.attemptedRequests+':'+item.settled.totalRequestBytes);assert.ok(high);const final=item.runId===39790544926?charge.newCharge:item.settled;return {...item,checkpointHighWater:high,conservative:Object.fromEntries(keys.map(k=>[k,Math.max(item.settled[k],high[k],final[k])]))};});
+ phase='charges_recorded_total';const recorded=Object.fromEntries(keys.map(k=>[k,phases.reduce((n,p)=>n+p.settled[k],0)]));assert.ok(keys.every(k=>recorded[k]===savedReport.aggregateT02Charge[k]));
  const conservative=Object.fromEntries(keys.map(k=>[k,phaseCosts.reduce((n,p)=>n+p.conservative[k],0)]));
  report.charges={carried:charge.carried,settledNew:charge.newCharge,capsuleHighWater:p.modelState,recordedAggregate:savedReport.aggregateT02Charge,conservativeAggregate:conservative,phaseCosts,allPriorCostsPreserved:true};
  phase='candidate';const head=await get('/git/ref/heads/feat/calculator-agent/calculator-pilot-step7-v1');assert.equal(head.object.sha,CANDIDATE);
