@@ -94,7 +94,7 @@ test("stale target branch or unverified CI refuses without touching historic rec
   ]){const f=fixture();await assert.rejects(()=>inspectCalculatorT02ReadOnlyHandoff(f.data,{...f.host,...changes}),{message:CALCULATOR_T02_HANDOFF_ERROR});}
 });
 test("altered charge, malformed receipt and missing trusted host verifier refuse",async()=>{
-  const f=fixture();f.data.charges.phases[3]!.checkpointHighWater.reservedRunTokens=9071;
+  const f=fixture();(f.data.charges.phases[3]!.checkpointHighWater as {reservedRunTokens:number}).reservedRunTokens=9071;
   await assert.rejects(()=>inspectCalculatorT02ReadOnlyHandoff(f.data,f.host),{message:CALCULATOR_T02_HANDOFF_ERROR});
   const h=fixture();h.data.archivedReceiptBytes=new Uint8Array(Buffer.from('{"invalid":true}'));
   await assert.rejects(()=>inspectCalculatorT02ReadOnlyHandoff(h.data,h.host),{message:CALCULATOR_T02_HANDOFF_ERROR});
