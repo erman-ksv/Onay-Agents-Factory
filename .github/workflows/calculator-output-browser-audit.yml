@@ -88,7 +88,7 @@ jobs:
            await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const address=server.address();assert.ok(address&&typeof address==='object');const origin='http://127.0.0.1:'+address.port;
            const child=spawn(chrome,['--headless=new','--disable-gpu','--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run','--no-default-browser-check','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore',shell:false});
            let ws:WebSocket|undefined;let sequence=0,session:string|undefined;const pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
-           let pageErrors=0,blockedRequests=0;const steps:any[]=[];
+           let pageErrors=0,blockedRequests=0;const blockedPaths:string[]=[],steps:any[]=[];
            try{
             const portFile=join(profile,'DevToolsActivePort');for(let i=0;i<100&&!existsSync(portFile);i++){assert.equal(child.exitCode,null,'Chrome sandbox startup failed');await sleep(100);}assert.ok(existsSync(portFile),'Chrome startup timeout');
             const [port,endpoint]=readFileSync(portFile,'utf8').trim().split('\n');ws=new WebSocket('ws://127.0.0.1:'+port+endpoint);
@@ -97,7 +97,7 @@ jobs:
             ws.addEventListener('message',event=>{const m=JSON.parse(String(event.data));if(m.id){const p=pending.get(m.id);if(p){clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(Error('CDP command refused')):p.resolve(m.result);}return;}
              if(m.method==='Runtime.exceptionThrown')pageErrors++;
              if(m.method==='Fetch.requestPaused'){const {requestId,request}=m.params;let allowed=false;try{const u=new URL(request.url);allowed=u.origin===origin&&request.method==='GET'&&(sourceMap.has(u.pathname)||u.pathname==='/'||u.pathname==='/favicon.ico');}catch{}
-              const action=allowed?(request.url.endsWith('/favicon.ico')?rpc('Fetch.fulfillRequest',{requestId,responseCode:204,body:''},m.sessionId):rpc('Fetch.continueRequest',{requestId},m.sessionId)):(blockedRequests++,rpc('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'},m.sessionId));void action.catch(()=>{pageErrors++;});}
+              const action=allowed?(request.url.endsWith('/favicon.ico')?rpc('Fetch.fulfillRequest',{requestId,responseCode:204,body:''},m.sessionId):rpc('Fetch.continueRequest',{requestId},m.sessionId)):(blockedRequests++,blockedPaths.push(new URL(request.url).pathname),rpc('Fetch.failRequest',{requestId,errorReason:'BlockedByClient'},m.sessionId));void action.catch(()=>{pageErrors++;});}
             });
             const version=await rpc('Browser.getVersion',{},undefined),target=await rpc('Target.createTarget',{url:'about:blank'},undefined);const attached=await rpc('Target.attachToTarget',{targetId:target.targetId,flatten:true},undefined);session=attached.sessionId;
             await rpc('Page.enable');await rpc('Runtime.enable');await rpc('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
@@ -111,7 +111,17 @@ jobs:
             await click('clear');await click('2');assert.equal(await display(),'2');await click('+');await click('3');await click('=');assert.equal(Number(await display()),5);steps.push({scenario:'Clear permits a new calculation after input',status:'passed'});
             await click('clear');await click('2');assert.equal(await display(),'2');await click('+');await click('3');await click('=');assert.equal(Number(await display()),5);steps.push({scenario:'Clear permits a new calculation after a result',status:'passed'});await screenshot('clear-then-addition-5');
             assert.equal(pageErrors,0);assert.equal(blockedRequests,0);const proof={status:'passed',testsExecuted:true,browser:version.product,browserSandboxDisabled:false,dependencyInstallationPerformed:false,steps,buttonLabels:labels,pageErrors,blockedRequests,proposalDigest:calculatorProposalDigest(currentProposal),publicationAuthorized:false};writeFileSync(join(outputDirectory,'browser-proof.json'),JSON.stringify(proof,null,2)+'\n',{mode:0o600});return proof;
-           }catch(error){writeFileSync(join(outputDirectory,'browser-proof.json'),JSON.stringify({status:'failed',testsExecuted:true,steps,pageErrors,blockedRequests,publicationAuthorized:false})+'\n',{mode:0o600});throw error;}
+           }catch(error){
+           const app=sourceMap.get('/src/app.mjs')??'',html=sourceMap.get('/index.html')??'';
+           const diagnostic={status:'saved-proposal-browser-failed',testsExecuted:true,steps,pageErrors,blockedRequests,blockedPaths,
+            moduleImports:[...app.matchAll(/(?:from\s*|import\s*)['"]([^'"]{1,200})['"]/g)].map(m=>m[1]),
+            htmlScriptSources:[...html.matchAll(/<script\b[^>]*\bsrc=['"]([^'"]{1,200})['"]/g)].map(m=>m[1]),
+            htmlIds:[...html.matchAll(/\bid=['"]([^'"]{1,100})['"]/g)].map(m=>m[1]),
+            htmlDataAttributes:[...new Set(html.match(/\bdata-[a-z0-9-]+/g)??[])],
+            scriptDatasetKeys:[...app.matchAll(/\.dataset\.([A-Za-z_][A-Za-z0-9_]*)/g)].map(m=>m[1]),
+            publicationAuthorized:false};
+           writeFileSync(join(outputDirectory,'browser-proof.json'),JSON.stringify(diagnostic,null,2)+'\n',{mode:0o600});console.log(JSON.stringify(diagnostic));throw error;
+           }
            finally{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Browser closed'));}pending.clear();ws?.close();child.kill('SIGTERM');server.close();setTimeout(()=>child.kill('SIGKILL'),1000).unref();}
           }
           
