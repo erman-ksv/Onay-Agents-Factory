@@ -1,14 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { calculatorPlanDigest } from "./calculatorPlan.js";
-import { TeamTaskStore } from "./teamTaskStore.js";
 import { CALCULATOR_T02_CHARGE_PIN as PIN, type CalculatorT02ChargeObservation } from "./calculatorT02ChargeReconciliation.js";
 import { CALCULATOR_T02_HANDOFF_ERROR, inspectCalculatorT02ReadOnlyHandoff } from "./calculatorT02ReadOnlyHandoff.js";
 
-const task = "calculator-pilot-step7-v1-34ee03-t02", plan = "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2";
 const sourceAudit = {
   status:"publication_reconciled_read_only",
   sourceSha:"e22c946c77095868deb7e65c230e2e6ab5c860f1",
@@ -45,19 +39,9 @@ const charges:CalculatorT02ChargeObservation = {
   ],recordedAggregate:PIN.recorded,
   finalNewCharge:{attemptedRequests:3,totalRequestBytes:33299,reservedRunTokens:9036,elapsedMs:138712},
 };
-function receipt() {
-  const root=mkdtempSync(join(tmpdir(),"calculator-t02-handoff-"));
-  try {
-    const id="calc-"+task;const store=new TeamTaskStore(root,{id,fingerprint:calculatorPlanDigest({planFingerprint:plan,taskId:task})});
-    assert.equal(store.claim(),"claimed");
-    for(const stage of ["load_current_source","generate_1","security_1","reviewer_1","tester_1","host_tests_1"]){
-      store.recordStage(stage,"running");store.recordStage(stage,"passed");
-    }
-    store.recordStage("publish_candidate","running");store.recordStage("publish_candidate","blocked");
-    store.finish("needs-review","publication_or_ci_uncertain_inspect_no_replay");store.close();
-    return new Uint8Array(readFileSync(join(root,id+".json")));
-  } finally {rmSync(root,{recursive:true,force:true});}
-}
+/** Byte-exact, source-free task receipt from the independently hashed 255-file qualification archive. */
+const ORIGINAL_RECEIPT = "{\"schemaVersion\":1,\"id\":\"calc-calculator-pilot-step7-v1-34ee03-t02\",\"fingerprint\":\"6e5431f142b6f8ca3f78298de687eb89043de1642d32c4a4602f7ece3c5dacc2\",\"status\":\"needs-review\",\"stages\":[{\"stage\":\"load_current_source\",\"status\":\"passed\"},{\"stage\":\"restore_proposal_1\",\"status\":\"passed\"},{\"stage\":\"security_1\",\"status\":\"passed\"},{\"stage\":\"reviewer_1\",\"status\":\"passed\"},{\"stage\":\"tester_1\",\"status\":\"passed\"},{\"stage\":\"host_tests_1\",\"status\":\"passed\"},{\"stage\":\"publish_candidate\",\"status\":\"blocked\"}],\"reasonCode\":\"publication_or_ci_uncertain_inspect_no_replay\"}\n";
+function receipt(): Uint8Array {return new Uint8Array(Buffer.from(ORIGINAL_RECEIPT,"utf8"));}
 function fixture() {
   let calls=0;
   const host={
