@@ -165,7 +165,7 @@ function preselectionFixture(root: string) {
     entry("styles.css","5".repeat(40))
   ];
   const before=core, after=[...core,...ui];
-  let head=PIN.candidateSha, checks=0, verifyBad=false, alterTree=false;
+  let head:string=PIN.candidateSha, checks=0, verifyBad=false, alterTree=false;
   const reader: CalculatorSnapshotReader={
     getHead:async()=>head,
     readCommit:async sha=>({sha,treeSha:sha===PIN.candidateSha?"d".repeat(40):"e".repeat(40),
