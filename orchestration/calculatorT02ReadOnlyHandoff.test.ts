@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CALCULATOR_T02_CHARGE_PIN as PIN, type CalculatorT02ChargeObservation } from "./calculatorT02ChargeReconciliation.js";
-import { CALCULATOR_T02_HANDOFF_ERROR, inspectCalculatorT02ReadOnlyHandoff } from "./calculatorT02ReadOnlyHandoff.js";
+import { CALCULATOR_T02_HANDOFF_ERROR, inspectCalculatorT02ReadOnlyHandoff,
+  assertCalculatorT02InspectedReadOnlyHandoff } from "./calculatorT02ReadOnlyHandoff.js";
 
 const sourceAudit = {
   status:"publication_reconciled_read_only",
@@ -57,6 +58,8 @@ test("published t02 is read-only, with pinned high-water charge and original rec
   assert.equal(f.calls,2);assert.equal(result.candidateSha,PIN.candidateSha);
   assert.deepEqual(result.priorCharge,PIN.conservative);
   assert.equal(result.nextTaskAuthorized,false);assert.equal(result.resumeAuthorized,false);
+  assert.equal(assertCalculatorT02InspectedReadOnlyHandoff(result),result);
+  assert.throws(()=>assertCalculatorT02InspectedReadOnlyHandoff(structuredClone(result)),{message:CALCULATOR_T02_HANDOFF_ERROR});
   assert.equal(result.publicationAuthorized,false);assert.equal(result.budgetResetAuthorized,false);
   assert.equal(result.historicalReceiptPreserved,true);assert.equal(result.auditClaimsArchiveVerified,true);
   assert.deepEqual(f.data.archivedReceiptBytes,before);
@@ -88,4 +91,12 @@ test("altered charge, malformed receipt and missing trusted host verifier refuse
   const h=fixture();h.data.archivedReceiptBytes=new Uint8Array(Buffer.from('{"invalid":true}'));
   await assert.rejects(()=>inspectCalculatorT02ReadOnlyHandoff(h.data,h.host),{message:CALCULATOR_T02_HANDOFF_ERROR});
   const q=fixture();await assert.rejects(()=>inspectCalculatorT02ReadOnlyHandoff(q.data,{} as any),{message:CALCULATOR_T02_HANDOFF_ERROR});
+});
+
+test("a claimed successful source-free JSON or prototype cannot become a checked host capability", async()=>{
+  const f=fixture();const result=await inspectCalculatorT02ReadOnlyHandoff(f.data,f.host);
+  const json=JSON.parse(JSON.stringify(result));
+  for(const forged of [json, Object.freeze({...result}), {...result, nextTaskAuthorized:true}, Object.create(result), null]) {
+    assert.throws(()=>assertCalculatorT02InspectedReadOnlyHandoff(forged),{message:CALCULATOR_T02_HANDOFF_ERROR});
+  }
 });
