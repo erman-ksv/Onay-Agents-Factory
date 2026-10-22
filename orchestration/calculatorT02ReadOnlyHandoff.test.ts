@@ -127,7 +127,7 @@ test("real in-process verified handoff writes exactly one non-authorizing sideca
     const inspected=inspectCalculatorT02ReconciliationSidecar(dir);
     assert.equal(inspected?.status,"already-recorded");
     assert.equal(inspected?.successorAuthorized,false);
-    const crashLock=join(dir,names[0]!.replace(/\\.json$/,".lock"));
+    const crashLock=join(dir,names[0]!.slice(0,-5)+".lock");
     writeFileSync(crashLock,"",{mode:0o600,flag:"wx"});
     assert.throws(()=>inspectCalculatorT02ReconciliationSidecar(dir),{message:CALCULATOR_T02_SIDECAR_ERROR});
     unlinkSync(crashLock);
