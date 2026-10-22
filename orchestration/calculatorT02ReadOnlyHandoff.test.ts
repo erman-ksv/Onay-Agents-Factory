@@ -164,14 +164,16 @@ function preselectionFixture(root: string) {
     entry("index.html","3".repeat(40)),entry("src/app.mjs","4".repeat(40)),
     entry("styles.css","5".repeat(40))
   ];
-  const before=core, after=[...core,...ui];
-  let head:string=PIN.candidateSha, checks=0, verifyBad=false, alterTree=false;
+  const workflow=entry(".github/workflows/calculator-task-ci.yml","7".repeat(40));
+  const before=[...core,workflow], after=[...core,workflow,...ui];
+  let head:string=PIN.candidateSha, checks=0, verifyBad=false, alterTree=false, alterMode=false;
   const reader: CalculatorSnapshotReader={
     getHead:async()=>head,
     readCommit:async sha=>({sha,treeSha:sha===PIN.candidateSha?"d".repeat(40):"e".repeat(40),
       parents:sha===PIN.candidateSha?[T02_PARENT]:sha===T02_PARENT?[SAVED_PLAN.request.baseSha]:[]}),
     readTree:async sha=>({sha,truncated:false,tree:sha==="d".repeat(40)?
-      (alterTree?[...after,entry("src/calculator.mjs","6".repeat(40))]:after):before}),
+      (alterTree?[...after,entry("src/calculator.mjs","6".repeat(40))]:
+        alterMode?after.map(e=>e.path===workflow.path?{...e,mode:"100755"}:e):after):before}),
     readBlob:async()=>{throw Error("preview must never download executable source");}
   };
   const verify:CalculatorCheckRunner=async input=>{
@@ -187,6 +189,7 @@ function preselectionFixture(root: string) {
     setHead(sha:string){head=sha;},
     setVerifierFailure(value:boolean){verifyBad=value;},
     setChangedTree(value:boolean){alterTree=value;},
+    setWorkflowModeChanged(value:boolean){alterMode=value;},
     receiptBytes:()=>new Uint8Array(readFileSync(t02path)),
     t03ReceiptPath:()=>join(state,"calc-"+plan.tasks[2]!.id+".json"),
     t03LockPath:()=>join(state,"calc-"+plan.tasks[2]!.id+".lock")
@@ -217,7 +220,7 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
   }finally{rmSync(root,{recursive:true,force:true});}
 });
 test("stale head, changed approved blobs, missing role proof and crash-lock refuse t03 before any claim",async()=>{
-  for(const bad of ["head","tree","verifier","lock","receipt"] as const){
+  for(const bad of ["head","tree","mode","verifier","lock","receipt"] as const){
     const root=mkdtempSync(join(tmpdir(),"t02-preview-refusals-"));
     try{
       const x=preselectionFixture(root),f=fixture(),checked=await inspectCalculatorT02ReadOnlyHandoff(f.data,f.host);
@@ -225,6 +228,7 @@ test("stale head, changed approved blobs, missing role proof and crash-lock refu
       const before=x.receiptBytes();
       if(bad==="head")x.setHead("f".repeat(40));
       if(bad==="tree")x.setChangedTree(true);
+      if(bad==="mode")x.setWorkflowModeChanged(true);
       if(bad==="verifier")x.setVerifierFailure(true);
       if(bad==="lock")writeFileSync(x.t03LockPath(),"",{flag:"wx",mode:0o600});
       if(bad==="receipt")writeFileSync(x.t03ReceiptPath(),"{}",{flag:"wx",mode:0o600});
