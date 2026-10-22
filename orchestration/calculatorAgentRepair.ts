@@ -15,6 +15,7 @@ const refuse = (): never => { throw new Error(CALCULATOR_AGENT_REPAIR_ERROR); };
 export type CalculatorAuthenticatedFailure = Readonly<{
   taskId: string; planFingerprint: string; baseSha: string; sourceManifestSha256: string;
   proposal: unknown; proposalDigest: string; assessments: readonly CalculatorAssessment[];
+  dependencySnapshot: CalculatorSnapshot;
   proposalTests?: CalculatorProposalTests; priorCharge: CalculatorPriorModelCharge;
   httpInFlight: false; publicationStarted: false;
 }>;
@@ -49,7 +50,7 @@ export function createCalculatorAgentRepairTeam(ownerRequest: unknown, env: Node
             Object.values(source.priorCharge).some(value => !Number.isSafeInteger(value) || value < 1)) return refuse();
         priorCharge = Object.freeze({ ...source.priorCharge }); sourceManifestSha256 = source.sourceManifestSha256;
         const previous = team.restoreProposal(plan, id, snapshot, source.proposal, source.proposalDigest, []);
-        const request = team.importRepairFeedback(plan, id, previous, source.assessments, source.proposalTests);
+        const request = team.importRepairFeedback(plan, id, previous, source.assessments, source.proposalTests, source.dependencySnapshot);
         const changes = await team.repair(plan, id, snapshot, request);
         const verified = await verify(task, changes, snapshot);
         // Fail before any specialist request if the host reused stale proof or

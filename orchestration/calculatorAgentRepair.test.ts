@@ -57,7 +57,7 @@ async function fixture(originalIndex?: string) {
     unverifiedAreas: ["Real browser execution remains a host responsibility"],
   }, refs));
   const source = { taskId: task.id, planFingerprint: plan.fingerprint, baseSha: A, sourceManifestSha256: "d".repeat(64),
-    proposal: previous, proposalDigest: calculatorProposalDigest(previous), assessments, priorCharge, httpInFlight: false as const, publicationStarted: false as const };
+    proposal: previous, proposalDigest: calculatorProposalDigest(previous), assessments, dependencySnapshot: dependency, priorCharge, httpInFlight: false as const, publicationStarted: false as const };
   const host: CalculatorAgentRepairHost = {
     loadAuthenticatedFailure: async () => source,
     verifyRepairedProposal: async (_task, changes) => collectCalculatorAssessmentEvidence(task, changes, dependency, {
@@ -81,6 +81,11 @@ test("the developer receives full failed findings and supplies the correction; a
         assert.equal(body.max_completion_tokens, 2048);
         assert.equal(p.repair.specialistFeedback.length, 3);
         assert.equal(p.repair.specialistFeedback[1].findings[0].message, f.assessments[1].findings[0].message);
+        assert.equal(p.repair.dependencyContract.path, "src/calculator.mjs");
+        assert.equal(p.repair.dependencyContract.sourceSha256, hash(core));
+        assert.equal(p.repair.dependencyContract.baseSha, A);
+        assert.equal(p.repair.dependencyContract.signature, "calculate(left, operator, right)");
+        assert.ok(!String(init?.body).includes(core));
         assert.deepEqual(p.repair.specialistFeedback[1].findings[0].evidenceRefs, ["changes@" + A]);
         assert.equal(p.repair.specialistFeedback[1].ready, false); return result(f.proposal(true));
       }
@@ -148,11 +153,11 @@ test("the repair-only profile cannot plan, regenerate, approve old code or accep
       const restored = team.restoreProposal(plan, task.id, f.snapshot, f.previous, f.source.proposalDigest);
       if (operation === "old-assess") await assert.rejects(() => team.assess("security", plan, task.id, restored));
       else if (operation === "cloned-repair") {
-        const request = team.importRepairFeedback(plan, task.id, restored, f.assessments);
+        const request = team.importRepairFeedback(plan, task.id, restored, f.assessments, undefined, f.dependency);
         await assert.rejects(() => team.repair(plan, task.id, f.snapshot, JSON.parse(JSON.stringify(request))));
       } else {
         const ready = f.assessments.map(a => validateCalculatorAssessment(a.role, { ready: true, summary: "No failure", findings: [], unverifiedAreas: [] }, ["changes@" + A]));
-        assert.throws(() => team.importRepairFeedback(plan, task.id, restored, ready));
+        assert.throws(() => team.importRepairFeedback(plan, task.id, restored, ready, undefined, f.dependency));
       }
     }
     assert.equal(calls, 0);
@@ -232,7 +237,31 @@ test("a finding cannot smuggle a complete unchanged private original into the co
     ready: false, summary: "Failed scoped review", findings: [{ severity: "blocker", message: "Quoted original: " + privateOriginal,
       evidenceRefs: ["changes@" + A] }], unverifiedAreas: [],
   }, ["changes@" + A]));
-  const request = team.importRepairFeedback(plan, task.id, previous, feedback);
+  const request = team.importRepairFeedback(plan, task.id, previous, feedback, undefined, f.dependency);
   await assert.rejects(() => team.repair(plan, task.id, f.snapshot, request)); assert.equal(calls, 0);
   assert.equal(team.checkpointCharge()!.attemptedRequests, 0);
+});
+test("missing or JSON-cloned dependency metadata fails before correction HTTP", async t => {
+  const f = await fixture();
+  for (const dependencySnapshot of [undefined, { ...f.dependency }, { ...f.dependency, baseSha: B }]) await t.test("unverified dependency", async () => {
+    let calls = 0;
+    const team = createCalculatorAgentRepairTeam(saved.request, env, { ...f.host,
+      loadAuthenticatedFailure: async () => ({ ...f.source, dependencySnapshot }) as never }, {
+      transport: async () => { calls++; return result(f.proposal(true)); },
+    });
+    await assert.rejects(() => team.generate(plan, task.id, f.snapshot)); assert.equal(calls, 0);
+    assert.deepEqual(team.snapshot().carriedPriorCharge, priorCharge);
+  });
+});
+test("full private dependency source quoted in a finding stays out of the model request", async () => {
+  const f = await fixture(); let calls = 0;
+  const team = createCalculatorModelTeam(saved.request, env, async () => { calls++; return result(f.proposal(true)); }, {}, undefined, undefined,
+    "calculator-restored-repair-four-roles");
+  const previous = team.restoreProposal(plan, task.id, f.snapshot, f.previous, f.source.proposalDigest);
+  const feedback = f.assessments.map(a => a.role !== "reviewer" ? a : validateCalculatorAssessment("reviewer", {
+    ready: false, summary: "Failed scoped review", findings: [{ severity: "blocker", message: "Unchanged source: " + core,
+      evidenceRefs: ["changes@" + A] }], unverifiedAreas: [],
+  }, ["changes@" + A]));
+  const request = team.importRepairFeedback(plan, task.id, previous, feedback, undefined, f.dependency);
+  await assert.rejects(() => team.repair(plan, task.id, f.snapshot, request)); assert.equal(calls, 0);
 });

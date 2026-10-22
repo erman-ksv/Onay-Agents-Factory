@@ -7,7 +7,10 @@ corrected pilot remains historical evidence and must not be reported as such.
 `createCalculatorAgentRepairTeam` is a bounded corrective adapter for the existing
 executor. Its proposal comes from one real Developer/Frontend model call, using
 the saved proposal and complete independent findings, evidence references and
-unverified areas. Host test failures can also be attached. The host does not
+unverified areas. A fresh branded dependency snapshot supplies only the verified
+module path, SHA and calculate(left, operator, right) signature to the developer;
+the full unchanged dependency source stays private. Missing or forged dependency
+metadata fails before a model call. Host test failures can also be attached. The host does not
 provide replacement application code. The output is reconstructed against the
 same fresh original snapshot and passes the normal scope/secret/static checks.
 
