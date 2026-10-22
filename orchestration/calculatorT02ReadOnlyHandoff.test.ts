@@ -1,6 +1,11 @@
 import test from "node:test";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { CALCULATOR_T02_CHARGE_PIN as PIN, type CalculatorT02ChargeObservation } from "./calculatorT02ChargeReconciliation.js";
+import { CALCULATOR_T02_SIDECAR_ERROR, inspectCalculatorT02ReconciliationSidecar,
+  recordCalculatorT02ReconciliationSidecar } from "./calculatorT02ReconciliationSidecar.js";
 import { CALCULATOR_T02_HANDOFF_ERROR, inspectCalculatorT02ReadOnlyHandoff,
   assertCalculatorT02InspectedReadOnlyHandoff } from "./calculatorT02ReadOnlyHandoff.js";
 
@@ -99,4 +104,28 @@ test("a claimed successful source-free JSON or prototype cannot become a checked
   for(const forged of [json, Object.freeze({...result}), {...result, nextTaskAuthorized:true}, Object.create(result), null]) {
     assert.throws(()=>assertCalculatorT02InspectedReadOnlyHandoff(forged),{message:CALCULATOR_T02_HANDOFF_ERROR});
   }
+});
+
+test("real in-process verified handoff writes exactly one non-authorizing sidecar; restart reads but cannot replay",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-real-sidecar-"));
+  try {
+    const dir=join(root,"sidecar");mkdirSync(dir,{mode:0o700});
+    const f=fixture(),checked=await inspectCalculatorT02ReadOnlyHandoff(f.data,f.host);
+    const initial=JSON.stringify(f.data.audit);
+    const first=recordCalculatorT02ReconciliationSidecar(dir,checked);
+    assert.equal(first.status,"recorded");
+    assert.equal(first.resumeAuthorized,false);assert.equal(first.successorAuthorized,false);
+    assert.equal(first.budgetResetAuthorized,false);
+    assert.deepEqual(first.priorCharge,PIN.conservative);
+    const names=readdirSync(dir);assert.equal(names.length,1);assert.ok(names[0]?.endsWith(".json"));
+    const persisted=new Uint8Array(readFileSync(join(dir,names[0]!)));
+    const inspected=inspectCalculatorT02ReconciliationSidecar(dir);
+    assert.equal(inspected?.status,"already-recorded");
+    assert.equal(inspected?.successorAuthorized,false);
+    assert.deepEqual(new Uint8Array(readFileSync(join(dir,names[0]!))),persisted);
+    assert.throws(()=>recordCalculatorT02ReconciliationSidecar(dir,checked),{message:CALCULATOR_T02_SIDECAR_ERROR});
+    assert.throws(()=>recordCalculatorT02ReconciliationSidecar(dir,structuredClone(checked)),{message:CALCULATOR_T02_HANDOFF_ERROR});
+    assert.equal(JSON.stringify(f.data.audit),initial);
+    assert.deepEqual(new Uint8Array(readFileSync(join(dir,names[0]!))),persisted);
+  } finally {rmSync(root,{force:true,recursive:true});}
 });
