@@ -10,6 +10,7 @@ import { createCalculatorPlan } from "./calculatorPlan.js";
 import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
 import { createCalculatorModelTeam } from "./calculatorModelTeam.js";
 import { createCalculatorAgentRepairTeam, type CalculatorAgentRepairHost } from "./calculatorAgentRepair.js";
+import { createCalculatorRemotelyAdmittedRepairTeam } from "./calculatorAgentRepairAdmission.js";
 import { collectCalculatorAssessmentEvidence, CALCULATOR_UI_BROWSER_SCENARIOS } from "./calculatorAssessmentEvidence.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import { openCalculatorWorkspace } from "./calculatorWorkspace.js";
@@ -309,4 +310,67 @@ test("unsafe cumulative arithmetic or a non-function persistence hook cannot rea
     transport: async () => { calls++; return result(f.proposal(true)); },
   });
   await assert.rejects(() => team.generate(plan, task.id, f.snapshot)); assert.equal(calls, 0);
+});
+function admissionFixture() {
+  const factory = "erman-ksv/Onay-Agents-Factory", runtimeSha = "f".repeat(40);
+  const liveEnv = { ...env, GITHUB_REPOSITORY: factory, GITHUB_RUN_ATTEMPT: "1", GITHUB_TOKEN: "factory-fixture",
+    CALCULATOR_GITHUB_TOKEN: "target-fixture", CALCULATOR_AGENT_REPAIR_APPROVED: "ONE_SEPARATELY_BOUNDED_AGENT_CORRECTION" };
+  let ref: string | undefined, head = A, posts = 0;
+  const admissionTransport: typeof fetch = async (url, init) => {
+    const path = decodeURIComponent(new URL(String(url)).pathname);
+    if (path.includes("/" + plan.owner.repository + "/")) {
+      assert.equal(init?.method, "GET"); return Response.json({ ref: "refs/heads/" + plan.branch, object: { type: "commit", sha: head } });
+    }
+    if (path.endsWith("/actions/runs/1")) return Response.json({ id: 1, head_sha: runtimeSha, run_attempt: 1,
+      status: "completed", conclusion: "success", path: ".github/workflows/ci.yml", event: "push",
+      repository: { full_name: factory }, head_repository: { full_name: factory } });
+    if (path.endsWith("/attempts/1/jobs")) return Response.json({ total_count: 1, jobs: [{ name: "typecheck", run_id: 1,
+      run_attempt: 1, head_sha: runtimeSha, status: "completed", conclusion: "success",
+      steps: ["Typecheck", "Test"].map(name => ({ name, status: "completed", conclusion: "success" })),
+    }] });
+    if (init?.method === "POST") {
+      posts++; assert.equal(posts, 1); ref = JSON.parse(String(init.body)).ref;
+      return Response.json({ ref, object: { type: "commit", sha: runtimeSha } }, { status: 201 });
+    }
+    return ref ? Response.json({ ref, object: { type: "commit", sha: runtimeSha } }) : new Response(null, { status: 404 });
+  };
+  return { liveEnv, authority: { runtimeSha, sourceCiRunId: 1 }, admissionTransport,
+    posted: () => posts, moveHead: () => { head = B; } };
+}
+test("the admitted team repairs via the model only after its remote barrier and cumulative persistence", async () => {
+  const f = await fixture(), a = admissionFixture(); let clock = 0, calls = 0, writes = 0;
+  const team = createCalculatorRemotelyAdmittedRepairTeam(saved.request, a.liveEnv, a.authority, f.host, {
+    admissionTransport: a.admissionTransport, timing: { now: () => clock, wait: async ms => { clock += ms; } },
+    checkpoints: { beforeRequest: state => { writes++; assert.equal(a.posted(), 1); assert.equal(state.attemptedRequests, 9 + writes); } },
+    transport: async (_url, init) => {
+      calls++; assert.equal(writes, calls); assert.equal(a.posted(), 1);
+      const role = /You are the (\w+) /.exec(JSON.parse(String(init?.body)).messages[0].content)![1];
+      return result(role === "frontend" ? f.proposal(true) : { ready: true, summary: "Fresh independent assessment", findings: [], unverifiedAreas: [] });
+    },
+  });
+  const changes = await team.generate(plan, task.id, f.snapshot);
+  for (const role of ["security", "reviewer", "tester"] as const) await team.assess(role, plan, task.id, changes);
+  assert.equal(calls, 4); assert.equal(writes, 4); assert.equal(a.posted(), 1);
+  assert.equal(team.checkpointCharge()!.attemptedRequests, 13);
+  await assert.rejects(() => team.generate(plan, task.id, f.snapshot)); assert.equal(calls, 4);
+});
+test("target movement while persisting an admitted phase stops before any model HTTP", async () => {
+  const f = await fixture(), a = admissionFixture(); let calls = 0, writes = 0;
+  const team = createCalculatorRemotelyAdmittedRepairTeam(saved.request, a.liveEnv, a.authority, f.host, {
+    admissionTransport: a.admissionTransport,
+    checkpoints: { beforeRequest: () => { writes++; a.moveHead(); } },
+    transport: async () => { calls++; return result(f.proposal(true)); },
+  });
+  await assert.rejects(() => team.generate(plan, task.id, f.snapshot));
+  assert.equal(a.posted(), 1); assert.equal(writes, 1); assert.equal(calls, 0);
+  assert.equal(team.checkpointCharge()!.attemptedRequests, 10);
+  await assert.rejects(() => team.generate(plan, task.id, f.snapshot)); assert.equal(a.posted(), 1);
+});
+test("an unauthenticated archive failure stops before remote admission or any model HTTP", async () => {
+  const f = await fixture(), a = admissionFixture(); let calls = 0;
+  const team = createCalculatorRemotelyAdmittedRepairTeam(saved.request, a.liveEnv, a.authority, {
+    ...f.host, loadAuthenticatedFailure: async () => { throw Error("fixture provenance mismatch"); },
+  }, { admissionTransport: a.admissionTransport, checkpoints: { beforeRequest: () => {} },
+    transport: async () => { calls++; return result(f.proposal(true)); } });
+  await assert.rejects(() => team.generate(plan, task.id, f.snapshot)); assert.equal(a.posted(), 0); assert.equal(calls, 0);
 });

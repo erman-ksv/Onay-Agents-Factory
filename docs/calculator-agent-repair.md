@@ -54,3 +54,49 @@ This change supplies the corrective team mechanism and offline regression proof.
 It does not install a live archive/admission workflow, authorize a consumed
 workflow replay, modify Calculator files, merge a PR, deploy, enable the legal
 agent, prove whole-application completion or finish automatic CI event delivery.
+
+## Remote one-use admission
+
+`createCalculatorRemotelyAdmittedRepairTeam` composes the corrective adapter with
+`createCalculatorRepairAdmission` and requires the existing trusted archive
+loader, actual proposal verifier and a cumulative pre-HTTP persistence hook.
+There is no default-success loader or verifier. The live runner must explicitly
+set `CALCULATOR_AGENT_REPAIR_APPROVED=ONE_SEPARATELY_BOUNDED_AGENT_CORRECTION`,
+confirm Free, disable the legal role, use run attempt 1 and bind the reviewed
+runtime SHA and its source CI run through trusted host configuration.
+
+Before a phase is admitted, the GitHub adapter independently reads successful
+Factory CI for that exact runtime SHA, attempt-1 `typecheck` job and successful
+`Typecheck` and `Test` steps. It also checks the current Calculator branch SHA
+against the saved failure. Missing, queued, partial or failed evidence refuses
+before any remote write. Factory-scoped `GITHUB_TOKEN` needs contents:write for
+the control ref; `FACTORY_READ_TOKEN` alone is insufficient. The Calculator token
+is used only for fixed GET requests by this adapter. No credentials enter model
+packets or diagnostic errors.
+
+One atomic GitHub POST creates a Factory control ref under
+`refs/heads/state/calculator-agent-repair/<sha256>`. Its key binds the target
+repository, plan, task and target base SHA. Changing the proposal, archive or
+runtime cannot create a second correction allowance for that same task/base.
+The ref points to the reviewed Factory runtime; it contains no application code
+or source text. The `state/` namespace does not trigger the current source CI's
+branch filters. Creation is read back before any model call. An existing ref,
+conflict, 429, lost response or mismatched readback stops without retry. The
+adapter never updates or deletes this ref; operators must preserve it together
+with the old artifact/receipt history. Manual deletion outside this protocol
+must not be treated as a new authorization.
+
+The permit is bound to the exact in-memory adapter. A JSON copy cannot authorize
+transport. Before EACH correction/review model request, the wrapper checks the
+remote control ref and target SHA, persists cumulative charges and checks both
+again after the persistence await. A moved target, failed write or lost barrier
+stops the phase. The normal executor's independent test and publication leases
+remain required; a remote admission never replaces those gates.
+
+Regression proof covers duplicate events, concurrent claims, process restart,
+changed proposal, stale SHA, uncertain creation, forged permit and target
+movement during persistence, including composition with the actual model-team
+adapter using fake HTTP. No live control ref or model request was created by
+these tests. The production archive loader and actual isolated host runners
+still need to be wired into a reviewed live workflow; this module does not
+silently activate one or revive a consumed/stale historical run.
