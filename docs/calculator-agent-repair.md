@@ -142,10 +142,10 @@ reference scenario is modified. Both Docker readiness and browser isolation,
 credential exclusion and sandbox readiness must pass before model HTTP or remote
 admission. Missing readiness stops; there is no direct-host execution fallback.
 
-The trusted browser runner must implement actual execution of the unchanged
-clear/backspace scenarios and bind the resulting proof to the new proposal and
-dependency hashes. This change supplies the composition, NOT a new browser binary
-or a default-success browser implementation. Existing evidence validation still
+The concrete `createCalculatorBrowserSandbox` runner executes the unchanged
+clear/backspace scenarios and binds proof to the exact proposal and dependency
+hashes. It requires a separately prepared immutable official browser image; it
+does not download a browser or supply a default success. Existing evidence validation still
 rejects stale/JSON proof and unexecuted/mismatched checks. Failed Docker checks
 stop before browser proof and fresh specialist calls. The current binding remains
 deliberately limited to the supported clear/backspace task; other tasks must not
@@ -155,5 +155,40 @@ Regression tests exercise real filesystem checkpoint/archive validation and the
 actual Docker adapter's command/mount protocol with injected process responses.
 No Docker container, browser, model or target write is run by those local tests.
 The production GitHub artifact-provenance checks, reviewed pin selection and
-isolated browser implementation still need wiring into a live workflow. The
+isolated browser runner still need wiring into the live AGENT workflow. The
 stale historical task remains blocked even though these host components exist.
+
+## Concrete browser runtime and read-only probe
+
+`createCalculatorBrowserSandbox({image})` accepts only an already-present
+`mcr.microsoft.com/playwright@sha256:<digest>` image. It invokes the fixed local
+Docker socket with no shell, `--pull=never`, no external network, a read-only
+root, dropped capabilities, no-new-privileges, non-root uid, bounded memory/CPU/
+PIDs, fixed read-only mounts and a default-deny browser seccomp policy. User
+namespaces are allowed for Chromium's own namespace sandbox. No host namespace,
+privileged container, Docker socket mount, provider key or GitHub credential is
+passed into the container. Proxy defaults are explicitly cleared there.
+
+The trusted Node harness uses Chromium's CDP PIPE, not a published debugging port.
+It verifies namespace and seccomp-BPF sandbox status through chrome://sandbox
+before loading candidate code. No --no-sandbox or direct-host fallback exists.
+Tests operate in an isolated JavaScript world so page scripts cannot replace the
+verifier's DOM globals. Only fixed candidate files are served on container-local
+loopback. External requests and WebSockets fail the check. Results contain only
+fixed scenario labels, identities, hashes and bounded source-free diagnostics.
+
+The runner has one preflight and one check allowance. Wrong/missing image,
+missing sandbox, timeout, failed process, malformed proof or changed core/proposal
+hash refuse without retry. A failed check cannot turn into a ready assessment.
+
+`config/calculator-browser/probe-workflow.yml` is a reviewed TEMPLATE. A host
+replaces its source/CI placeholders only after that exact Factory SHA has green
+source CI. The resulting one-use read-only workflow prepares the official image
+outside the testing container, resolves its immutable digest, checks out the
+already existing Calculator candidate at a fixed SHA without persisted Git
+credentials and runs `scripts/calculator-browser-candidate-probe.mjs`. No pnpm
+dependency installation or model call is required. The only uploaded artifact
+is the source-free report. This probe does not replay task 2, update a task
+receipt, publish code, prove agent autonomy or close step 8. The candidate's
+historical manual corrections remain disclosed. A successful probe is evidence
+that this runtime can execute the unchanged scenarios on that candidate.
