@@ -53,7 +53,7 @@ function read(path: string): Buffer {
 
 /** Optional pin is a trusted host test seam, never a CLI/env/model parameter.
  * The production wrapper always uses the compiled-in genuine artifact pin. */
-export function inspectCalculatorStoppedSuccessor(root: string, pin: ArchivePin = CALCULATOR_STOPPED_SUCCESSOR_PIN) {
+function inspectArchive(root: string, pin: ArchivePin, kind: string) {
   try {
     if (!isAbsolute(root) || resolve(root) !== root || root === parse(root).root || !HASH.test(pin.manifestSha256)) return refuse();
     let ancestor = parse(root).root;
@@ -63,7 +63,7 @@ export function inspectCalculatorStoppedSuccessor(root: string, pin: ArchivePin 
     const manifestBytes = read(join(root, "manifest.json"));
     if (sha(manifestBytes) !== pin.manifestSha256) return refuse();
     const manifest = object(JSON.parse(manifestBytes.toString("utf8")));
-    if (manifest.version !== 1 || manifest.kind !== "calculator-one-successor-forensic" || manifest.evidenceValidation !== "unvalidated" ||
+    if (manifest.version !== 1 || manifest.kind !== kind || manifest.evidenceValidation !== "unvalidated" ||
         manifest.resumeAuthorized !== false || manifest.budgetResetAuthorized !== false || manifest.fileCount !== pin.fileCount ||
         manifest.totalBytes !== pin.totalBytes || !Array.isArray(manifest.files) || manifest.files.length !== pin.fileCount ||
         manifest.treeSha256 !== digest(manifest.files)) return refuse();
@@ -97,6 +97,17 @@ export function inspectCalculatorStoppedSuccessor(root: string, pin: ArchivePin 
     walk(evidence, "", 0);
     if (files.size !== pin.fileCount || total !== pin.totalBytes) return refuse();
     const json = (path: string) => { const b = files.get(path); if (!b) return refuse(); return object(JSON.parse(b.toString("utf8"))); };
+    const recheck = () => {
+      for (const [path, b] of files) if (!read(join(evidence, path)).equals(b)) return refuse();
+      if (!read(join(root, "manifest.json")).equals(manifestBytes)) return refuse();
+    };
+    return { files, manifest, json, recheck };
+  } catch { return refuse(); }
+}
+
+export function inspectCalculatorStoppedSuccessor(root: string, pin: ArchivePin = CALCULATOR_STOPPED_SUCCESSOR_PIN) {
+  try {
+    const { files, manifest, json, recheck } = inspectArchive(root, pin, "calculator-one-successor-forensic");
     const source = CALCULATOR_PUBLISHED_STATE_PIN, context = json("context.json"), origin = object(context.origin), transition = object(context.transition);
     if (context.version !== 1 || origin.runId !== CALCULATOR_STOPPED_SUCCESSOR_PIN.runId || origin.eventSha !== CALCULATOR_STOPPED_SUCCESSOR_PIN.eventSha ||
         origin.runtimeSha !== CALCULATOR_STOPPED_SUCCESSOR_PIN.runtimeSha || origin.repository !== "erman-ksv/Onay-Agents-Factory" || origin.runAttempt !== 1 ||
@@ -125,11 +136,56 @@ export function inspectCalculatorStoppedSuccessor(root: string, pin: ArchivePin 
         report.status !== "blocked" || report.taskId !== CALCULATOR_STOPPED_SUCCESSOR_TASK || report.publication !== undefined ||
         report.proposalTestsExecuted !== false || report.candidateTestsExecuted !== false || report.wholeAppCompleted !== false || report.legalEnabled !== false) return refuse();
     // Recheck all authenticated inputs after parsing; never clear the old in-flight marker.
-    for (const [path, b] of files) if (!read(join(evidence, path)).equals(b)) return refuse();
-    if (!read(join(root, "manifest.json")).equals(manifestBytes)) return refuse();
-    return Object.freeze({ taskId: CALCULATOR_STOPPED_SUCCESSOR_TASK, manifestSha256: pin.manifestSha256, fileCount: files.size, totalBytes: total,
+    recheck();
+    return Object.freeze({ taskId: CALCULATOR_STOPPED_SUCCESSOR_TASK, manifestSha256: pin.manifestSha256, fileCount: files.size, totalBytes: pin.totalBytes,
       capsulePath, capsuleSha256: sha(bytes), receiptSha256: sha(files.get("state/calc-" + CALCULATOR_STOPPED_SUCCESSOR_TASK + ".json")!),
       previousCharge: CALCULATOR_STOPPED_SUCCESSOR_CHARGE, proposalAvailable: false as const, oldHttpInFlight: true as const,
       resumeAuthorized: false as const, budgetResetAuthorized: false as const });
   } catch { return refuse(); }
+}
+
+/** Second consumed archive, independently authenticated in audit39754107111. */
+export const CALCULATOR_OUTPUT_RECOVERY_SOURCE = Object.freeze({
+  runId:39753293947,eventSha:'2fd7c0e0786eef03eb4bbef53d6a050995ddc4d5',runtimeSha:'3c8fb04230f606c3bd47ca5eadd2d39841fa56a8',
+  artifactId:12415085654,artifactDigest:'sha256:0bc8ab2833f17e15ce2fdb9559ac9ffe2cb83447f239f5d1434fbf0c57064d25',
+  manifestSha256:'eb8c58b6368855eb1538c56ced83ed2f4654540d62adec5b313f9440679fcdd3',fileCount:88,totalBytes:334789,
+});
+export const CALCULATOR_SECOND_T02_CHARGE=Object.freeze({attemptedRequests:1,totalRequestBytes:5300,reservedRunTokens:3223,elapsedMs:19922});
+export function inspectCalculatorOutputRecoverySource(root:string) {
+  try {
+    const pin=CALCULATOR_OUTPUT_RECOVERY_SOURCE,source=CALCULATOR_PUBLISHED_STATE_PIN;
+    const {files,manifest,json,recheck}=inspectArchive(root,pin,'calculator-truncated-successor-recovery-forensic');
+    const previous=inspectCalculatorStoppedSuccessor(join(root,'evidence/prior-evidence'));
+    const context=json('context.json'),origin=object(context.origin),request=object(context.request),transition=object(context.transition);
+    if(context.version!==1||origin.repository!=='erman-ksv/Onay-Agents-Factory'||origin.runId!==pin.runId||origin.runAttempt!==1||
+      origin.eventSha!==pin.eventSha||origin.runtimeSha!==pin.runtimeSha||origin.workflowPath!=='.github/workflows/calculator-successor-recovery.yml'||
+      request.approval!=='ONE_TRUNCATED_SUCCESSOR_REGENERATION'||request.taskId!==CALCULATOR_STOPPED_SUCCESSOR_TASK||
+      request.automaticReplay!==false||request.budgetResetAuthorized!==false||!same(request.source,CALCULATOR_STOPPED_SUCCESSOR_PIN)||
+      !same(request.completedTaskSource,source)||!same(manifest.previousCharges,request.previousCharges)||
+      !same(manifest.previousCharges.stoppedSuccessor,CALCULATOR_STOPPED_SUCCESSOR_CHARGE)||
+      !same(manifest.additionalAllowance,request.additionalAllowance)||manifest.additionalAllowance.maxOutputTokens!==1200||
+      transition.candidateSha!==source.candidateSha||transition.planFingerprint!==source.planFingerprint||
+      transition.previousTaskId!==source.taskId||transition.expectedNextTaskId!==CALCULATOR_STOPPED_SUCCESSOR_TASK)return refuse();
+    const remote=json('barrier/remote.json');
+    if(remote.artifactId!==12414567811||remote.artifactDigest!=='sha256:02b2609947047085d54bb97d320c448a266b48712faacbd30d4b256f5cde8db9'||
+      remote.manifestSha256!=='622ed179157d80f48e366ec92fc9b8f397165b4f64d09f22352d361807e04121'||
+      remote.manifestSha256!==context.admission.manifestSha256||!same(remote.origin,origin))return refuse();
+    const matches=[...files.keys()].filter(p=>new RegExp('^execution-private/[a-f0-9]{64}/'+CALCULATOR_STOPPED_SUCCESSOR_TASK+'\\.execution\\.json$').test(p));
+    if(matches.length!==1)return refuse();const capsulePath=matches[0]!,bytes=files.get(capsulePath)!,raw=json(capsulePath);
+    const {identity,payload}=parseCalculatorExecutionCheckpointBytes(bytes,raw.identity,sha(bytes)).data;
+    if(identity.repository!=='erman-ksv/Onay-Factory-Calculator'||identity.goalId!==source.goalId||identity.planFingerprint!==source.planFingerprint||
+      identity.taskId!==CALCULATOR_STOPPED_SUCCESSOR_TASK||identity.baseSha!==source.candidateSha||identity.branch!=='feat/calculator-agent/'+source.goalId||
+      payload.stage!=='generate_1'||payload.status!=='blocked'||payload.attempt!==1||payload.proposal||payload.assessments.length||
+      !payload.httpInFlight||payload.publicationStarted||!same(payload.modelState,CALCULATOR_SECOND_T02_CHARGE))return refuse();
+    const receipt=json('state/calc-'+CALCULATOR_STOPPED_SUCCESSOR_TASK+'.json'),report=json('calculator-report.json');
+    if(receipt.status!=='blocked'||receipt.publication!==undefined||receipt.id!=='calc-'+CALCULATOR_STOPPED_SUCCESSOR_TASK||
+      receipt.fingerprint!==digest({planFingerprint:source.planFingerprint,taskId:CALCULATOR_STOPPED_SUCCESSOR_TASK})||
+      report.status!=='blocked'||report.taskId!==CALCULATOR_STOPPED_SUCCESSOR_TASK||report.publication!==undefined||
+      report.proposalTestsExecuted!==false||report.candidateTestsExecuted!==false||report.wholeAppCompleted!==false||report.legalEnabled!==false)return refuse();
+    recheck();
+    return Object.freeze({taskId:CALCULATOR_STOPPED_SUCCESSOR_TASK,manifestSha256:pin.manifestSha256,fileCount:files.size,totalBytes:pin.totalBytes,
+      capsuleSha256:sha(bytes),receiptSha256:sha(files.get('state/calc-'+CALCULATOR_STOPPED_SUCCESSOR_TASK+'.json')!),
+      firstCharge:previous.previousCharge,secondCharge:CALCULATOR_SECOND_T02_CHARGE,aggregateT02Charge:Object.freeze({attemptedRequests:2,totalRequestBytes:10140,reservedRunTokens:6293,elapsedMs:43128}),
+      proposalAvailable:false as const,oldHttpInFlight:true as const,resumeAuthorized:false as const,budgetResetAuthorized:false as const});
+  }catch{return refuse();}
 }

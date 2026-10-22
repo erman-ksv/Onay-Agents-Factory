@@ -1,3 +1,4 @@
+import type { CalculatorHostPreset } from "./taskModelBudget.js";
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, resolve } from "node:path";
@@ -48,7 +49,7 @@ export function prepareCalculatorRuntimeAfterCi(value: unknown): CalculatorRunti
 /** Host-only limits. The named successor preset changes waiting time only,
  * with four requests, fixed byte/output ceilings and no repair. */
 export type CalculatorRuntimeHostLimits = Readonly<
-  { maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0; hostPreset: "calculator-successor-four-roles" } |
+  { maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0; hostPreset: CalculatorHostPreset } |
   { maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0 } |
   { maxRequests: 3; maxRunBytes: 72000; maxRepairs: 0 } |
   { maxRequests: 1; maxRunBytes: 24000; maxRepairs: 0 }>;
@@ -60,8 +61,8 @@ export function prepareCalculatorRuntimeHostLimits(value: unknown): CalculatorRu
   const raw = value as Record<string, unknown>;
   if (raw.maxRepairs !== 0) return refuse();
   if (Object.hasOwn(raw, "hostPreset")) {
-    if (raw.hostPreset !== "calculator-successor-four-roles" || raw.maxRequests !== 4 || raw.maxRunBytes !== 96000) return refuse();
-    return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0, hostPreset: "calculator-successor-four-roles" });
+    if ((raw.hostPreset !== "calculator-successor-four-roles" && raw.hostPreset !== "calculator-frontend-2048-four-roles") || raw.maxRequests !== 4 || raw.maxRunBytes !== 96000) return refuse();
+    return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0, hostPreset: raw.hostPreset });
   }
   if (raw.maxRequests === 4 && raw.maxRunBytes === 96000) return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0 });
   if (raw.maxRequests === 3 && raw.maxRunBytes === 72000) return Object.freeze({ maxRequests: 3, maxRunBytes: 72000, maxRepairs: 0 });

@@ -73,11 +73,12 @@ export function calculatorRole(value: unknown): CalculatorRole {
   return value as CalculatorRole;
 }
 
-export function buildCalculatorRoleInstructions(value: unknown): string {
+export function buildCalculatorRoleInstructions(value: unknown, outputTokens: 1200 | 2048 = 1200): string {
   const role = calculatorRole(value), entry = CALCULATOR_TEAM[role];
+  if ((outputTokens !== 1200 && outputTokens !== 2048) || (outputTokens === 2048 && role !== "frontend")) return refuse();
   return [
     "You are the " + role + " in the isolated calculator development team.",
-    entry.baseInstructions, entry.instructions, SPECIALIST_REVIEW_CONTRACT,
+    entry.baseInstructions, entry.instructions.replace("1200 output tokens", outputTokens + " output tokens"), SPECIALIST_REVIEW_CONTRACT,
     "Host-owned scope: " + CALCULATOR_PROFILE.repository + ". The task's exact paths, immutable SHA and bounded evidence remain authoritative.",
     "Inputs: " + entry.inputs + ". Outputs: " + entry.outputs + ".",
     "Allowed proposal paths for this role: " + (entry.writablePaths.join(", ") || "none; read-only assessment/planning role") + ".",

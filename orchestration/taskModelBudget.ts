@@ -10,7 +10,7 @@ export type TaskModelBudgetOptions = {
   /** Monotonic clock injection for offline tests. Real deadlines still apply. */
   now?: () => number;
   /** Exact host-only preset for a new four-role successor, never a retry. */
-  hostPreset?: "calculator-successor-four-roles";
+  hostPreset?: CalculatorHostPreset;
 };
 
 export const DEFAULT_TASK_MODEL_BUDGET = Object.freeze({
@@ -30,6 +30,15 @@ export const HARD_TASK_MODEL_BUDGET = Object.freeze({
 });
 export const CALCULATOR_SUCCESSOR_TASK_BUDGET = Object.freeze({ maxRequests: 4, maxRequestBytes: 24000,
   maxRunBytes: 96000, maxOutputTokens: 1200, wallTimeMs: 300000 });
+
+/** Separate host admission; original defaults and the 1200-token preset stay fixed. */
+export type CalculatorHostPreset = "calculator-successor-four-roles" | "calculator-frontend-2048-four-roles";
+export const CALCULATOR_FRONTEND_TASK_BUDGET = Object.freeze({ ...CALCULATOR_SUCCESSOR_TASK_BUDGET, maxOutputTokens: 2048 });
+export function calculatorHostModelBudget(preset: CalculatorHostPreset) {
+  if (preset === "calculator-successor-four-roles") return CALCULATOR_SUCCESSOR_TASK_BUDGET;
+  if (preset === "calculator-frontend-2048-four-roles") return CALCULATOR_FRONTEND_TASK_BUDGET;
+  throw Error("Invalid host calculator budget preset.");
+}
 
 export type TaskModelBudgetFailureCode = "request_limit" | "request_bytes_limit" |
   "run_bytes_limit" | "task_timeout" | "invalid_request" | "rate_limited" |
@@ -93,11 +102,11 @@ export function createTaskModelBudgetFetch(
 } {
   const { now = () => performance.now(), hostPreset, ...overrides } = options;
   const limits = { ...DEFAULT_TASK_MODEL_BUDGET, ...overrides };
-  if (hostPreset !== undefined && (hostPreset !== "calculator-successor-four-roles" ||
-      Object.entries(CALCULATOR_SUCCESSOR_TASK_BUDGET).some(([key, value]) => limits[key as keyof typeof limits] !== value)))
+  const preset = hostPreset === undefined ? undefined : calculatorHostModelBudget(hostPreset);
+  if (preset && Object.entries(preset).some(([key, value]) => limits[key as keyof typeof limits] !== value))
     throw Error("Invalid host successor budget preset.");
   for (const key of Object.keys(DEFAULT_TASK_MODEL_BUDGET) as (keyof typeof DEFAULT_TASK_MODEL_BUDGET)[]) {
-    const ceiling = hostPreset && key === "wallTimeMs" ? CALCULATOR_SUCCESSOR_TASK_BUDGET.wallTimeMs : HARD_TASK_MODEL_BUDGET[key];
+    const ceiling = preset && key === "wallTimeMs" ? preset.wallTimeMs : HARD_TASK_MODEL_BUDGET[key];
     if (!isPositiveInteger(limits[key]) || limits[key] > ceiling) {
       throw new Error("Task model limits must be positive safe integers within the host ceilings.");
     }
