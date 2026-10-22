@@ -38,7 +38,7 @@ export type CalculatorT02ReadOnlyHandoff = Readonly<{
   taskId: typeof TASK; planFingerprint: typeof PLAN; candidateSha: string;
   originalReceiptSha256: string; sourceManifestSha256: string;
   priorCharge: typeof CALCULATOR_T02_CHARGE_PIN.conservative;
-  ciRunId: typeof CI_RUN; archiveVerifiedBySourceAudit: true;
+  ciRunId: typeof CI_RUN; auditClaimsArchiveVerified: true;
   historicalReceiptPreserved: true; readOnly: true;
   resumeAuthorized: false; budgetResetAuthorized: false;
   publicationAuthorized: false; nextTaskAuthorized: false;
@@ -64,7 +64,11 @@ export async function inspectCalculatorT02ReadOnlyHandoff(input: Readonly<{
         a.modelsRun !== false || a.githubWritesPerformed !== false || a.receiptsChanged !== false ||
         a.automaticReplay !== false || a.resumeAuthorized !== false ||
         a.budgetResetAuthorized !== false || a.autonomousDevelopmentProven !== false ||
-        a.wholeStep8Closed !== false || a.sourceRunId !== CALCULATOR_T02_CHARGE_PIN.sourceRunId ||
+        a.wholeStep8Closed !== false ||
+        a.sourceSha !== "e22c946c77095868deb7e65c230e2e6ab5c860f1" ||
+        a.auditRunId !== 39808880793 ||
+        a.auditEventSha !== "7dd8648e10451b420b1b0a65bbfbb2341c93cf50" ||
+        a.sourceRunId !== CALCULATOR_T02_CHARGE_PIN.sourceRunId ||
         a.sourceArtifactId !== CALCULATOR_T02_CHARGE_PIN.artifactId ||
         a.candidateSha !== CALCULATOR_T02_CHARGE_PIN.candidateSha ||
         archive.manifestSha256 !== CALCULATOR_T02_CHARGE_PIN.manifestSha256 ||
@@ -109,7 +113,7 @@ export async function inspectCalculatorT02ReadOnlyHandoff(input: Readonly<{
       taskId: TASK, planFingerprint: PLAN, candidateSha: candidate.sha,
       originalReceiptSha256: sha(input.archivedReceiptBytes), sourceManifestSha256: archive.manifestSha256,
       priorCharge: prior.priorCharge, ciRunId: CI_RUN,
-      archiveVerifiedBySourceAudit: true as const, historicalReceiptPreserved: true as const,
+      auditClaimsArchiveVerified: true as const, historicalReceiptPreserved: true as const,
       readOnly: true as const, resumeAuthorized: false as const, budgetResetAuthorized: false as const,
       publicationAuthorized: false as const, nextTaskAuthorized: false as const,
     });
