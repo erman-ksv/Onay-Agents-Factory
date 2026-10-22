@@ -1,5 +1,5 @@
 import test from "node:test";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -127,6 +127,11 @@ test("real in-process verified handoff writes exactly one non-authorizing sideca
     const inspected=inspectCalculatorT02ReconciliationSidecar(dir);
     assert.equal(inspected?.status,"already-recorded");
     assert.equal(inspected?.successorAuthorized,false);
+    const crashLock=join(dir,names[0]!.replace(/\\.json$/,".lock"));
+    writeFileSync(crashLock,"",{mode:0o600,flag:"wx"});
+    assert.throws(()=>inspectCalculatorT02ReconciliationSidecar(dir),{message:CALCULATOR_T02_SIDECAR_ERROR});
+    unlinkSync(crashLock);
+    assert.equal(inspectCalculatorT02ReconciliationSidecar(dir)?.status,"already-recorded");
     assert.deepEqual(new Uint8Array(readFileSync(join(dir,names[0]!))),persisted);
     assert.throws(()=>recordCalculatorT02ReconciliationSidecar(dir,checked),{message:CALCULATOR_T02_SIDECAR_ERROR});
     assert.throws(()=>recordCalculatorT02ReconciliationSidecar(dir,structuredClone(checked)),{message:CALCULATOR_T02_HANDOFF_ERROR});
