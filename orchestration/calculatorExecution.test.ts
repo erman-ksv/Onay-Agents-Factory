@@ -273,3 +273,50 @@ test("a host failure cannot forward a full private original through repair diagn
     assert.equal(calls, 1);
   } finally { f.cleanup(); }
 });
+
+test("host zero-repair limit blocks a rejected review or failed host check without regeneration", async t => {
+  for (const trigger of ["reviewer", "host-tests"]) await t.test(trigger, async () => {
+    const f = await fixture({ rejectFirstReview: trigger === "reviewer" });
+    try {
+      let repairs = 0;
+      const originalRepair = f.team.repair;
+      f.team = Object.freeze({ ...f.team, repair: async (...args: Parameters<typeof originalRepair>) => {
+        repairs++; return originalRepair(...args);
+      } });
+      if (trigger === "host-tests") {
+        const originalCheck = f.tools.checkProposal;
+        f.tools.checkProposal = async input => ({ ...await originalCheck(input), status: "failed", testsExecuted: true,
+          failures: ["Expected arithmetic result was not observed."] });
+      }
+      const result = await runCalculatorExecution(f.workspace, { ...f, maxRepairs: 0 });
+      assert.equal(result.status, "blocked"); assert.equal(result.reasonCode, "repair_limit_reached");
+      assert.equal(result.attempts, 1); assert.equal(result.repairs, 0); assert.equal(repairs, 0);
+      assert.deepEqual(f.requests.map(item => item.role), ["coder", "security", "reviewer", "tester"]);
+      assert.equal(f.counts().generations, 1); assert.equal(f.counts().publishes, 0); assert.equal(f.counts().ciReads, 0);
+      assert.equal(f.receipt()!.status, "blocked");
+      assert.equal(f.receipt()!.stages.some(stage => stage.stage === "repair_2"), false);
+    } finally { f.cleanup(); }
+  });
+});
+
+test("host zero-repair limit still permits a successful first candidate through all four roles", async () => {
+  const f = await fixture();
+  try {
+    const result = await runCalculatorExecution(f.workspace, { ...f, maxRepairs: 0 });
+    assert.equal(result.status, "candidate-verified"); assert.equal(result.attempts, 1); assert.equal(result.repairs, 0);
+    assert.equal(result.proposalTestsExecuted, true); assert.equal(result.candidateTestsExecuted, true);
+    assert.deepEqual(f.requests.map(item => item.role), ["coder", "security", "reviewer", "tester"]);
+    assert.deepEqual(f.counts(), { generations: 1, publishes: 1, checks: 1, ciReads: 1 });
+  } finally { f.cleanup(); }
+});
+
+test("invalid host repair limits fail before a task claim or model call", async t => {
+  for (const value of [2, -1, "0", null]) await t.test(String(value), async () => {
+    const f = await fixture();
+    try {
+      const result = await runCalculatorExecution(f.workspace, { ...f, maxRepairs: value as 0 | 1 });
+      assert.equal(result.status, "blocked"); assert.equal(f.receipt(), undefined);
+      assert.deepEqual(f.requests, []); assert.deepEqual(f.counts(), { generations: 0, publishes: 0, checks: 0, ciReads: 0 });
+    } finally { f.cleanup(); }
+  });
+});

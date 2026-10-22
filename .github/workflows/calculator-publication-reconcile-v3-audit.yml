@@ -1,0 +1,78 @@
+name: Calculator publication charge reconciliation audit
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.factory/calculator-publication-reconcile-v3-audit-request.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: audit-control
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: e22c946c77095868deb7e65c230e2e6ab5c860f1
+          path: runtime
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Authenticate origin and exact private ZIP without displaying credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {writeFileSync} from 'node:fs';import {join} from 'node:path';
+          try{
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.equal(process.env.GITHUB_RUN_NUMBER,'1');assert.equal(process.env.GITHUB_REPOSITORY,'erman-ksv/Onay-Agents-Factory');
+          const api='https://api.github.com/repos/erman-ksv/Onay-Agents-Factory',headers={Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json'};
+          const get=async path=>{const r=await fetch(api+path,{headers,redirect:'error',signal:AbortSignal.timeout(10000)});assert.equal(r.status,200);return r.json();};
+          const ci=await get('/actions/runs/39805411575');assert.equal(ci.head_sha,'e22c946c77095868deb7e65c230e2e6ab5c860f1');assert.equal(ci.conclusion,'success');assert.equal(ci.status,'completed');assert.equal(ci.run_attempt,1);assert.equal(ci.path,'.github/workflows/ci.yml');
+          const run=await get('/actions/runs/39790544926');assert.equal(run.head_sha,'08aa2ecc163d7db5cf4c816b03e35c7b6a09156b');assert.equal(run.path,'.github/workflows/calculator-clear-zero-qualification.yml');assert.equal(run.status,'completed');assert.equal(run.conclusion,'success');assert.equal(run.run_attempt,1);assert.equal(run.repository.full_name,'erman-ksv/Onay-Agents-Factory');
+          const artifact=await get('/actions/artifacts/12431481505');assert.equal(artifact.workflow_run.id,39790544926);assert.equal(artifact.workflow_run.head_sha,run.head_sha);assert.equal(artifact.expired,false);assert.equal(artifact.name,'calculator-clear-zero-qualification-evidence-39790544926');assert.equal(artifact.digest,'sha256:6c62eb1a42182975101d5de306cf716249887f98fb117f7bb477ef69810abbb6');assert.equal(artifact.size_in_bytes,330101);
+          let response=await fetch(api+'/actions/artifacts/12431481505/zip',{headers,redirect:'manual',signal:AbortSignal.timeout(10000)});
+          if(response.status===302){const url=new URL(response.headers.get('location'));assert.equal(url.protocol,'https:');assert.ok(url.hostname.endsWith('.blob.core.windows.net')||url.hostname.endsWith('.actions.githubusercontent.com'));response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(20000)});}
+          assert.equal(response.status,200);assert.ok(response.body);let bytes=0;const chunks=[];for await(const chunk of response.body){bytes+=chunk.length;assert.ok(bytes<=1048576);chunks.push(chunk);}const zip=Buffer.concat(chunks);assert.equal(zip.length,330101);assert.equal(createHash('sha256').update(zip).digest('hex'),'6c62eb1a42182975101d5de306cf716249887f98fb117f7bb477ef69810abbb6');
+          writeFileSync(join(process.env.RUNNER_TEMP,'publication-reconcile.zip'),zip,{mode:0o600,flag:'wx'});console.log(JSON.stringify({originVerified:true,zipDigestVerified:true,modelsRun:false,writesPerformed:false}));
+          }catch{throw Error('Pinned source/archive provenance refused; no replay authorized.');}
+          JS
+      - name: Extract bounded private evidence without links or path traversal
+        run: |
+          python3 - <<'PY'
+          import os,pathlib,zipfile,re,stat
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'publication-reconcile-archive';root.mkdir(mode=0o700)
+          names=set();total=0
+          with zipfile.ZipFile(pathlib.Path(os.environ['RUNNER_TEMP'])/'publication-reconcile.zip') as archive:
+            assert len(archive.infolist())<=1024
+            for info in archive.infolist():
+              parts=info.filename.rstrip('/').split('/');assert len(parts)<=24 and all(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,199}',p) and '..' not in p for p in parts)
+              assert info.filename not in names;names.add(info.filename)
+              kind=(info.external_attr>>16)&0o170000;assert kind in (0,stat.S_IFREG,stat.S_IFDIR)
+              target=root.joinpath(*parts)
+              if info.is_dir():target.mkdir(parents=True,exist_ok=True,mode=0o700);continue
+              assert not info.flag_bits&1 and info.file_size<=524288;total+=info.file_size;assert total<4*1024*1024
+              target.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+              with target.open('xb') as out:out.write(archive.read(info))
+              target.chmod(0o600)
+          print('Pinned private archive extracted; original receipts and locks preserved.')
+          PY
+      - name: Reconcile approved bytes, costs, candidate PR and exact-SHA CI read-only
+        working-directory: runtime
+        env:
+          CALCULATOR_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: node ../audit-control/.factory/calculator-publication-reconcile-audit.mjs
+      - name: Preserve only source-free reconciliation result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-publication-reconcile-audit-result
+          path: ${{ runner.temp }}/publication-reconcile-report.json
+          if-no-files-found: ignore
+          retention-days: 14

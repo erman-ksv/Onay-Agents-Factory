@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "approval": "ONE_FINAL_TESTER_OF_SAVED_PROPOSAL",
+  "runtimeSha": "aec60c61152849150cd901df2d826afd37a33a25",
+  "priorRunId": 39576151385,
+  "priorArtifactId": 12334546968,
+  "priorArtifactDigest": "sha256:cffa995e7563da50f4797bf05ac132916f211b2eec41183ebfb298ef6149b132",
+  "priorManifestSha256": "24c70e3b23c9ba3e66c8184ee4b79a7879cc0f379545ebb159e59640a6b08e48",
+  "priorCapsulePath": "execution-private/519aab418f6ba4dde6607e599507cf4c77e60df574e2776b15790ca8e1eeb099/calculator-pilot-step7-v1-34ee03-t01.execution.json",
+  "priorCapsuleSha256": "e7e15c6e5378ea245a55ac5103b80c04049b7e249c62d062139a3b9fb60abcdb",
+  "goalId": "calculator-pilot-step7-v1",
+  "taskId": "calculator-pilot-step7-v1-34ee03-t01",
+  "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+  "proposalDigest": "a38dceea13bb4c1457c8c74e5aa254335125ab862fce432bd8ac0fcdacd7e9fb",
+  "historicalCharges": {
+    "oldExecution": {
+      "attemptedRequests": 2,
+      "totalRequestBytes": 48000,
+      "reservedRunTokens": 16000,
+      "elapsedMs": 120000
+    },
+    "planning": {
+      "reservedRunTokens": 13855
+    },
+    "regeneration": {
+      "attemptedRequests": 2,
+      "totalRequestBytes": 13304,
+      "reservedRunTokens": 6061,
+      "elapsedMs": 63809
+    },
+    "priorContinuation": {
+      "attemptedRequests": 2,
+      "totalRequestBytes": 16463,
+      "reservedRunTokens": 6437,
+      "elapsedMs": 65646
+    }
+  },
+  "additionalAllowance": {
+    "maxRequests": 1,
+    "maxRunBytes": 24000,
+    "maxRunTokens": 16000,
+    "maxOutputTokens": 1200,
+    "wallTimeMs": 120000,
+    "maxRepairs": 0
+  }
+}

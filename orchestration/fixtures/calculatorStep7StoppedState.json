@@ -1,0 +1,102 @@
+[
+  {
+    "path": "barrier/recovery.json",
+    "content": "{\"version\":1,\"goalId\":\"calculator-pilot-step7-v1\",\"priorRunId\":39437299742,\"recoveryRunId\":\"39448498604\",\"runtimeSha\":\"4b8f56ee80c1aecb9f25536ccf2b0c96ef2fa203\",\"eventSha\":\"666ae4a559396e57bcb8e713d29087967b5fb821\",\"priorManifestDigest\":\"a8d16ca5b3a61e2e8269c02b2c989dbd18cf97de2dfe0dee183295ba87381fc2\",\"priorStateDigest\":\"3ae8e64a5c7541731cf268becaf316ec0a4bda33e62647ea6068977af3ce6c0b\",\"conservativePriorCharge\":{\"attemptedRequests\":2,\"totalRequestBytes\":48000,\"reservedRunTokens\":12000,\"elapsedMs\":60000},\"priorRecoveryRunId\":39446900969,\"priorRecoveryBarrierDigest\":\"1f58e194ee9187af40456745062ff559be7ece15649193ec9ecd6364559b817b\",\"priorRecoveryReceiptDigest\":\"44728b41e00d920941dcfc42e7ef737f5ae04c07cc2b99bee1916137c8f7ceba\",\"authorization\":\"ONE_JSON_REQUEST_CORRECTION\",\"automaticReplay\":false}\n"
+  },
+  {
+    "path": "calculator-report.json",
+    "content": "{\"status\":\"blocked\",\"reasonCode\":\"execution_failed_no_replay\",\"taskId\":\"calculator-pilot-step7-v1-34ee03-t01\",\"attempts\":1,\"repairs\":0,\"proposalTestsExecuted\":false,\"candidateTestsExecuted\":false,\"wholeAppCompleted\":false,\"finalCalculatorCiVerified\":false,\"legalEnabled\":false}\n"
+  },
+  {
+    "path": "context.json",
+    "content": "{\"version\":1,\"runtimeSha\":\"4b8f56ee80c1aecb9f25536ccf2b0c96ef2fa203\",\"eventSha\":\"666ae4a559396e57bcb8e713d29087967b5fb821\",\"runId\":\"39448498604\",\"correction\":true,\"request\":{\"version\":1,\"mode\":\"plan\",\"factorySha\":\"d733e078800505534cd7c39f15406822416e7f24\",\"freeTierConfirmed\":true,\"goal\":{\"version\":1,\"id\":\"calculator-pilot-step7-v1\",\"goal\":\"Create the complete agreed static calculator with independent tests, keyboard support and a responsive phone layout.\",\"provider\":\"groq\",\"baseRef\":\"feat/calculator-pilot-bootstrap\",\"baseSha\":\"2c1218f2b020962ad93adf68d902a847271a7e72\"},\"config\":{\"version\":1,\"sandboxImage\":\"node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392\",\"trustedWorkflows\":[{\"id\":390241255,\"path\":\".github/workflows/calculator-task-ci.yml\",\"blobSha\":\"45fae4a292a04e89a631ad7ff2469a3af7265e70\"}]}}}\n"
+  },
+  {
+    "path": "planning-accounting.json",
+    "content": "{\"provider\":\"groq\",\"stopped\":false,\"planned\":true,\"generatedTasks\":0,\"repairedTasks\":0,\"modelBudget\":{\"attemptedRequests\":1,\"totalRequestBytes\":6267,\"remainingRequests\":13,\"remainingRunBytes\":137733,\"elapsedMs\":1491},\"contextBudget\":{\"reservedRunTokens\":1855,\"reservedWindowTokens\":1855,\"attemptedRequests\":1},\"carriedPriorCharge\":{\"attemptedRequests\":2,\"totalRequestBytes\":48000,\"reservedRunTokens\":12000,\"elapsedMs\":60000},\"aggregatePlanningCharge\":{\"attemptedRequests\":3,\"totalRequestBytes\":54267,\"reservedRunTokens\":13855,\"elapsedMs\":61491},\"testsExecuted\":false,\"publicationAuthorized\":false,\"legalEnabled\":false}\n"
+  },
+  {
+    "path": "planning-proposal.json",
+    "content": "{\"tasks\":[{\"id\":\"calculator-pilot-step7-v1-34ee03-t01\",\"role\":\"coder\",\"goal\":\"Implement core arithmetic functions\",\"acceptanceIds\":[\"addition\",\"negative-result\",\"multiplication\",\"division\",\"decimals\",\"decimal-display\",\"zero-recovery\"],\"paths\":[\"src/calculator.mjs\",\"test/calculator.test.mjs\"],\"dependsOn\":[]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t02\",\"role\":\"frontend\",\"goal\":\"Build static UI layout and wiring to core calculator\",\"acceptanceIds\":[\"clear\",\"backspace\"],\"paths\":[\"index.html\",\"styles.css\",\"src/app.mjs\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t01\"]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t03\",\"role\":\"frontend\",\"goal\":\"Add keyboard input handling and synchronize with button clicks\",\"acceptanceIds\":[\"keyboard\"],\"paths\":[\"src/app.mjs\",\"test/ui.test.mjs\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t02\"]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t04\",\"role\":\"frontend\",\"goal\":\"Implement responsive design for narrow screens\",\"acceptanceIds\":[\"narrow-screen\"],\"paths\":[\"styles.css\",\"index.html\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t02\"]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t05\",\"role\":\"frontend\",\"goal\":\"Run UI integration tests covering all UI scenarios\",\"acceptanceIds\":[\"addition\",\"negative-result\",\"multiplication\",\"division\",\"decimals\",\"decimal-display\",\"zero-recovery\",\"clear\",\"backspace\",\"keyboard\",\"narrow-screen\"],\"paths\":[\"test/ui.test.mjs\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t03\",\"calculator-pilot-step7-v1-34ee03-t04\"]}],\"blockers\":[],\"unverifiedAreas\":[\"Source files have not been inspected; actual implementation status is unknown.\"]}\n"
+  },
+  {
+    "path": "prior-barrier/launch.json",
+    "content": "{\"version\":1,\"goalId\":\"calculator-pilot-step7-v1\",\"mode\":\"plan\",\"factorySha\":\"d733e078800505534cd7c39f15406822416e7f24\",\"ownerFingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"configDigest\":\"3a5ca644a490016c438970541389b32efcf08831c028e376dffbb58f886e12a8\",\"binding\":\"3e960ac2f9771c75719df71a75cdcf6c63f1905ca10f32e4510c3f283a891aed\",\"runId\":39437299742,\"eventSha\":\"08a2386f181cc615af58bf4f605ea8c4f1226fa1\",\"requestBlobSha\":\"e4f1bfec18323d94512b2c26ea23cfeffb586ec6\",\"workflowBlobSha\":\"34f09f646f4fe7392316502fd11e66c8dc1cfe95\"}\n"
+  },
+  {
+    "path": "prior-capsule/completion.json",
+    "content": "{\"version\":1,\"manifestDigest\":\"a8d16ca5b3a61e2e8269c02b2c989dbd18cf97de2dfe0dee183295ba87381fc2\",\"exitCode\":10,\"stateDigests\":{\"calc-planning-calculator-pilot-step7-v1.json\":\"bfee7c76156682f53b0aaf925aaf12d9b75ca051140cfe6686f44e5e2a2afa56\"},\"reportDigest\":\"9e0905d11e028b4a13419d4f52ad8ee2cb25af7dd6688df2ce4900b6d655207b\"}\n"
+  },
+  {
+    "path": "prior-capsule/launch.json",
+    "content": "{\"version\":1,\"goalId\":\"calculator-pilot-step7-v1\",\"mode\":\"plan\",\"factorySha\":\"d733e078800505534cd7c39f15406822416e7f24\",\"ownerFingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"configDigest\":\"3a5ca644a490016c438970541389b32efcf08831c028e376dffbb58f886e12a8\",\"binding\":\"3e960ac2f9771c75719df71a75cdcf6c63f1905ca10f32e4510c3f283a891aed\",\"runId\":39437299742,\"eventSha\":\"08a2386f181cc615af58bf4f605ea8c4f1226fa1\",\"requestBlobSha\":\"e4f1bfec18323d94512b2c26ea23cfeffb586ec6\",\"workflowBlobSha\":\"34f09f646f4fe7392316502fd11e66c8dc1cfe95\"}\n"
+  },
+  {
+    "path": "prior-capsule/report/calculator-report.json",
+    "content": "{\"mode\":\"plan\",\"status\":\"blocked\",\"reasonCode\":\"runtime_report_unverified\",\"wholeAppCompleted\":false,\"legalEnabled\":false}\n"
+  },
+  {
+    "path": "prior-capsule/state/calc-planning-calculator-pilot-step7-v1.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-planning-calculator-pilot-step7-v1\",\"fingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"status\":\"blocked\",\"stages\":[{\"stage\":\"model_plan\",\"status\":\"running\"}],\"reasonCode\":\"planning_interrupted_no_replay\"}\n"
+  },
+  {
+    "path": "prior-recovery/barrier/recovery.json",
+    "content": "{\"version\":1,\"goalId\":\"calculator-pilot-step7-v1\",\"priorRunId\":39437299742,\"recoveryRunId\":\"39446900969\",\"runtimeSha\":\"4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2\",\"eventSha\":\"988bed450daf80e0e9602a0b8ddd3fb1f2771bd6\",\"priorManifestDigest\":\"a8d16ca5b3a61e2e8269c02b2c989dbd18cf97de2dfe0dee183295ba87381fc2\",\"priorStateDigest\":\"3ae8e64a5c7541731cf268becaf316ec0a4bda33e62647ea6068977af3ce6c0b\",\"conservativePriorCharge\":{\"attemptedRequests\":1,\"totalRequestBytes\":24000,\"reservedRunTokens\":6000,\"elapsedMs\":30000},\"authorization\":\"ONE_REVIEWED_STEP7_RECOVERY\",\"automaticReplay\":false}\n"
+  },
+  {
+    "path": "prior-recovery/context.json",
+    "content": "{\"version\":1,\"runtimeSha\":\"4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2\",\"eventSha\":\"988bed450daf80e0e9602a0b8ddd3fb1f2771bd6\",\"runId\":\"39446900969\",\"request\":{\"version\":1,\"mode\":\"plan\",\"factorySha\":\"d733e078800505534cd7c39f15406822416e7f24\",\"freeTierConfirmed\":true,\"goal\":{\"version\":1,\"id\":\"calculator-pilot-step7-v1\",\"goal\":\"Create the complete agreed static calculator with independent tests, keyboard support and a responsive phone layout.\",\"provider\":\"groq\",\"baseRef\":\"feat/calculator-pilot-bootstrap\",\"baseSha\":\"2c1218f2b020962ad93adf68d902a847271a7e72\"},\"config\":{\"version\":1,\"sandboxImage\":\"node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392\",\"trustedWorkflows\":[{\"id\":390241255,\"path\":\".github/workflows/calculator-task-ci.yml\",\"blobSha\":\"45fae4a292a04e89a631ad7ff2469a3af7265e70\"}]}}}\n"
+  },
+  {
+    "path": "prior-recovery/prior-barrier/launch.json",
+    "content": "{\"version\":1,\"goalId\":\"calculator-pilot-step7-v1\",\"mode\":\"plan\",\"factorySha\":\"d733e078800505534cd7c39f15406822416e7f24\",\"ownerFingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"configDigest\":\"3a5ca644a490016c438970541389b32efcf08831c028e376dffbb58f886e12a8\",\"binding\":\"3e960ac2f9771c75719df71a75cdcf6c63f1905ca10f32e4510c3f283a891aed\",\"runId\":39437299742,\"eventSha\":\"08a2386f181cc615af58bf4f605ea8c4f1226fa1\",\"requestBlobSha\":\"e4f1bfec18323d94512b2c26ea23cfeffb586ec6\",\"workflowBlobSha\":\"34f09f646f4fe7392316502fd11e66c8dc1cfe95\"}\n"
+  },
+  {
+    "path": "prior-recovery/prior-capsule/completion.json",
+    "content": "{\"version\":1,\"manifestDigest\":\"a8d16ca5b3a61e2e8269c02b2c989dbd18cf97de2dfe0dee183295ba87381fc2\",\"exitCode\":10,\"stateDigests\":{\"calc-planning-calculator-pilot-step7-v1.json\":\"bfee7c76156682f53b0aaf925aaf12d9b75ca051140cfe6686f44e5e2a2afa56\"},\"reportDigest\":\"9e0905d11e028b4a13419d4f52ad8ee2cb25af7dd6688df2ce4900b6d655207b\"}\n"
+  },
+  {
+    "path": "prior-recovery/prior-capsule/launch.json",
+    "content": "{\"version\":1,\"goalId\":\"calculator-pilot-step7-v1\",\"mode\":\"plan\",\"factorySha\":\"d733e078800505534cd7c39f15406822416e7f24\",\"ownerFingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"configDigest\":\"3a5ca644a490016c438970541389b32efcf08831c028e376dffbb58f886e12a8\",\"binding\":\"3e960ac2f9771c75719df71a75cdcf6c63f1905ca10f32e4510c3f283a891aed\",\"runId\":39437299742,\"eventSha\":\"08a2386f181cc615af58bf4f605ea8c4f1226fa1\",\"requestBlobSha\":\"e4f1bfec18323d94512b2c26ea23cfeffb586ec6\",\"workflowBlobSha\":\"34f09f646f4fe7392316502fd11e66c8dc1cfe95\"}\n"
+  },
+  {
+    "path": "prior-recovery/prior-capsule/report/calculator-report.json",
+    "content": "{\"mode\":\"plan\",\"status\":\"blocked\",\"reasonCode\":\"runtime_report_unverified\",\"wholeAppCompleted\":false,\"legalEnabled\":false}\n"
+  },
+  {
+    "path": "prior-recovery/prior-capsule/state/calc-planning-calculator-pilot-step7-v1.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-planning-calculator-pilot-step7-v1\",\"fingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"status\":\"blocked\",\"stages\":[{\"stage\":\"model_plan\",\"status\":\"running\"}],\"reasonCode\":\"planning_interrupted_no_replay\"}\n"
+  },
+  {
+    "path": "prior-recovery/state/calc-planning-calculator-pilot-step7-v1.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-planning-calculator-pilot-step7-v1\",\"fingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"status\":\"blocked\",\"stages\":[{\"stage\":\"model_plan\",\"status\":\"running\"}],\"reasonCode\":\"planning_interrupted_no_replay\"}\n"
+  },
+  {
+    "path": "prior-recovery/state/calc-recovery-calculator-pilot-step7-v1.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-recovery-calculator-pilot-step7-v1\",\"fingerprint\":\"1f58e194ee9187af40456745062ff559be7ece15649193ec9ecd6364559b817b\",\"status\":\"blocked\",\"stages\":[{\"stage\":\"recovery_plan\",\"status\":\"running\"}],\"reasonCode\":\"recovery_stopped_no_replay\"}\n"
+  },
+  {
+    "path": "prior-recovery-barrier/recovery.json",
+    "content": "{\"version\":1,\"goalId\":\"calculator-pilot-step7-v1\",\"priorRunId\":39437299742,\"recoveryRunId\":\"39446900969\",\"runtimeSha\":\"4fcdf994f42d204fa6e5f65b1dc1fa52ea5d8ad2\",\"eventSha\":\"988bed450daf80e0e9602a0b8ddd3fb1f2771bd6\",\"priorManifestDigest\":\"a8d16ca5b3a61e2e8269c02b2c989dbd18cf97de2dfe0dee183295ba87381fc2\",\"priorStateDigest\":\"3ae8e64a5c7541731cf268becaf316ec0a4bda33e62647ea6068977af3ce6c0b\",\"conservativePriorCharge\":{\"attemptedRequests\":1,\"totalRequestBytes\":24000,\"reservedRunTokens\":6000,\"elapsedMs\":30000},\"authorization\":\"ONE_REVIEWED_STEP7_RECOVERY\",\"automaticReplay\":false}\n"
+  },
+  {
+    "path": "state/calc-calculator-pilot-step7-v1-34ee03-t01.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-calculator-pilot-step7-v1-34ee03-t01\",\"fingerprint\":\"1506eac908473ce0879ce9466f792b888a126d4da9f688e521c20c3f45ddeab6\",\"status\":\"blocked\",\"stages\":[{\"stage\":\"load_current_source\",\"status\":\"passed\"},{\"stage\":\"generate_1\",\"status\":\"passed\"},{\"stage\":\"security_1\",\"status\":\"passed\"},{\"stage\":\"reviewer_1\",\"status\":\"blocked\"}],\"reasonCode\":\"execution_failed_no_replay\"}\n"
+  },
+  {
+    "path": "state/calc-json-correction-calculator-pilot-step7-v1.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-json-correction-calculator-pilot-step7-v1\",\"fingerprint\":\"1fe50a8d920ea236417b0eecddd249e83a77cd3fc0b16e6be2a21c0bd7184f45\",\"status\":\"blocked\",\"stages\":[{\"stage\":\"recovery_plan\",\"status\":\"passed\"},{\"stage\":\"one_task\",\"status\":\"blocked\"}],\"reasonCode\":\"one_recovery_task_attempted_no_replay\"}\n"
+  },
+  {
+    "path": "state/calc-plan-calculator-pilot-step7-v1.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-plan-calculator-pilot-step7-v1\",\"fingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"status\":\"needs-review\",\"stages\":[{\"stage\":\"save_plan\",\"status\":\"passed\"},{\"stage\":\"digest_a_1e91cad431880b10b810d1a0bb7fe97c\",\"status\":\"passed\"},{\"stage\":\"digest_b_9a5856394d3f10ed100a82f3927b6ed2\",\"status\":\"passed\"}],\"reasonCode\":\"plan_saved_not_execution\"}\n"
+  },
+  {
+    "path": "state/calc-planning-calculator-pilot-step7-v1.json",
+    "content": "{\"schemaVersion\":1,\"id\":\"calc-planning-calculator-pilot-step7-v1\",\"fingerprint\":\"34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8\",\"status\":\"blocked\",\"stages\":[{\"stage\":\"model_plan\",\"status\":\"running\"}],\"reasonCode\":\"planning_interrupted_no_replay\"}\n"
+  },
+  {
+    "path": "state/calculator-pilot-step7-v1.calculator-plan.json",
+    "content": "{\"version\":1,\"request\":{\"version\":1,\"id\":\"calculator-pilot-step7-v1\",\"goal\":\"Create the complete agreed static calculator with independent tests, keyboard support and a responsive phone layout.\",\"baseRef\":\"feat/calculator-pilot-bootstrap\",\"baseSha\":\"2c1218f2b020962ad93adf68d902a847271a7e72\",\"provider\":\"groq\"},\"proposal\":{\"tasks\":[{\"id\":\"calculator-pilot-step7-v1-34ee03-t01\",\"role\":\"coder\",\"goal\":\"Implement core arithmetic functions\",\"acceptanceIds\":[\"addition\",\"negative-result\",\"multiplication\",\"division\",\"decimals\",\"decimal-display\",\"zero-recovery\"],\"paths\":[\"src/calculator.mjs\",\"test/calculator.test.mjs\"],\"dependsOn\":[]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t02\",\"role\":\"frontend\",\"goal\":\"Build static UI layout and wiring to core calculator\",\"acceptanceIds\":[\"clear\",\"backspace\"],\"paths\":[\"index.html\",\"styles.css\",\"src/app.mjs\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t01\"]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t03\",\"role\":\"frontend\",\"goal\":\"Add keyboard input handling and synchronize with button clicks\",\"acceptanceIds\":[\"keyboard\"],\"paths\":[\"src/app.mjs\",\"test/ui.test.mjs\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t02\"]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t04\",\"role\":\"frontend\",\"goal\":\"Implement responsive design for narrow screens\",\"acceptanceIds\":[\"narrow-screen\"],\"paths\":[\"styles.css\",\"index.html\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t02\"]},{\"id\":\"calculator-pilot-step7-v1-34ee03-t05\",\"role\":\"frontend\",\"goal\":\"Run UI integration tests covering all UI scenarios\",\"acceptanceIds\":[\"addition\",\"negative-result\",\"multiplication\",\"division\",\"decimals\",\"decimal-display\",\"zero-recovery\",\"clear\",\"backspace\",\"keyboard\",\"narrow-screen\"],\"paths\":[\"test/ui.test.mjs\"],\"dependsOn\":[\"calculator-pilot-step7-v1-34ee03-t03\",\"calculator-pilot-step7-v1-34ee03-t04\"]}],\"blockers\":[],\"unverifiedAreas\":[\"Source files have not been inspected; actual implementation status is unknown.\"]},\"fingerprint\":\"1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2\"}\n"
+  }
+]

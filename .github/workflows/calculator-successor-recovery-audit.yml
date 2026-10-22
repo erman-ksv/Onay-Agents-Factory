@@ -1,0 +1,33 @@
+name: Calculator truncated successor recovery archive audit
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.factory/calculator-successor-recovery-audit-request.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 3c8fb04230f606c3bd47ca5eadd2d39841fa56a8
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12411509353'
+          run-id: 39747322491
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-recovery-audit
+          merge-multiple: true
+      - name: Authenticate the fixed failed archive and unchanged completed dependency without models
+        run: pnpm exec tsx orchestration/calculatorSuccessorRecovery.ts audit "$RUNNER_TEMP/calculator-recovery-audit"

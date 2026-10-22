@@ -1,0 +1,59 @@
+name: Calculator isolated browser candidate probe
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.factory/calculator-isolated-browser-probe-request.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Reject replay and require reviewed source CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');
+          assert.equal(process.env.GITHUB_RUN_NUMBER,'1');
+          assert.equal(process.env.GITHUB_REPOSITORY,'erman-ksv/Onay-Agents-Factory');
+          const r=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/runs/39805411575',{redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+process.env.GH_TOKEN,Accept:'application/vnd.github+json'}});
+          assert.equal(r.status,200);const run=await r.json();
+          assert.equal(run.head_sha,'e22c946c77095868deb7e65c230e2e6ab5c860f1');assert.equal(run.path,'.github/workflows/ci.yml');
+          assert.equal(run.run_attempt,1);assert.equal(run.status,'completed');assert.equal(run.conclusion,'success');
+          JS
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: e22c946c77095868deb7e65c230e2e6ab5c860f1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Prepare official browser image without model credentials
+        run: |
+          docker pull mcr.microsoft.com/playwright:v1.56.1-noble
+          browser_image_ref=$(docker image inspect --format '{{index .RepoDigests 0}}' mcr.microsoft.com/playwright:v1.56.1-noble)
+          [[ "$browser_image_ref" =~ ^mcr\.microsoft\.com/playwright@sha256:[a-f0-9]{64}$ ]]
+          printf 'BROWSER_IMAGE=%s\n' "$browser_image_ref" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: erman-ksv/Onay-Factory-Calculator
+          ref: 949a0bf874722fd8cbd886c2cb0af8f2b502ac05
+          path: calculator-candidate
+          token: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          persist-credentials: false
+      - name: Verify exact read-only candidate and run isolated browser
+        run: |
+          test "$(git -C calculator-candidate rev-parse HEAD)" = '949a0bf874722fd8cbd886c2cb0af8f2b502ac05'
+          node scripts/calculator-browser-candidate-probe.mjs
+      - name: Preserve source-free result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-isolated-browser-probe-result
+          path: ${{ runner.temp }}/factory-browser-probe.json
+          if-no-files-found: ignore
+          retention-days: 14

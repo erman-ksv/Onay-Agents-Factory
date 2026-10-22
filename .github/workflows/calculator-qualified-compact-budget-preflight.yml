@@ -1,0 +1,204 @@
+name: Calculator compact exact t02 packet budget preflight
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.factory/calculator-qualified-compact-budget-preflight-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: calculator-one-cycle
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-qualified-compact-budget-preflight-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 24fe59f2e2f8de0d732eff64e9ce45c5b523e4c2
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install locked host dependencies in the fresh Actions worker
+        working-directory: runtime
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12415777866'
+          run-id: 39756457942
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-qualified-review/prior-evidence
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12418090626'
+          run-id: 39760227668
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-qualified-review/repaired-evidence
+          merge-multiple: true
+      - name: Prepare pinned isolated task-check image
+        run: docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Verify source, current head, costs and exact-proposal host checks without model credentials
+        working-directory: runtime
+        env:
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          FACTORY_HISTORY_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: |
+          cat > "$RUNNER_TEMP/calculator-qualified-review.mts" <<'NODE'
+          import assert from 'node:assert/strict';
+          import {createHash} from 'node:crypto';
+          import {readFileSync,readdirSync,lstatSync,mkdirSync,writeFileSync,openSync,closeSync,fsyncSync,constants,chmodSync} from 'node:fs';
+          import {join} from 'node:path';
+          const runtime = process.cwd();
+          const {parseCalculatorExecutionCheckpointBytes} = await import(join(runtime,'orchestration/calculatorExecutionCheckpoint.ts'));
+          const {inspectCalculatorStoppedSuccessor} = await import(join(runtime,'orchestration/calculatorStoppedSuccessor.ts'));
+          const {inspectCalculatorPublishedTaskState,restoreCalculatorPublishedTaskState,calculatorPublishedTaskLaunch} = await import(join(runtime,'orchestration/calculatorPublishedTaskState.ts'));
+          const {inspectCalculatorAfterCiEventState,restoreCalculatorAfterCiEventState} = await import(join(runtime,'orchestration/calculatorAfterCiEventState.ts'));
+          const {runCalculatorAfterCi} = await import(join(runtime,'orchestration/calculatorAfterCi.ts'));
+          const {CalculatorPlanStore} = await import(join(runtime,'orchestration/calculatorPlanStore.ts'));
+          const root=join(process.env.RUNNER_TEMP!,'calculator-qualified-review/prior-evidence'),hash=(b:Buffer|string)=>createHash('sha256').update(b).digest('hex');
+          const b=readFileSync(join(root,'manifest.json'));assert.equal(hash(b),'3e2575e3c55a9ee81d16cd996445de940ebb9970e7111e5e1e9309a488299abb');
+          const m=JSON.parse(b.toString());assert.equal(m.kind,'calculator-output-recovery-forensic');assert.equal(m.fileCount,106);assert.equal(m.totalBytes,483598);
+          assert.equal(m.resumeAuthorized,false);assert.equal(m.budgetResetAuthorized,false);assert.equal(hash(JSON.stringify(m.files)),m.treeSha256);
+          const paths=new Set<string>(),capsules:any[]=[];let total=0,currentProposal:any,currentAssessments:any[]=[];
+          for(const f of m.files){assert.equal(typeof f.path,'string');assert.ok(f.path.split('/').every((p:string)=>/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(p)&&!p.includes('..')));assert.ok(!paths.has(f.path));paths.add(f.path);const p=join(root,'evidence',f.path),s=lstatSync(p);assert.ok(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1);const bytes=readFileSync(p);assert.equal(bytes.length,f.bytes);assert.equal(hash(bytes),f.sha256);total+=bytes.length;
+           if(/^execution-private\/[a-f0-9]{64}\/.*\.execution\.json$/.test(f.path)){const raw=JSON.parse(bytes.toString()),data=parseCalculatorExecutionCheckpointBytes(bytes,raw.identity,hash(bytes)).data;const p=data.payload;assert.equal(p.stage,'execution_complete');assert.equal(p.status,'blocked');assert.equal(p.httpInFlight,false);assert.equal(p.publicationStarted,false);assert.ok(p.proposal);assert.equal(p.assessments.length,3);currentProposal=p.proposal;currentAssessments=p.assessments;capsules.push({taskId:data.identity.taskId,modelState:p.modelState,proposalPresent:true,httpInFlight:false,publicationStarted:false,proposalDigest:data.proposalDigest,proposalFiles:p.proposal.files.map((f:any)=>({path:f.path,bytes:Buffer.byteLength(f.content),sha256:hash(f.content)})),assessments:p.assessments.map((a:any)=>({role:a.role,ready:a.ready,summary:a.summary,findings:a.findings,unverifiedAreaCount:a.unverifiedAreas.length}))});}}
+          let seen=0;function walk(path:string,prefix=''){for(const name of readdirSync(path)){const p=join(path,name),rel=prefix?prefix+'/'+name:name,s=lstatSync(p);assert.ok(!s.isSymbolicLink());if(s.isDirectory())walk(p,rel);else{assert.ok(paths.has(rel));seen++;}}}walk(join(root,'evidence'));assert.equal(seen,106);assert.equal(total,483598);assert.equal(capsules.length,1);
+          const {inspectCalculatorOutputRecoverySource}=await import(join(runtime,'orchestration/calculatorStoppedSuccessor.ts'));
+          const previous=inspectCalculatorOutputRecoverySource(join(root,'evidence/prior-evidence'));
+          const prior=inspectCalculatorPublishedTaskState(join(root,'evidence/prior-evidence/evidence/prior-evidence/evidence/prior-evidence'));
+          const context=JSON.parse(readFileSync(join(root,'evidence/context.json')).toString()),remote=JSON.parse(readFileSync(join(root,'evidence/barrier/remote.json')).toString());
+          assert.equal(remote.artifactId,12416635148);assert.equal(remote.artifactDigest,'sha256:0dfc06dea50e45d88a7fc9961518abcf48310cbf9c2c902ffbe4469f20898a48');assert.equal(remote.manifestSha256,'cb49f1e629ab61a2474a09b880be27492df52fb101e28508470d7e2a19fe36ce');assert.equal(remote.manifestSha256,context.admission.manifestSha256);
+          const report=JSON.parse(readFileSync(join(root,'evidence/calculator-report.json')).toString());assert.equal(report.status,'blocked');assert.equal(report.taskId,previous.taskId);assert.equal(report.reasonCode,'repair_limit_reached');assert.equal(report.publication,undefined);assert.equal(report.proposalTestsExecuted,false);assert.equal(report.candidateTestsExecuted,false);assert.deepEqual(m.previousCharges,context.request.previousCharges);assert.deepEqual(m.previousCharges.stoppedSuccessor,previous.firstCharge);assert.deepEqual(m.previousCharges.stoppedRecovery,previous.secondCharge);assert.equal(capsules[0].taskId,previous.taskId);assert.equal(capsules[0].modelState.attemptedRequests,4);
+          const qualifiedRoot=join(process.env.RUNNER_TEMP!,'calculator-qualified-review'),mode=process.argv[2];
+          const RUNTIME_SHA='24fe59f2e2f8de0d732eff64e9ce45c5b523e4c2',FACTORY='erman-ksv/Onay-Agents-Factory';
+          const WORKFLOW='.github/workflows/calculator-qualified-compact-budget-preflight.yml',REQUEST='.factory/calculator-qualified-compact-budget-preflight-request.json';
+          const TASK='calculator-pilot-step7-v1-34ee03-t02',BASE='5c4bc71b3119a50d2ca7ce1dbdf12bcaa000ce75';
+          const DIGEST='52971e45f59d03255a4c95712c7af8b12c5a322c8d25763e8efc8b2759e6a7b8';
+          const carried={attemptedRequests:6,totalRequestBytes:43543,reservedRunTokens:18128,elapsedMs:244708};
+          const allowance={maxRequests:3,maxRunBytes:72000,maxRepairs:0,maxRunTokens:16000,wallTimeMs:300000};
+          const hashes:{[key:string]:string}={'index.html':'b910b1be94ca0ed30bfee9df726c3f3a5eb07de4f5b8fee981b92d694b48640b','styles.css':'f2a12e8bea97b23b98f2e7368d8af83dd1d7c1a6c23251e1ba6b6e4b2c6defee','src/app.mjs':'0cc8c40dd8d6d9a0e718822961e88a514912684adea676d99a09acf18ce210c6'};
+          function put(path:string,value:any){const bytes=JSON.stringify(value)+'\n';assert.ok(Buffer.byteLength(bytes)<512*1024);assert.ok(!/(?:gsk_|gh[pousr]_)[A-Za-z0-9_-]{20,}/.test(bytes));const fd=openSync(path,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);try{writeFileSync(fd,bytes);fsyncSync(fd);}finally{closeSync(fd);}}
+          function read(path:string){const s=lstatSync(path);assert.ok(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1&&s.size<512*1024);return JSON.parse(readFileSync(path,'utf8'));}
+          async function get(path:string){assert.ok(process.env.FACTORY_HISTORY_TOKEN);const r=await fetch('https://api.github.com/repos/'+FACTORY+path,{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.FACTORY_HISTORY_TOKEN,'X-GitHub-Api-Version':'2022-11-28'}});assert.equal(r.status,200,'GitHub provenance unavailable');const text=await r.text();assert.ok(Buffer.byteLength(text)<=1048576);return JSON.parse(text);}
+          async function history(){
+           assert.equal(process.env.GITHUB_REPOSITORY,FACTORY);assert.equal(process.env.GITHUB_EVENT_NAME,'push');assert.equal(process.env.GITHUB_REF,'refs/heads/feat/calculator-step7-regeneration-20261020');assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.equal(process.env.GITHUB_RUN_NUMBER,'1');
+           const id=Number(process.env.GITHUB_RUN_ID);assert.ok(Number.isSafeInteger(id)&&id>0);const run=await get('/actions/runs/'+id);
+           assert.equal(run.id,id);assert.equal(run.head_sha,process.env.GITHUB_SHA);assert.equal(run.path,WORKFLOW);assert.equal(run.run_attempt,1);assert.equal(run.run_number,1);assert.equal(run.status,'in_progress');assert.equal(run.event,'push');assert.equal(run.head_repository.full_name,FACTORY);assert.equal(run.repository.full_name,FACTORY);
+           const runs=await get('/actions/workflows/'+run.workflow_id+'/runs?per_page=100');assert.equal(runs.total_count,1);assert.equal(runs.workflow_runs.length,1);assert.equal(runs.workflow_runs[0].id,id);
+           let sourceCi=await get('/actions/runs/39764831265');for(let i=0;i<6&&mode==='prepare'&&sourceCi.status!=='completed';i++){await new Promise(r=>setTimeout(r,10000));sourceCi=await get('/actions/runs/39764831265');}assert.equal(sourceCi.head_sha,RUNTIME_SHA);assert.equal(sourceCi.status,'completed');assert.equal(sourceCi.conclusion,'success');assert.equal(sourceCi.path,'.github/workflows/ci.yml');assert.equal(sourceCi.run_attempt,1);
+           for(const p of [
+            {runId:39756457942,eventSha:'8c8d5b796d58e892a724d74194ef173ec2c76cc2',path:'.github/workflows/calculator-output-recovery.yml',conclusion:'failure',artifactId:12415777866,digest:'sha256:2aeffeab183443f38ef1f01c0c78f8dc21689fd8a481bc0e110af2af4da88bfd',size:112493},
+            {runId:39760227668,eventSha:'538547b15e30085ce3b451bf91838ddafa3b31f8',path:'.github/workflows/calculator-output-api-repair-browser-audit.yml',conclusion:'success',artifactId:12418090626,digest:'sha256:d488d0cc6d69f8447baf8166ffa02e7ddf921a94077effd2afe72cf58b214747',size:27696},
+           ]){const old=await get('/actions/runs/'+p.runId);assert.equal(old.id,p.runId);assert.equal(old.head_sha,p.eventSha);assert.equal(old.path,p.path);assert.equal(old.run_attempt,1);assert.equal(old.event,'push');assert.equal(old.head_repository.full_name,FACTORY);assert.equal(old.status,'completed');assert.equal(old.conclusion,p.conclusion);const a=await get('/actions/artifacts/'+p.artifactId);assert.equal(a.id,p.artifactId);assert.equal(a.digest,p.digest);assert.equal(a.expired,false);assert.equal(a.size_in_bytes,p.size);assert.equal(a.workflow_run.id,p.runId);assert.equal(a.workflow_run.head_sha,p.eventSha);}
+           return {runId:id,eventSha:run.head_sha,runtimeSha:RUNTIME_SHA,workflowPath:WORKFLOW};
+          }
+          const {calculatorProposalDigest}=await import(join(runtime,'orchestration/calculatorExecutionEvidence.ts'));
+          const {createCalculatorSnapshotReader,loadCalculatorSnapshot,calculatorSources}=await import(join(runtime,'github/calculatorSnapshot.ts'));
+          const {createCalculatorSandbox}=await import(join(runtime,'orchestration/calculatorSandbox.ts'));
+          const {prepareCalculatorRoleChanges}=await import(join(runtime,'commander/calculatorTeam.ts'));
+          const {createCalculatorCiReader}=await import(join(runtime,'github/calculatorCi.ts'));
+          const {evaluateTestExecutionEvidence}=await import(join(runtime,'agents/tester/agent.ts'));
+          const {createCalculatorPublishedDependencyRunner}=await import(join(runtime,'orchestration/calculatorPublishedTaskState.ts'));
+          const {openCalculatorWorkspace,selectCalculatorWorkspaceTask}=await import(join(runtime,'orchestration/calculatorWorkspace.ts'));
+          const {TeamTaskStore}=await import(join(runtime,'orchestration/teamTaskStore.ts'));
+          const launch=calculatorPublishedTaskLaunch(prior),request={version:1,runtimeSha:RUNTIME_SHA,taskId:TASK,baseSha:BASE,proposalDigest:DIGEST,carriedCharge:carried,additionalAllowance:allowance,automaticReplay:false,budgetResetAuthorized:false,legalEnabled:false};
+          assert.deepEqual(read(join(process.env.GITHUB_WORKSPACE!,'request',REQUEST)),request);
+          assert.equal(capsules[0].proposalDigest,'c585a6bbaafde6234a26d6c629ae754ffa15a198716d844f924e5bba18105b3e');
+          const aggregate=Object.fromEntries(Object.keys(carried).map(k=>[k,previous.aggregateT02Charge[k]+capsules[0].modelState[k]]));assert.deepEqual(aggregate,carried);
+          assert.ok(['prepare','execute'].includes(mode));const origin=await history();
+          assert.equal(process.env.AGENT_FACTORY_TARGET_PROFILE,'calculator');assert.equal(process.env.AGENT_FACTORY_LEGAL_ENABLED,'false');assert.equal(process.env.ONAY_TEAM_FREE_TIER_CONFIRMED,'true');
+          const repaired=join(qualifiedRoot,'repaired-evidence'),manifest=read(join(repaired,'unapproved-repaired-source/repair-manifest.json')),browser=read(join(repaired,'browser-proof.json'));
+          assert.equal(manifest.resultProposalDigest,DIGEST);assert.equal(manifest.resultFileSha256,hashes['src/app.mjs']);assert.equal(manifest.sourceProposalDigest,capsules[0].proposalDigest);for(const k of ['publicationAuthorized','securityReady','reviewerReady','testerReady'])assert.equal(manifest[k],false);
+          assert.equal(browser.status,'passed');assert.equal(browser.testsExecuted,true);assert.equal(browser.proposalDigest,DIGEST);assert.equal(browser.browserSandboxDisabled,false);assert.equal(browser.dependencyInstallationPerformed,false);assert.equal(browser.publicationAuthorized,false);assert.equal(browser.pageErrors,0);assert.equal(browser.blockedRequests,0);
+          const {CALCULATOR_UI_BROWSER_SCENARIOS,collectCalculatorAssessmentEvidence}=await import(join(runtime,'orchestration/calculatorAssessmentEvidence.ts'));
+          assert.deepEqual(browser.steps,CALCULATOR_UI_BROWSER_SCENARIOS.map((scenario:string)=>({scenario,status:'passed'})));
+          const rawFiles=Object.keys(hashes).map(path=>{const p=join(repaired,'unapproved-repaired-source',path),s=lstatSync(p);assert.ok(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1&&s.size<8192);const content=readFileSync(p,'utf8');assert.equal(hash(content),hashes[path]);return {operation:'create',path,content,message:'Restore the exact independently qualified saved UI'};});
+          const state=join(qualifiedRoot,'state');if(mode==='prepare'){chmodSync(qualifiedRoot,0o700);restoreCalculatorPublishedTaskState(prior,state);}
+          const store=new CalculatorPlanStore(state,launch.goal),plan=store.inspect();assert.equal(plan.fingerprint,'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2');
+          const task=plan.tasks.find((t:any)=>t.id===TASK);assert.ok(task);assert.deepEqual(task.acceptanceIds,['clear','backspace']);
+          const reader=createCalculatorSnapshotReader(process.env);assert.equal(await reader.getHead(plan.branch),BASE);
+          const coreSnapshot=await loadCalculatorSnapshot({repository:plan.owner.repository,baseRef:plan.branch,baseSha:BASE,changePaths:['src/calculator.mjs','test/calculator.test.mjs']},reader),baseSources=calculatorSources(coreSnapshot);
+          const firstRoot=join(root,'evidence/prior-evidence/evidence/prior-evidence/evidence/prior-evidence/evidence');let authenticatedCore:any;
+          for(const d of readdirSync(join(firstRoot,'execution-private'))){const directory=join(firstRoot,'execution-private',d);if(!lstatSync(directory).isDirectory())continue;for(const n of readdirSync(directory)){if(!n.endsWith('-t01.execution.json'))continue;const raw=read(join(directory,n));authenticatedCore=parseCalculatorExecutionCheckpointBytes(readFileSync(join(directory,n)),raw.identity).data.payload.proposal;}}
+          assert.ok(authenticatedCore);for(const f of authenticatedCore.files)assert.ok(baseSources.get(f.path)===f.content,'Core source differs from authenticated dependency');
+          const checks=createCalculatorSandbox({image:launch.config.sandboxImage,baseSha:BASE,baseSources},process.env);assert.equal((await checks.preflight()).ready,true);
+          const ci=createCalculatorCiReader({trustedWorkflows:launch.config.trustedWorkflows},process.env),proof=await ci({repository:plan.owner.repository,branch:plan.branch,candidateSha:BASE});
+          const verified=evaluateTestExecutionEvidence(proof.runs,proof.jobs,BASE,['Calculator task CI'],['Syntax','Task tests']);assert.equal(verified.status,'passed');assert.equal(verified.testsExecuted,true);
+          const workspace=await openCalculatorWorkspace(store,reader,plan.branch,BASE),dependencies=createCalculatorPublishedDependencyRunner(prior,reader,checks.checkProposal);
+          const selection=await selectCalculatorWorkspaceTask(workspace,dependencies);assert.equal(selection.status,'ready');assert.equal(selection.task.id,TASK);
+          const uiSnapshot=await loadCalculatorSnapshot({repository:plan.owner.repository,baseRef:plan.branch,baseSha:BASE,changePaths:task.paths},reader);
+          const prepared=prepareCalculatorRoleChanges('frontend',{summary:'Restore the saved UI with verified module path and binary-argument adapter',changes:rawFiles},uiSnapshot);assert.equal(calculatorProposalDigest(prepared),DIGEST);
+          const identity={id:'calc-qualified-t02-'+launch.goal.id,fingerprint:hash(JSON.stringify({origin,request}))};
+          const admissionDir=join(qualifiedRoot,'admission'),admissionFile=join(admissionDir,'admission.json');
+          if(mode==='prepare'){
+           const host=await checks.checkProposal({task,changes:prepared,proposalDigest:DIGEST});assert.equal(host.status,'passed');assert.equal(host.testsExecuted,true);
+           const {createCalculatorModelTeam}=await import(join(runtime,'orchestration/calculatorModelTeam.ts'));
+           let simulationClock=0,simulatedCalls=0,dryCap:any;
+           const dryTeam=createCalculatorModelTeam(launch.goal,{...process.env,AGENT_FACTORY_PROVIDER:'groq',GROQ_API_KEY:'fixture-key',CALCULATOR_MODEL_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN'},async()=>{simulatedCalls++;return Response.json({choices:[{finish_reason:'stop',message:{role:'assistant',content:JSON.stringify({ready:true,summary:'Simulated bounded packet validation, not a real specialist verdict',findings:[],unverifiedAreas:['No real model assessment has executed']})}}]});},{now:()=>simulationClock,wait:async(ms:number)=>{simulationClock+=ms;}},undefined,undefined,'calculator-successor-four-roles',()=>dryCap);
+           const dryChanges=dryTeam.restoreProposal(plan,TASK,uiSnapshot,prepared,DIGEST,[]);
+           dryCap=await collectCalculatorAssessmentEvidence(task,dryChanges,coreSnapshot,{checkProposal:async()=>host,checkBrowser:async(input:any)=>({repository:prepared.repository,taskId:TASK,baseSha:BASE,proposalDigest:DIGEST,dependencySha256:input.dependencySha256,status:'passed',testsExecuted:true,browser:browser.browser,sandboxDisabled:false,pageErrors:0,blockedRequests:0,scenarios:browser.steps.map((s:any)=>s.scenario)})});
+           try{for(const role of ['security','reviewer','tester'])await dryTeam.assess(role,plan,TASK,dryChanges);}catch(e){console.log(JSON.stringify({status:'qualified-packet-simulation-stopped',diagnostic:dryTeam.diagnostic(),simulatedCharge:dryTeam.checkpointCharge(),realModelCalls:0}));throw Error('Exact proposal packets exceed unchanged budgets; no real model request is authorized');}
+           assert.equal(simulatedCalls,3);put(join(qualifiedRoot,'packet-budget-simulation.json'),{status:'passed',simulatedCalls,simulatedCharge:dryTeam.checkpointCharge(),realModelCalls:0,publicationAuthorized:false});
+           console.log(JSON.stringify({status:'qualified-packets-fit-existing-budgets',simulatedCharge:dryTeam.checkpointCharge(),realModelCalls:0}));
+           mkdirSync(admissionDir,{mode:0o700});const marker=new TeamTaskStore(admissionDir,identity);try{assert.equal(marker.claim(),'claimed');marker.recordStage('three_fresh_assessments_and_one_candidate','running');}finally{marker.close();}
+           put(admissionFile,{version:1,origin,request,sourceManifestSha256:hash(b),files:hashes,dependencySha256:hash(baseSources.get('src/calculator.mjs')!),oldApprovalsTransferred:false,resumeAuthorized:false});
+           console.log(JSON.stringify({status:'admission-prepared',taskId:TASK,proposalDigest:DIGEST,modelsRun:false,publicationPerformed:false}));
+          }else{
+           const admission=read(admissionFile);assert.deepEqual(admission.origin,origin);assert.deepEqual(admission.request,request);assert.deepEqual(admission.files,hashes);assert.equal(admission.sourceManifestSha256,hash(b));assert.equal(admission.dependencySha256,hash(baseSources.get('src/calculator.mjs')!));assert.equal(admission.oldApprovalsTransferred,false);
+           const remoteId=Number(process.env.QUALIFIED_ADMISSION_ID),remoteDigest=process.env.QUALIFIED_ADMISSION_DIGEST;assert.ok(Number.isSafeInteger(remoteId)&&remoteId>0);assert.ok(/^sha256:[a-f0-9]{64}$/.test(remoteDigest??''));const remote=await get('/actions/artifacts/'+remoteId);assert.equal(remote.name,'calculator-qualified-review-admission-'+origin.runId);assert.equal(remote.digest,remoteDigest);assert.equal(remote.expired,false);assert.equal(remote.workflow_run.id,origin.runId);assert.equal(remote.workflow_run.head_sha,origin.eventSha);
+           assert.equal(process.env.AGENT_FACTORY_PROVIDER,'groq');assert.equal(process.env.GROQ_MODEL,undefined);assert.equal(process.env.CALCULATOR_EXECUTION_LIVE_APPROVED,'RUN_ONE_FREE_CALCULATOR_TASK');assert.equal(process.env.AGENT_FACTORY_ENABLE_GITHUB_WRITES,'true');assert.equal(process.env.AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES,'false');
+           put(join(qualifiedRoot,'remote-admission.json'),{artifactId:remoteId,artifactDigest:remoteDigest,admissionSha256:hash(readFileSync(admissionFile)),origin});
+           const once=new TeamTaskStore(qualifiedRoot,identity);assert.equal(once.claim(),'claimed');once.recordStage('qualify_saved_t02','running');
+           const {createCalculatorModelTeam}=await import(join(runtime,'orchestration/calculatorModelTeam.ts'));
+           const {createCalculatorRuntimeCheckpointWriters,createCalculatorRuntimeRequestCheckpoint,createCalculatorRuntimeAssessmentRejection}=await import(join(runtime,'orchestration/calculatorRuntime.ts'));
+           const {runCalculatorExecution}=await import(join(runtime,'orchestration/calculatorExecution.ts'));
+           const {createCalculatorPublisher}=await import(join(runtime,'github/calculatorPublisher.ts'));
+           const privateDir=join(qualifiedRoot,'execution-private');mkdirSync(privateDir,{mode:0o700});
+           const checkpointIdentity={repository:plan.owner.repository,goalId:launch.goal.id,ownerFingerprint:plan.owner.ownerFingerprint,planFingerprint:plan.fingerprint,branch:plan.branch,baseSha:BASE,bootstrapSha:plan.owner.baseSha,runtimeConfigDigest:hash(JSON.stringify({origin,request}))};
+           const writers=createCalculatorRuntimeCheckpointWriters(privateDir,checkpointIdentity);let active:any={attempt:1,stage:'qualification',status:'running',assessments:[],modelState:{attemptedRequests:0,totalRequestBytes:0,reservedRunTokens:0,elapsedMs:0},httpInFlight:false,publicationStarted:false};let poisoned=false,cap:any;
+           function save(payload:any,charge:any){assert.equal(poisoned,false);try{const next={...payload,modelState:{...charge,elapsedMs:Math.ceil(charge.elapsedMs)}};writers.get(TASK).save(next);active=next;}catch(e){poisoned=true;throw e;}}
+           const beforeRequest=createCalculatorRuntimeRequestCheckpoint({maxRequests:3,maxRunBytes:72000,maxRepairs:0},(charge:any,admitted:boolean)=>save({...active,status:admitted?'running':'blocked',httpInFlight:admitted},charge));
+           let team:any;const afterAssessmentRejected=createCalculatorRuntimeAssessmentRejection({directory:privateDir,context:()=>{const match=/^(security|reviewer|tester)_1$/.exec(active.stage);if(!match||!active.proposal)return undefined;return {identity:{...checkpointIdentity,taskId:TASK},proposal:active.proposal,expectedRole:match[1],kind:'task',stage:active.stage,attempt:1,status:active.status,httpInFlight:active.httpInFlight};},charge:()=>team.checkpointCharge(),persistReturned:(charge:any)=>save({...active,status:'blocked',httpInFlight:false},charge)});
+           team=createCalculatorModelTeam(launch.goal,process.env,globalThis.fetch,{},undefined,{beforeRequest,afterAssessmentRejected},'calculator-successor-four-roles',()=>cap);
+           const publisher=createCalculatorPublisher({plan,reader,env:process.env});let restored=false;
+           try{
+           const result=await runCalculatorExecution(workspace,{team,tools:{checkProposal:checks.checkProposal,publish:publisher.publish,ci},verifyDependencies:dependencies,maxRepairs:0,execution:'live',env:process.env,
+            restoreProposal:async (actualPlan:any,id:string,snapshot:any)=>{assert.equal(restored,false);restored=true;assert.equal(actualPlan.fingerprint,plan.fingerprint);assert.equal(id,TASK);assert.equal(snapshot.baseSha,BASE);const changes=team.restoreProposal(actualPlan,id,snapshot,prepared,DIGEST,[]);
+             cap=await collectCalculatorAssessmentEvidence(task,changes,coreSnapshot,{checkProposal:checks.checkProposal,checkBrowser:async (input:any)=>{assert.equal(input.proposalDigest,DIGEST);assert.equal(input.dependencySha256,admission.dependencySha256);return {repository:changes.repository,taskId:TASK,baseSha:BASE,proposalDigest:DIGEST,dependencySha256:admission.dependencySha256,status:'passed',testsExecuted:true,browser:browser.browser,sandboxDisabled:false,pageErrors:0,blockedRequests:0,scenarios:browser.steps.map((s:any)=>s.scenario)};}});return changes;},
+            checkpoint:(event:any)=>{assert.equal(event.taskId,TASK);const inFlight=active.httpInFlight;save({attempt:event.attempt,stage:event.stage,status:event.status,...(event.proposal?{proposal:event.proposal}:{}),assessments:event.assessments,modelState:active.modelState,publicationStarted:event.publicationStarted,httpInFlight:event.status==='passed'?false:inFlight},team.checkpointCharge());},
+           });
+           const charge=team.checkpointCharge();assert.ok(charge.attemptedRequests<=3);const total=Object.fromEntries(Object.keys(carried).map(k=>[k,carried[k]+charge[k]]));
+           put(join(qualifiedRoot,'calculator-report.json'),{...result,modelDiagnostic:team.diagnostic(),newCharge:charge,carriedCharge:carried,aggregateT02Charge:total,oldApprovalsTransferred:false,modelGenerationRepeated:false,automaticReplay:false,legalEnabled:false});
+           once.recordStage('qualify_saved_t02',result.status==='blocked'?'blocked':'passed');once.finish(result.status==='blocked'?'blocked':'needs-review','qualified_t02_consumed_no_replay');
+           console.log(JSON.stringify({...result,newCharge:charge,aggregateT02Charge:total,oldApprovalsTransferred:false,modelGenerationRepeated:false}));if(result.status==='blocked')process.exitCode=10;
+           }finally{try{put(join(qualifiedRoot,'model-charge-final.json'),{carried,newCharge:team.checkpointCharge(),diagnostic:team.diagnostic(),automaticReplay:false});}finally{writers.close();once.close();}}
+          }
+          NODE
+          pnpm exec tsx "$RUNNER_TEMP/calculator-qualified-review.mts" prepare
+      - name: Preserve preflight evidence without authorizing replay
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-qualified-compact-budget-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-qualified-review/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false

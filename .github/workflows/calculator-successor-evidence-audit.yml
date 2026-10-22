@@ -1,0 +1,84 @@
+name: Inspect fixed first successor failure evidence without models
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.github/workflows/calculator-successor-evidence-audit.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 6e4873fa763f91191210ce6087ab3aefd787312a
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: runtime
+      - name: Verify exact failed production source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          const base='https://api.github.com/repos/erman-ksv/Onay-Agents-Factory';
+          const get=async path=>{const r=await fetch(base+path,{headers:{authorization:'Bearer '+process.env.GH_TOKEN,accept:'application/vnd.github+json'},redirect:'error',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('source unavailable');return r.json();};
+          const run=await get('/actions/runs/39747322491');
+          if(run.head_sha!=='dbae505ae6e4a6f6b2cf93150936eba24c46c8bf'||run.path!=='.github/workflows/calculator-after-ci-successor.yml'||run.run_attempt!==1||run.status!=='completed'||run.conclusion!=='failure')throw Error('wrong source run');
+          const a=await get('/actions/artifacts/12411509353');
+          if(a.name!=='calculator-successor-evidence-39747322491'||a.digest!=='sha256:90ba693a978d1b68067ae2f0e4f19f2d6351afa1d753811d471b1b217dcb8c6b'||a.size_in_bytes!==69704||a.expired!==false||a.workflow_run.id!==39747322491)throw Error('wrong evidence artifact');
+          console.log(JSON.stringify({sourceVerified:true,modelsRun:false}));
+          NODE
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12411509353'
+          run-id: 39747322491
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-successor-failure-audit
+          merge-multiple: true
+      - name: Verify all bytes and print only charges and barrier metadata
+        working-directory: runtime
+        run: |
+          cat > "$RUNNER_TEMP/calculator-successor-audit.mts" <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync,readdirSync,lstatSync} from 'node:fs';
+          import {join,resolve} from 'node:path';
+          import {createHash} from 'node:crypto';
+          import {pathToFileURL} from 'node:url';
+          const runtime=join(process.env.GITHUB_WORKSPACE,'runtime');
+          const {inspectCalculatorPublishedTaskState}=await import(pathToFileURL(join(runtime,'orchestration/calculatorPublishedTaskState.ts')).href);
+          const {parseCalculatorExecutionCheckpointBytes}=await import(pathToFileURL(join(runtime,'orchestration/calculatorExecutionCheckpoint.ts')).href);
+          const root=join(process.env.RUNNER_TEMP,'calculator-successor-failure-audit'), hash=b=>createHash('sha256').update(b).digest('hex');
+          const manifestBytes=readFileSync(join(root,'manifest.json'));
+          assert.equal(hash(manifestBytes),'a45092537f70be2babcd801aaa71adbfaa80227c4b63750bffea2d2ceaf9d47a');
+          const m=JSON.parse(manifestBytes);assert.equal(m.fileCount,70);assert.equal(m.totalBytes,304510);
+          const paths=new Set(),capsules=[];let total=0;
+          for(const entry of m.files){
+            assert.match(entry.path,/^[A-Za-z0-9][A-Za-z0-9._/-]+\.(json|lock)$/);assert.ok(!entry.path.split('/').includes('..'));assert.ok(!paths.has(entry.path));paths.add(entry.path);
+            const p=join(root,'evidence',entry.path),s=lstatSync(p);assert.ok(s.isFile()&&!s.isSymbolicLink());
+            const b=readFileSync(p);assert.equal(b.length,entry.bytes);assert.equal(hash(b),entry.sha256);total+=b.length;
+            if(entry.path.startsWith('execution-private/')&&entry.path.endsWith('.json')){
+              const data=JSON.parse(b);
+              if(data.identity&&data.payload){const validated=parseCalculatorExecutionCheckpointBytes(b,data.identity,entry.sha256).data;
+                capsules.push({taskId:validated.identity.taskId,stage:validated.payload.stage,status:validated.payload.status,charge:validated.payload.modelState,
+                  proposalPresent:!!validated.payload.proposal,assessments:validated.payload.assessments.length,httpInFlight:validated.payload.httpInFlight,publicationStarted:validated.payload.publicationStarted});}
+            }
+          }
+          let seen=0;function walk(p){for(const name of readdirSync(p)){const n=join(p,name),s=lstatSync(n);assert.ok(!s.isSymbolicLink());if(s.isDirectory())walk(n);else{assert.ok(paths.has(n.slice(join(root,'evidence').length+1)));seen++;}}}walk(join(root,'evidence'));assert.equal(seen,70);assert.equal(total,m.totalBytes);
+          const prior=inspectCalculatorPublishedTaskState(join(root,'evidence/prior-evidence'));
+          const context=JSON.parse(readFileSync(join(root,'evidence/context.json'))),remote=JSON.parse(readFileSync(join(root,'evidence/barrier/remote.json')));
+          assert.equal(remote.artifactId,12411024412);assert.equal(remote.artifactDigest,'sha256:5239635c9ed62556c17c575b09f886f8fbcd294c640f0393526d13426cb90e77');assert.equal(remote.manifestSha256,context.admission.manifestSha256);
+          const report=JSON.parse(readFileSync(join(root,'evidence/calculator-report.json')));
+          assert.equal(report.status,'blocked');assert.equal(report.taskId,'calculator-pilot-step7-v1-34ee03-t02');assert.equal(report.reasonCode,'execution_failed_no_replay');
+          assert.ok(capsules.some(c=>c.taskId===report.taskId&&c.charge.attemptedRequests===1&&!c.proposalPresent&&!c.publicationStarted));
+          console.log(JSON.stringify({status:'failed-successor-evidence-verified',fileCount:seen,totalBytes:total,priorTaskId:prior.taskId,priorTaskCharge:prior.completedTaskCharge,barrierPersistedAndAcknowledged:true,newCapsules:capsules,modelsRun:false,writesPerformed:false,resumeAuthorized:false,budgetResetAuthorized:false}));
+          NODE
+          pnpm exec tsx "$RUNNER_TEMP/calculator-successor-audit.mts"

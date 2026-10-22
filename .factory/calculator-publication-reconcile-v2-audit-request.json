@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "purpose": "read-only-pending-publication-reconciliation",
+  "factorySha": "e22c946c77095868deb7e65c230e2e6ab5c860f1",
+  "sourceRunId": 39790544926,
+  "artifactId": 12431481505,
+  "artifactDigest": "sha256:6c62eb1a42182975101d5de306cf716249887f98fb117f7bb477ef69810abbb6",
+  "candidateSha": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+  "modelsRun": false,
+  "taskReplayAuthorized": false,
+  "receiptChangesAuthorized": false,
+  "targetWritesAuthorized": false,
+  "legalEnabled": false,
+  "previousAuditRunId": 39807887977,
+  "originalAuditPreserved": true
+}

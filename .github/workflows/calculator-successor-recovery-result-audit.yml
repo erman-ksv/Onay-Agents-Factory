@@ -1,0 +1,70 @@
+name: Calculator truncated recovery result and duplicate audit
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.factory/calculator-successor-recovery-result-audit-request.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 3c8fb04230f606c3bd47ca5eadd2d39841fa56a8
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12415085654'
+          run-id: 39753293947
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-recovery-result-audit
+          merge-multiple: true
+      - name: Authenticate all evidence and refuse the real consumed event twice without model calls
+        run: |
+          cat > "$RUNNER_TEMP/calculator-recovery-result-audit.mts" <<'NODE'
+          import assert from 'node:assert/strict';
+          import {createHash} from 'node:crypto';
+          import {readFileSync,readdirSync,lstatSync,mkdirSync} from 'node:fs';
+          import {join} from 'node:path';
+          const runtime = process.cwd();
+          const {parseCalculatorExecutionCheckpointBytes} = await import(join(runtime,'orchestration/calculatorExecutionCheckpoint.ts'));
+          const {inspectCalculatorStoppedSuccessor} = await import(join(runtime,'orchestration/calculatorStoppedSuccessor.ts'));
+          const {inspectCalculatorPublishedTaskState,restoreCalculatorPublishedTaskState,calculatorPublishedTaskLaunch} = await import(join(runtime,'orchestration/calculatorPublishedTaskState.ts'));
+          const {inspectCalculatorAfterCiEventState,restoreCalculatorAfterCiEventState} = await import(join(runtime,'orchestration/calculatorAfterCiEventState.ts'));
+          const {runCalculatorAfterCi} = await import(join(runtime,'orchestration/calculatorAfterCi.ts'));
+          const {CalculatorPlanStore} = await import(join(runtime,'orchestration/calculatorPlanStore.ts'));
+          const root=join(process.env.RUNNER_TEMP!,'calculator-recovery-result-audit'),hash=(b:Buffer|string)=>createHash('sha256').update(b).digest('hex');
+          const b=readFileSync(join(root,'manifest.json'));assert.equal(hash(b),'eb8c58b6368855eb1538c56ced83ed2f4654540d62adec5b313f9440679fcdd3');
+          const m=JSON.parse(b.toString());assert.equal(m.kind,'calculator-truncated-successor-recovery-forensic');assert.equal(m.fileCount,88);assert.equal(m.totalBytes,334789);
+          assert.equal(m.resumeAuthorized,false);assert.equal(m.budgetResetAuthorized,false);assert.equal(hash(JSON.stringify(m.files)),m.treeSha256);
+          const paths=new Set<string>(),capsules:any[]=[];let total=0;
+          for(const f of m.files){assert.equal(typeof f.path,'string');assert.ok(f.path.split('/').every((p:string)=>/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(p)&&!p.includes('..')));assert.ok(!paths.has(f.path));paths.add(f.path);const p=join(root,'evidence',f.path),s=lstatSync(p);assert.ok(s.isFile()&&!s.isSymbolicLink()&&s.nlink===1);const bytes=readFileSync(p);assert.equal(bytes.length,f.bytes);assert.equal(hash(bytes),f.sha256);total+=bytes.length;
+           if(/^execution-private\/[a-f0-9]{64}\/.*\.execution\.json$/.test(f.path)){const raw=JSON.parse(bytes.toString()),data=parseCalculatorExecutionCheckpointBytes(bytes,raw.identity,hash(bytes)).data;const p=data.payload;assert.equal(p.stage,'generate_1');assert.equal(p.status,'blocked');assert.equal(p.httpInFlight,true);assert.equal(p.publicationStarted,false);assert.equal(p.proposal,undefined);assert.equal(p.assessments.length,0);capsules.push({taskId:data.identity.taskId,modelState:p.modelState,proposalPresent:false,httpInFlight:true,publicationStarted:false});}}
+          let seen=0;function walk(path:string,prefix=''){for(const name of readdirSync(path)){const p=join(path,name),rel=prefix?prefix+'/'+name:name,s=lstatSync(p);assert.ok(!s.isSymbolicLink());if(s.isDirectory())walk(p,rel);else{assert.ok(paths.has(rel));seen++;}}}walk(join(root,'evidence'));assert.equal(seen,88);assert.equal(total,334789);assert.equal(capsules.length,1);
+          const previous=inspectCalculatorStoppedSuccessor(join(root,'evidence/prior-evidence'));
+          const prior=inspectCalculatorPublishedTaskState(join(root,'evidence/prior-evidence/evidence/prior-evidence'));
+          const context=JSON.parse(readFileSync(join(root,'evidence/context.json')).toString()),remote=JSON.parse(readFileSync(join(root,'evidence/barrier/remote.json')).toString());
+          assert.equal(remote.artifactId,12414567811);assert.equal(remote.artifactDigest,'sha256:02b2609947047085d54bb97d320c448a266b48712faacbd30d4b256f5cde8db9');assert.equal(remote.manifestSha256,'622ed179157d80f48e366ec92fc9b8f397165b4f64d09f22352d361807e04121');assert.equal(remote.manifestSha256,context.admission.manifestSha256);
+          const report=JSON.parse(readFileSync(join(root,'evidence/calculator-report.json')).toString());assert.equal(report.status,'blocked');assert.equal(report.taskId,previous.taskId);assert.equal(report.reasonCode,'execution_failed_no_replay');assert.equal(report.publication,undefined);assert.equal(report.proposalTestsExecuted,false);assert.equal(report.candidateTestsExecuted,false);assert.deepEqual(m.previousCharges,context.request.previousCharges);assert.deepEqual(m.previousCharges.stoppedSuccessor,previous.previousCharge);assert.equal(capsules[0].taskId,previous.taskId);assert.equal(capsules[0].modelState.attemptedRequests,1);
+          const local=join(process.env.RUNNER_TEMP!,'calculator-recovery-duplicate-proof');mkdirSync(local,{mode:0o700});
+          const state=join(local,'state'),event=join(local,'event');restoreCalculatorPublishedTaskState(prior,state);
+          const barrier=inspectCalculatorAfterCiEventState(join(root,'evidence/confirmed-event'),{request:context.transition,origin:context.origin,manifestSha256:remote.manifestSha256});restoreCalculatorAfterCiEventState(barrier,event);
+          const before=new Map(readdirSync(event).map((n:string)=>[n,readFileSync(join(event,n))]));let toolsCalled=0;
+          const deny=async()=>{toolsCalled++;throw Error('duplicate_must_stop_before_tools');},launch=calculatorPublishedTaskLaunch(prior);
+          const reader={getHead:deny,readCommit:deny,readTree:deny,readBlob:deny},options={eventDirectory:event,ci:deny,verifyDependencies:deny,execution:{execution:'offline-test',maxRepairs:0,team:{generate:deny,repair:deny,assess:deny},tools:{checkProposal:deny,publish:deny,ci:deny}}};
+          for(let attempt=0;attempt<2;attempt++){const result=await runCalculatorAfterCi(new CalculatorPlanStore(state,launch.goal),reader,context.transition,options);assert.equal(result.reasonCode,'after_ci_event_already_recorded_no_replay');assert.equal(result.execution,undefined);}
+          assert.equal(toolsCalled,0);for(const [n,bytes] of before)assert.deepEqual(readFileSync(join(event,n)),bytes);
+          const newCharge=capsules[0].modelState,aggregate=Object.fromEntries(Object.keys(previous.previousCharge).map(k=>[k,previous.previousCharge[k]+newCharge[k]]));
+          console.log(JSON.stringify({status:'truncated-recovery-evidence-verified',runId:39753293947,artifactId:12415085654,manifestSha256:hash(b),fileCount:seen,totalBytes:total,priorChargesPreserved:true,previousCharge:previous.previousCharge,newCapsules:capsules,aggregateT02Charge:aggregate,barrierPersistedAndAcknowledged:true,realConsumedEventRestored:true,duplicateRefused:true,restartRefused:true,toolsCalled,modelsRun:false,githubWritesPerformed:false,privateCopiesCreated:true,resumeAuthorized:false,budgetResetAuthorized:false}));
+          NODE
+          pnpm exec tsx "$RUNNER_TEMP/calculator-recovery-result-audit.mts"

@@ -21,6 +21,38 @@ import { evaluateTestExecutionEvidence } from "../agents/tester/agent.js";
 
 export const CALCULATOR_RUNTIME_ERROR = "Calculator live runtime is not ready. Inspect private state, provider, sandbox, workflow pins and GitHub access; no replay.";
 function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
+/** Host-only additional allowance. These literals lower the normal limits;
+ * neither owner/model JSON nor environment variables can select a larger cap. */
+export type CalculatorRuntimeHostLimits = Readonly<{ maxRequests: 4; maxRunBytes: 96000; maxRepairs: 0 }>;
+export function prepareCalculatorRuntimeHostLimits(value: unknown): CalculatorRuntimeHostLimits | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
+      Object.keys(value).sort().join(",") !== "maxRepairs,maxRequests,maxRunBytes") return refuse();
+  const raw = value as Record<string, unknown>;
+  if (raw.maxRequests !== 4 || raw.maxRunBytes !== 96000 || raw.maxRepairs !== 0) return refuse();
+  return Object.freeze({ maxRequests: 4, maxRunBytes: 96000, maxRepairs: 0 });
+}
+/** Called only after the existing task/provider ledgers reserve a request.
+ * Persist even a refused reservation, but never label local refusal as HTTP.
+ * A caught refusal cannot reopen the gate or refund the conservative charge. */
+export function createCalculatorRuntimeRequestCheckpoint(limitsInput: CalculatorRuntimeHostLimits | undefined,
+  persist: (charge: CalculatorPriorModelCharge, admitted: boolean) => void | Promise<void>) {
+  const limits = prepareCalculatorRuntimeHostLimits(limitsInput);
+  if (typeof persist !== "function") return refuse();
+  let stopped = false;
+  return async (charge: CalculatorPriorModelCharge): Promise<void> => {
+    if (stopped) return refuse();
+    try {
+      if (!charge || typeof charge !== "object" || Array.isArray(charge) ||
+          Object.keys(charge).sort().join(",") !== "attemptedRequests,elapsedMs,reservedRunTokens,totalRequestBytes" ||
+          Object.values(charge).some(value => !Number.isSafeInteger(value) || value < 0)) return refuse();
+      const admitted = !limits || (charge.attemptedRequests <= limits.maxRequests && charge.totalRequestBytes <= limits.maxRunBytes);
+      await persist(charge, admitted);
+      if (!admitted) return refuse();
+    } catch { stopped = true; return refuse(); }
+  };
+}
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 /** Private evidence is never placed in the source-free receipt/artifact tree.
  * Namespace by metadata directory, so sibling runs cannot share task filenames.
@@ -107,7 +139,9 @@ export async function loadCalculatorRuntimeSources(reader: CalculatorSnapshotRea
  * task; durable state survives failures and model HTTP budgets are never reset
  * inside a repair. Production adapters remain isolated from model arguments. */
 export async function runCalculatorRuntime(input: unknown, configInput: unknown, directory: string,
-  mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env) {
+  mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env, hostLimits?: CalculatorRuntimeHostLimits) {
+  const limits = prepareCalculatorRuntimeHostLimits(hostLimits);
+  if (limits && mode !== "run") return refuse();
   const owner = prepareCalculatorGoal(input), store = new CalculatorPlanStore(directory, input);
   const saved = store.inspect();
   if (mode === "inspect") return { mode, status: saved?.status ?? "unplanned", planFingerprint: saved?.fingerprint,
@@ -175,6 +209,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     // Runtime checkout provenance is pinned by the host workflow barrier. This
     // digest binds evidence to policy/config/model; it grants no resume authority.
     const runtimeConfigDigest = digest({ policyVersion: "calculator-private-execution-v1", provider: provider.provider, model: provider.model,
+      ...(limits ? { hostLimits: limits } : {}),
       version: config.version, sandboxImage: config.sandboxImage,
       trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
     const writers = createCalculatorRuntimeCheckpointWriters(privateDirectory, { repository: owner.repository,
@@ -195,9 +230,9 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         writers.get(activeId).save(next); active = next;
       } catch { checkpointUnavailable = true; return refuse(); }
     }
-    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, {
-      beforeRequest: charge => save({ ...active, status: "running", httpInFlight: true }, charge),
-    });
+    const beforeRequest = createCalculatorRuntimeRequestCheckpoint(limits, (charge, admitted) =>
+      save({ ...active, status: admitted ? "running" : "blocked", httpInFlight: admitted }, charge));
+    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest });
     function charge(): CalculatorPriorModelCharge {
       const result = team.checkpointCharge(); if (!result) return refuse(); return result;
     }
@@ -246,6 +281,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
       phase = "one_task_execution_failed";
       const result = await runCalculatorExecution(workspace, { team, env, verifyDependencies, checkpoint,
+        ...(limits ? { maxRepairs: limits.maxRepairs } : {}),
         tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } });
       if (active.httpInFlight || (active.status === "running" && writers.has(activeId)))
         save({ ...active, status: "blocked" }, charge());

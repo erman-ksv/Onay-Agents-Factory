@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "request": {
+    "version": 1,
+    "id": "calculator-pilot-step7-v1",
+    "goal": "Create the complete agreed static calculator with independent tests, keyboard support and a responsive phone layout.",
+    "baseRef": "feat/calculator-pilot-bootstrap",
+    "baseSha": "2c1218f2b020962ad93adf68d902a847271a7e72",
+    "provider": "groq"
+  },
+  "proposal": {
+    "tasks": [
+      {
+        "id": "calculator-pilot-step7-v1-34ee03-t01",
+        "role": "coder",
+        "goal": "Implement core arithmetic functions",
+        "acceptanceIds": [
+          "addition",
+          "negative-result",
+          "multiplication",
+          "division",
+          "decimals",
+          "decimal-display",
+          "zero-recovery"
+        ],
+        "paths": [
+          "src/calculator.mjs",
+          "test/calculator.test.mjs"
+        ],
+        "dependsOn": []
+      },
+      {
+        "id": "calculator-pilot-step7-v1-34ee03-t02",
+        "role": "frontend",
+        "goal": "Build static UI layout and wiring to core calculator",
+        "acceptanceIds": [
+          "clear",
+          "backspace"
+        ],
+        "paths": [
+          "index.html",
+          "styles.css",
+          "src/app.mjs"
+        ],
+        "dependsOn": [
+          "calculator-pilot-step7-v1-34ee03-t01"
+        ]
+      },
+      {
+        "id": "calculator-pilot-step7-v1-34ee03-t03",
+        "role": "frontend",
+        "goal": "Add keyboard input handling and synchronize with button clicks",
+        "acceptanceIds": [
+          "keyboard"
+        ],
+        "paths": [
+          "src/app.mjs",
+          "test/ui.test.mjs"
+        ],
+        "dependsOn": [
+          "calculator-pilot-step7-v1-34ee03-t02"
+        ]
+      },
+      {
+        "id": "calculator-pilot-step7-v1-34ee03-t04",
+        "role": "frontend",
+        "goal": "Implement responsive design for narrow screens",
+        "acceptanceIds": [
+          "narrow-screen"
+        ],
+        "paths": [
+          "styles.css",
+          "index.html"
+        ],
+        "dependsOn": [
+          "calculator-pilot-step7-v1-34ee03-t02"
+        ]
+      },
+      {
+        "id": "calculator-pilot-step7-v1-34ee03-t05",
+        "role": "frontend",
+        "goal": "Run UI integration tests covering all UI scenarios",
+        "acceptanceIds": [
+          "addition",
+          "negative-result",
+          "multiplication",
+          "division",
+          "decimals",
+          "decimal-display",
+          "zero-recovery",
+          "clear",
+          "backspace",
+          "keyboard",
+          "narrow-screen"
+        ],
+        "paths": [
+          "test/ui.test.mjs"
+        ],
+        "dependsOn": [
+          "calculator-pilot-step7-v1-34ee03-t03",
+          "calculator-pilot-step7-v1-34ee03-t04"
+        ]
+      }
+    ],
+    "blockers": [],
+    "unverifiedAreas": [
+      "Source files have not been inspected; actual implementation status is unknown."
+    ]
+  },
+  "fingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2"
+}
