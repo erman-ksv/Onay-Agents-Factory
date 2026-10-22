@@ -137,7 +137,6 @@ jobs:
           path: \${{ runner.temp }}/calculator-recovery-audit
           merge-multiple: true
       - name: Authenticate the fixed failed archive and unchanged completed dependency without models
-        run: |
-          pnpm exec tsx --eval 'import {join} from "node:path"; import {inspectCalculatorStoppedSuccessor} from "./orchestration/calculatorStoppedSuccessor.ts"; import {inspectCalculatorPublishedTaskState} from "./orchestration/calculatorPublishedTaskState.ts"; const root=join(process.env.RUNNER_TEMP!,"calculator-recovery-audit"); const stopped=inspectCalculatorStoppedSuccessor(root); const prior=inspectCalculatorPublishedTaskState(join(root,"evidence/prior-evidence")); console.log(JSON.stringify({status:"recovery-source-verified",stopped,priorTaskId:prior.taskId,modelsRun:false,githubWritesPerformed:false,resumeAuthorized:false}));'
+        run: pnpm exec tsx orchestration/calculatorSuccessorRecovery.ts audit "$RUNNER_TEMP/calculator-recovery-audit"
 `;
 }

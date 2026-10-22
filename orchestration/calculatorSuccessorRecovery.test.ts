@@ -143,8 +143,8 @@ test("production workflow persists admission before exposing model credentials a
 test("genuine-source audit has no model or Calculator write capability and cannot publish a live request", () => {
   const workflow = renderCalculatorSuccessorRecoveryAuditWorkflow(SHA);
   assert.ok(workflow.includes("ref: " + SHA)); assert.ok(workflow.includes("artifact-ids: '12411509353'"));
-  assert.ok(workflow.includes("inspectCalculatorStoppedSuccessor(root)"));
-  assert.ok(workflow.includes('join(root,"evidence/prior-evidence")'));
+  assert.ok(workflow.includes('calculatorSuccessorRecovery.ts audit "$RUNNER_TEMP/calculator-recovery-audit"'));
+  assert.ok(!workflow.includes("--eval"));
   assert.ok(!workflow.includes("GROQ_API_KEY")); assert.ok(!workflow.includes("CALCULATOR_GITHUB_TOKEN"));
   assert.ok(!workflow.includes("contents: write")); assert.ok(!workflow.includes(" execute "));
   assert.throws(() => renderCalculatorSuccessorRecoveryAuditWorkflow("main"));

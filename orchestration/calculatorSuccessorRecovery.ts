@@ -195,6 +195,12 @@ export function collectCalculatorSuccessorRecoveryEvidence(root: string) {
 export async function runCalculatorSuccessorRecovery(args: string[], env: NodeJS.ProcessEnv = process.env, transport: typeof fetch = globalThis.fetch) {
   let phase = "entry_unverified";
   try {
+    if (args.length === 2 && args[0] === "audit") {
+      const stopped = inspectCalculatorStoppedSuccessor(args[1]!);
+      const prior = inspectCalculatorPublishedTaskState(join(args[1]!, "evidence/prior-evidence"));
+      return { status: "recovery-source-verified", stopped, priorTaskId: prior.taskId, modelsRun: false,
+        githubWritesPerformed: false, resumeAuthorized: false };
+    }
     if (args.length !== 3 || !["prepare", "execute", "collect"].includes(args[0]!)) return refuse();
     const [mode, root, runtimeSha] = args as [string, string, string]; hash(runtimeSha); const current = runIdentity(env); directory(root);
     if (mode === "collect") return collectCalculatorSuccessorRecoveryEvidence(root);
