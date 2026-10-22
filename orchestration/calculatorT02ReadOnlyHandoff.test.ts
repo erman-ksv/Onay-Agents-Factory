@@ -10,7 +10,10 @@ import { CALCULATOR_T02_HANDOFF_ERROR, inspectCalculatorT02ReadOnlyHandoff } fro
 
 const task = "calculator-pilot-step7-v1-34ee03-t02", plan = "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2";
 const sourceAudit = {
-  status:"publication_reconciled_read_only",readOnlyAudit:true,modelsRun:false,githubWritesPerformed:false,
+  status:"publication_reconciled_read_only",
+  sourceSha:"e22c946c77095868deb7e65c230e2e6ab5c860f1",
+  auditRunId:39808880793,auditEventSha:"7dd8648e10451b420b1b0a65bbfbb2341c93cf50",
+  readOnlyAudit:true,modelsRun:false,githubWritesPerformed:false,
   receiptsChanged:false,automaticReplay:false,resumeAuthorized:false,budgetResetAuthorized:false,
   autonomousDevelopmentProven:false,wholeStep8Closed:false,sourceRunId:PIN.sourceRunId,
   sourceArtifactId:PIN.artifactId,candidateSha:PIN.candidateSha,
@@ -71,12 +74,14 @@ test("published t02 is read-only, with pinned high-water charge and original rec
   assert.deepEqual(result.priorCharge,PIN.conservative);
   assert.equal(result.nextTaskAuthorized,false);assert.equal(result.resumeAuthorized,false);
   assert.equal(result.publicationAuthorized,false);assert.equal(result.budgetResetAuthorized,false);
-  assert.equal(result.historicalReceiptPreserved,true);assert.deepEqual(f.data.archivedReceiptBytes,before);
+  assert.equal(result.historicalReceiptPreserved,true);assert.equal(result.auditClaimsArchiveVerified,true);
+  assert.deepEqual(f.data.archivedReceiptBytes,before);
   assert.ok(Object.isFrozen(result));assert.ok(Object.isFrozen(result.priorCharge));
 });
 test("forged summary, missing source identity, amended proposal and suspicious status refuse before remote calls",async()=>{
   const edits=[
-    (a:any)=>{a.archive.fileCount=254;},(a:any)=>{a.sourceArtifactId=1;},(a:any)=>{a.capsule.assessments[2].ready=false;},
+    (a:any)=>{a.archive.fileCount=254;},(a:any)=>{a.sourceArtifactId=1;},
+    (a:any)=>{a.auditEventSha="0".repeat(40);},(a:any)=>{a.capsule.assessments[2].ready=false;},
     (a:any)=>{a.candidate.changedPaths.push("src/calculator.mjs");},
     (a:any)=>{a.capsuleObserved.publicationStarted=false;},(a:any)=>{a.capsule.oldReceiptReason="ok";},
     (a:any)=>{a.ci.verifiedRunIds=[1];},(a:any)=>{a.resumeAuthorized=true;},
