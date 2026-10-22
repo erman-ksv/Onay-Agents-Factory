@@ -12,6 +12,7 @@ import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalcu
 import { calculatorProposalDigest, validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
 import { calculatorHostModelBudget, type CalculatorHostPreset, DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
 import { CalculatorModelAdmissionError, createCalculatorGroqPacer, type CalculatorModelAdmissionDiagnostic, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
+import { calculatorAssessmentEvidencePacket, type CalculatorAssessmentEvidenceProvider } from "./calculatorAssessmentEvidence.js";
 
 export const CALCULATOR_MODEL_ERROR = "Calculator model team stopped: configuration, evidence, response or context budget is unverified. No retry or write is authorized.";
 function refuse(): never { throw new Error(CALCULATOR_MODEL_ERROR); }
@@ -94,8 +95,10 @@ function privateRejectedAssessment(result: unknown, providerKey: string): unknow
  * installs, automatic retries, or legal role. One instance owns one run's ledger. */
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
   transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}, priorCharge?: CalculatorPriorModelCharge,
-  checkpointHooks?: CalculatorModelCheckpointHooks, hostPreset?: CalculatorHostPreset) {
+  checkpointHooks?: CalculatorModelCheckpointHooks, hostPreset?: CalculatorHostPreset,
+  assessmentEvidence?: CalculatorAssessmentEvidenceProvider) {
   const owner = prepareCalculatorGoal(ownerRequest);
+  if (assessmentEvidence !== undefined && typeof assessmentEvidence !== "function") return refuse();
   const requestOwner = Object.freeze({ version: 1 as const, id: owner.id, goal: owner.goal,
     baseRef: owner.baseRef, baseSha: owner.baseSha, provider: owner.provider });
   if (env.AGENT_FACTORY_TARGET_PROFILE !== "calculator" || env.AGENT_FACTORY_PROVIDER !== owner.provider ||
@@ -382,16 +385,20 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         if (seen.has(role)) return refuse(); seen.add(role); assessed.set(changes, seen);
         const evidenceId = "changes@" + (identity.inspectionSha ?? changes.baseSha);
         const evidence = JSON.parse(changes.reviewEvidence);
+        const token = await assessmentEvidence?.(task, changes);
+        const hostEvidence = token === undefined ? undefined : calculatorAssessmentEvidencePacket(token, task, changes);
+        const allowedEvidenceRefs = hostEvidence ? [evidenceId, hostEvidence.evidenceId] : [evidenceId];
         const result = await call(buildCalculatorRoleInstructions(role), { repository: owner.repository, baseSha: changes.baseSha,
           task: { id: task.id, role: task.role, goal: task.goal, paths: task.paths, acceptanceIds: task.acceptanceIds },
-          acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId, allowedEvidenceRefs: [evidenceId],
+          acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), evidenceId, allowedEvidenceRefs,
           ...(identity.inspectionSha ? { inspectedCommitSha: identity.inspectionSha } : {}),
           // Preserve every changed byte and hash. Repository/base identity and
           // unknown areas already occur once in this packet, not in each layer.
           completeChangedText: { changes: evidence.changes },
-          unverifiedAreas: [...new Set(["Unshown unchanged source", "No runtime tests or browser checks have executed", "No publication or completion",
+          ...(hostEvidence ? { verifiedHostEvidence: hostEvidence } : {}),
+          unverifiedAreas: hostEvidence ? [...hostEvidence.unverifiedAreas] : [...new Set(["Unshown unchanged source", "No runtime tests or browser checks have executed", "No publication or completion",
             ...evidence.unverified])] });
-        try { return validateCalculatorAssessment(role, result, [evidenceId]); }
+        try { return validateCalculatorAssessment(role, result, allowedEvidenceRefs); }
         catch (error) {
           if (!(error instanceof CalculatorAssessmentValidationError)) throw error;
           // Latch before private I/O: an awaited/reentrant hook cannot call a
