@@ -32,7 +32,9 @@ try{
  const raw=JSON.parse(capsuleBytes.toString('utf8'));const capsule=parseCalculatorExecutionCheckpointBytes(capsuleBytes,raw.identity,sha(capsuleBytes)).data;
  assert.equal(capsule.identity.repository,TARGET);assert.equal(capsule.identity.taskId,TASK);assert.equal(capsule.identity.planFingerprint,PLAN);assert.equal(capsule.identity.baseSha,BASE);
  assert.equal(capsule.identity.branch,'feat/calculator-agent/calculator-pilot-step7-v1');
- const p=capsule.payload;assert.equal(p.stage,'execution_complete');assert.equal(p.status,'passed');assert.equal(p.httpInFlight,false);assert.equal(p.publicationStarted,true);assert.ok(p.proposal);
+ const p=capsule.payload;report.capsuleObserved={stage:p.stage,status:p.status,httpInFlight:p.httpInFlight,publicationStarted:p.publicationStarted,proposalDigest:capsule.proposalDigest,assessmentCount:p.assessments.length};
+ assert.equal(p.stage,'publish_candidate');assert.equal(p.status,'blocked');assert.equal(p.httpInFlight,false);assert.equal(p.publicationStarted,true);assert.ok(p.proposal);
+ assert.ok(capsule.history.some(h=>h.payload.stage==='host_tests_1'&&h.payload.status==='passed'));
  assert.equal(p.assessments.length,3);assert.ok(p.assessments.every((a,i)=>a.role===['security','reviewer','tester'][i]&&a.ready===true&&a.testsExecuted===false&&a.publicationAuthorized===false&&!a.findings.some(f=>['blocker','high'].includes(f.severity))));
  assert.equal(capsule.proposalDigest,calculatorProposalDigest(p.proposal));assert.equal(capsule.proposalDigest,'bc1e0790d5d4c54c06ea1abe8b6f5d8f6eca767a9a477f4146947d59f3fd6f5b');
  const savedReport=json('calculator-report.json');assert.equal(savedReport.reasonCode,'publication_or_ci_uncertain_inspect_no_replay');assert.equal(savedReport.status,'needs-review');assert.equal(savedReport.proposalTestsExecuted,true);assert.equal(savedReport.candidateTestsExecuted,false);assert.equal(savedReport.publication,undefined);assert.equal(savedReport.wholeAppCompleted,false);assert.equal(savedReport.legalEnabled,false);
