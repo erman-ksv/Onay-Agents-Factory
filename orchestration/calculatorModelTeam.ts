@@ -376,10 +376,11 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
             return { severity: finding.severity, message: finding.message, evidenceRefs: finding.evidenceRefs };
           });
           const suffix = validateCalculatorAssessment(role, { ready: saved.ready, summary: saved.summary, findings, unverifiedAreas: [] }, refs).unverifiedAreas;
-          const count = saved.unverifiedAreas.length - suffix.length;
-          if (count < 0 || suffix.some((area, offset) => saved.unverifiedAreas[count + offset] !== area)) return refuse();
+          const storedUnknowns = saved.unverifiedAreas;
+          const count = storedUnknowns.length - suffix.length;
+          if (count < 0 || suffix.some((area, offset) => storedUnknowns[count + offset] !== area)) return refuse();
           const rebuilt = validateCalculatorAssessment(role, { ready: saved.ready, summary: saved.summary, findings,
-            unverifiedAreas: saved.unverifiedAreas.slice(0, count) }, refs);
+            unverifiedAreas: storedUnknowns.slice(0, count) }, refs);
           const canonical = { role: saved.role, ready: saved.ready, summary: saved.summary, findings: saved.findings,
             unverifiedAreas: saved.unverifiedAreas, testsExecuted: false, overallTaskCompletionVerified: false, publicationAuthorized: false };
           if (JSON.stringify(canonical) !== JSON.stringify(rebuilt)) return refuse(); return rebuilt;
