@@ -48,5 +48,9 @@ jobs:
           const report=JSON.parse(readFileSync(join(root,'calculator-report.json'),'utf8'));assert.equal(report.modelGenerationRepeated,false);assert.equal(report.oldApprovalsTransferred,false);assert.equal(report.newCharge.attemptedRequests,3);assert.equal(report.aggregateT02Charge.attemptedRequests,9);assert.equal(report.publication,undefined);
           const result={status:'qualified-result-authenticated',sourceRunId:39765383540,artifactId:12419478145,manifestSha256:hash(readFileSync(join(root,'qualified-manifest.json'))),fileCount:127,totalBytes:total,proposalDigest:checkpoint.proposalDigest,assessments:checkpoint.payload.assessments,newCharge:report.newCharge,aggregateT02Charge:report.aggregateT02Charge,modelDiagnostic:report.modelDiagnostic,httpInFlight:checkpoint.payload.httpInFlight,publicationStarted:false,modelsRun:false,githubWritesPerformed:false};
           let text=JSON.stringify(result);for(const f of checkpoint.payload.proposal.files)text=text.split(f.content).join('[complete source omitted]');assert.ok(Buffer.byteLength(text)<32768);assert.ok(!/(?:gsk_|gh[pousr]_)[A-Za-z0-9_-]{20,}/.test(text));console.log(text);
+
+          const app=checkpoint.payload.proposal.files.find((f:any)=>f.path==='src/app.mjs').content;
+          const snippets:any[]=[];for(const name of ['clearAll','updateDisplay']){const i=app.indexOf(name);assert.ok(i>=0);snippets.push({name,excerpt:app.slice(Math.max(0,i-25),Math.min(app.length,i+360))});}
+          console.log(JSON.stringify({status:'bounded-clear-display-inspection',sha256:hash(app),snippets,modelCalls:0,githubWritesPerformed:false}));
           NODE
           pnpm exec tsx "$RUNNER_TEMP/calculator-qualified-result-audit.mts"
