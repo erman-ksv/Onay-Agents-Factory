@@ -32,9 +32,13 @@ candidate source, dispatch workflows, mutate receipts or grant resume authority.
 
 The controller and runtime entry do not install a cross-repository event
 subscription. `workflow_run` does not deliver Calculator events into Factory.
-There is no new production runner using this entry yet. Before a live successor
-run, the trusted host must authenticate the final step-7 artifact, restore its
-state and charges, persist/upload the new one-use barrier, and preserve and
+There is no new production successor runner using this entry yet.
+`calculatorPublishedTaskState.ts` now authenticates the fixed final step-7
+archive, retains historical charges, restores exact task receipts and supplies
+a dependency checker that revalidates saved approvals and actually tests current
+committed sources without model calls. Its separate audit workflow validates
+this path with the private artifact. Before a live successor run, the trusted
+host must persist/upload the new one-use barrier, and preserve and
 restore the after-CI event receipts as well as task receipts across runners.
 The legacy flat private-execution exporter does not export nested event state;
 it must not be reused unchanged for the new runner. A trusted callback or

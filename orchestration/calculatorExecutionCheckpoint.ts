@@ -171,6 +171,45 @@ function validateTransition(previous: CalculatorExecutionCheckpointPayload, payl
       previous.assessments.some((assessment, index) => !same(assessment, payload.assessments[index])))) return refuse();
   return repairCompleted;
 }
+/** Read-only validation for an authenticated imported artifact. This checks data,
+ * not artifact provenance or permission to resume; no file or lock is created. */
+export function parseCalculatorExecutionCheckpointBytes(raw: Uint8Array, identityInput: CalculatorExecutionCheckpointIdentity,
+  expectedDigest?: string): { data: RecordData; repairUsed: boolean } {
+  try {
+    if (!(raw instanceof Uint8Array) || raw.byteLength < 1 || raw.byteLength > MAX_BYTES ||
+        (expectedDigest !== undefined && !DIGEST.test(expectedDigest))) return refuse();
+    const bytes = Buffer.from(raw), identity = validateIdentity(identityInput);
+    if (expectedDigest !== undefined && digest(bytes) !== expectedDigest) return refuse();
+    const data: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    if (!plain(data) || !exact(data, ["version", "identity", "sequence", "payload", "integritySha256", "history",
+        ...(Object.hasOwn(data, "proposalDigest") ? ["proposalDigest"] : [])]) || data.version !== 1 ||
+        !same(validateIdentity(data.identity), identity) || !Number.isSafeInteger(data.sequence) || (data.sequence as number) < 1 ||
+        typeof data.integritySha256 !== "string" || !DIGEST.test(data.integritySha256) || !Array.isArray(data.history) ||
+        data.history.length >= MAX_SNAPSHOTS || data.sequence !== data.history.length + 1) return refuse();
+    const history: HistoryEntry[] = []; let prior: CalculatorExecutionCheckpointPayload | undefined, used = false;
+    for (const item of data.history) {
+      if (!plain(item) || !exact(item, ["sequence", "payload", "integritySha256",
+          ...(Object.hasOwn(item, "proposalDigest") ? ["proposalDigest"] : [])]) || item.sequence !== history.length + 1 ||
+          typeof item.integritySha256 !== "string" || !DIGEST.test(item.integritySha256)) return refuse();
+      const priorPayload = validatePayload(item.payload, identity);
+      const priorProposalDigest = priorPayload.proposal ? calculatorProposalDigest(priorPayload.proposal) : undefined;
+      if (item.proposalDigest !== priorProposalDigest) return refuse();
+      const priorUnsigned = { version: 1, identity, sequence: item.sequence, payload: priorPayload,
+        ...(priorProposalDigest ? { proposalDigest: priorProposalDigest } : {}), history: [...history] };
+      if (digest(JSON.stringify(priorUnsigned)) !== item.integritySha256) return refuse();
+      if (prior) used = validateTransition(prior, priorPayload, used) || used;
+      history.push({ sequence: item.sequence as number, payload: priorPayload,
+        ...(priorProposalDigest ? { proposalDigest: priorProposalDigest } : {}), integritySha256: item.integritySha256 });
+      prior = priorPayload;
+    }
+    const payload = validatePayload(data.payload, identity), proposalDigest = payload.proposal ? calculatorProposalDigest(payload.proposal) : undefined;
+    if (data.proposalDigest !== proposalDigest) return refuse();
+    if (prior) used = validateTransition(prior, payload, used) || used;
+    const unsigned = { version: 1 as const, identity, sequence: data.sequence as number, payload, ...(proposalDigest ? { proposalDigest } : {}), history };
+    if (digest(JSON.stringify(unsigned)) !== data.integritySha256) return refuse();
+    return { data: { ...unsigned, integritySha256: data.integritySha256 }, repairUsed: used };
+  } catch { return refuse(); }
+}
 function ensureDirectory(path: string, create: boolean): string {
   if (!isAbsolute(path)) return refuse();
   const directory = resolve(path), parts = directory.slice(parse(directory).root.length).split("/").filter(Boolean);
@@ -202,7 +241,7 @@ export function createCalculatorExecutionCheckpointStore(directoryInput: string,
   identityInput: CalculatorExecutionCheckpointIdentity): CalculatorExecutionCheckpointStore {
   let lockFd: number | undefined, lockPath: string | undefined, createdLockStat: { ino: number; dev: number } | undefined;
   try {
-    const identity = validateIdentity(identityInput), identityDigest = digest(JSON.stringify(identity));
+    const identity = validateIdentity(identityInput);
     const directory = ensureDirectory(directoryInput, true), directoryStat = lstatSync(directory);
     const path = join(directory, identity.taskId + ".execution.json");
     lockPath = path + ".lock";
@@ -239,36 +278,10 @@ export function createCalculatorExecutionCheckpointStore(directoryInput: string,
       if (raw.length > MAX_BYTES) return refuse();
       const sha256 = digest(raw);
       if ((expectedDigest !== undefined && sha256 !== expectedDigest) || (lastSha !== undefined && sha256 !== lastSha)) return refuse();
-      const data: unknown = JSON.parse(raw.toString("utf8"));
-      if (!plain(data) || !exact(data, ["version", "identity", "sequence", "payload", "integritySha256", "history",
-          ...(Object.hasOwn(data, "proposalDigest") ? ["proposalDigest"] : [])]) || data.version !== 1 ||
-          digest(JSON.stringify(validateIdentity(data.identity))) !== identityDigest ||
-          !Number.isSafeInteger(data.sequence) || (data.sequence as number) < 1 || (data.sequence as number) < lastSequence ||
-          typeof data.integritySha256 !== "string" || !DIGEST.test(data.integritySha256) || !Array.isArray(data.history) ||
-          data.history.length >= MAX_SNAPSHOTS || data.sequence !== data.history.length + 1) return refuse();
-      const history: HistoryEntry[] = []; let prior: CalculatorExecutionCheckpointPayload | undefined, used = false;
-      for (const item of data.history) {
-        if (!plain(item) || !exact(item, ["sequence", "payload", "integritySha256",
-            ...(Object.hasOwn(item, "proposalDigest") ? ["proposalDigest"] : [])]) || item.sequence !== history.length + 1 ||
-            typeof item.integritySha256 !== "string" || !DIGEST.test(item.integritySha256)) return refuse();
-        const priorPayload = validatePayload(item.payload, identity);
-        const priorProposalDigest = priorPayload.proposal ? calculatorProposalDigest(priorPayload.proposal) : undefined;
-        if (item.proposalDigest !== priorProposalDigest) return refuse();
-        const priorUnsigned = { version: 1, identity, sequence: item.sequence, payload: priorPayload,
-          ...(priorProposalDigest ? { proposalDigest: priorProposalDigest } : {}), history: [...history] };
-        if (digest(JSON.stringify(priorUnsigned)) !== item.integritySha256) return refuse();
-        if (prior) used = validateTransition(prior, priorPayload, used) || used;
-        history.push({ sequence: item.sequence as number, payload: priorPayload,
-          ...(priorProposalDigest ? { proposalDigest: priorProposalDigest } : {}), integritySha256: item.integritySha256 });
-        prior = priorPayload;
-      }
-      const payload = validatePayload(data.payload, identity), proposalDigest = payload.proposal ? calculatorProposalDigest(payload.proposal) : undefined;
-      if (data.proposalDigest !== proposalDigest) return refuse();
-      if (prior) used = validateTransition(prior, payload, used) || used;
-      const unsigned = { version: 1, identity, sequence: data.sequence, payload, ...(proposalDigest ? { proposalDigest } : {}), history };
-      if (digest(JSON.stringify(unsigned)) !== data.integritySha256) return refuse();
-      lastSequence = data.sequence as number; lastSha = sha256; previous = payload;
-      currentRecord = { ...unsigned, integritySha256: data.integritySha256 } as RecordData; repairUsed = used;
+      const parsed = parseCalculatorExecutionCheckpointBytes(raw, identity, expectedDigest);
+      if (parsed.data.sequence < lastSequence) return refuse();
+      lastSequence = parsed.data.sequence; lastSha = sha256; previous = parsed.data.payload;
+      currentRecord = parsed.data; repairUsed = parsed.repairUsed;
       return { data: currentRecord,
         reference: Object.freeze({ sha256, bytes: raw.length, sequence: lastSequence }) };
     }

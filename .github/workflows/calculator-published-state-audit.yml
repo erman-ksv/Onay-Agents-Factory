@@ -1,0 +1,77 @@
+name: Calculator completed task state and current dependency audit
+on:
+  push:
+    branches: ['feat/calculator-saved-state-20261022']
+    paths: ['orchestration/calculatorPublishedTaskState.ts', '.github/workflows/calculator-published-state-audit.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout reviewed host runtime at the immutable event SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install only locked host dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify fixed source run and artifact provenance without model credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          try {
+            if (process.env.GITHUB_REPOSITORY !== 'erman-ksv/Onay-Agents-Factory' || process.env.GITHUB_EVENT_NAME !== 'push' ||
+                process.env.GITHUB_REF !== 'refs/heads/feat/calculator-saved-state-20261022' || process.env.GITHUB_RUN_ATTEMPT !== '1') throw Error();
+            async function get(path) {
+              const r = await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory' + path, {
+                method: 'GET', redirect: 'error', signal: AbortSignal.timeout(10000), headers: {
+                  Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + process.env.GITHUB_TOKEN,
+                  'X-GitHub-Api-Version': '2022-11-28' } });
+              if (!r.ok || !r.body) throw Error();
+              const reader = r.body.getReader(), chunks = []; let bytes = 0;
+              try { while (true) { const part = await reader.read(); if (part.done) break;
+                bytes += part.value.byteLength; if (bytes > 1048576) { await reader.cancel(); throw Error(); } chunks.push(part.value); }
+              } finally { reader.releaseLock(); }
+              return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            }
+            const run = await get('/actions/runs/39609923862');
+            if (run.id !== 39609923862 || run.head_sha !== 'dd5bf9971cf3f59e9bf75e81621d5412d228984c' || run.run_attempt !== 1 ||
+                run.head_branch !== 'feat/calculator-step7-regeneration-20261020' || run.event !== 'push' ||
+                run.path !== '.github/workflows/calculator-step7-final-tester.yml' || run.status !== 'completed' || run.conclusion !== 'success' ||
+                run.repository?.full_name !== 'erman-ksv/Onay-Agents-Factory' || run.head_repository?.full_name !== 'erman-ksv/Onay-Agents-Factory') throw Error();
+            const artifact = await get('/actions/artifacts/12350008132');
+            if (artifact.id !== 12350008132 || artifact.name !== 'calculator-step7-final-tester-evidence-39609923862' || artifact.expired !== false ||
+                artifact.digest !== 'sha256:1fabef62cf75ac976d3844c4adede15e78a8fb38a95ac310372ff83a90947ae9' || artifact.size_in_bytes !== 53286 ||
+                artifact.workflow_run?.id !== 39609923862 || artifact.workflow_run?.head_sha !== run.head_sha) throw Error();
+            console.log(JSON.stringify({ sourceRunVerified: true, sourceArtifactVerified: true, modelsRun: false, githubWritesPerformed: false }));
+          } catch { console.error('Fixed published task archive provenance unverified; no replay.'); process.exitCode = 10; }
+          NODE
+      - name: Download fixed private archive as data
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12350008132'
+          run-id: 39609923862
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-published-state/archive
+          merge-multiple: true
+      - name: Prepare exact reviewed sandbox image
+        run: docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Validate archive, test current dependency and restore exact private receipts
+        env:
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: |
+          chmod 700 "$RUNNER_TEMP/calculator-published-state"
+          pnpm exec tsx orchestration/calculatorPublishedTaskState.ts "$RUNNER_TEMP/calculator-published-state/archive" --check-current --restore "$RUNNER_TEMP/calculator-published-state/verified-state"
