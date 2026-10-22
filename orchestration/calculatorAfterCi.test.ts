@@ -211,3 +211,49 @@ test("request metadata, wrong successor and runtime restoration injection cannot
     assert.equal(f.counts().generations, 0); assert.equal(f.savedNext(), undefined); f.unchanged();
   } finally { f.cleanup(); }
 });
+
+test("external barrier persistence completes before the successor is claimed or generated", async () => {
+  const f = fixture();
+  try {
+    let persisted = false;
+    const generate = f.options.execution.team.generate;
+    const result = await runCalculatorAfterCi(f.store, f.reader, f.request, { ...f.options,
+      persistBarrier: async input => {
+        const barrier = JSON.parse(readFileSync(join(input.eventDirectory, input.eventKey.id + ".json"), "utf8"));
+        assert.equal(barrier.status, "running"); assert.equal(f.savedNext(), undefined); assert.equal(f.counts().generations, 0);
+        persisted = true;
+      }, execution: { ...f.options.execution, team: { ...f.options.execution.team,
+        generate: async (...args) => { assert.equal(persisted, true); return generate(...args); } } } });
+    assert.equal(result.status, "advanced"); assert.equal(f.counts().ciCalls, 3); assert.equal(f.counts().generations, 1); f.unchanged();
+  } finally { f.cleanup(); }
+});
+
+test("failed external persistence consumes the event without a task or model request and cannot replay", async () => {
+  const f = fixture();
+  try {
+    const first = await runCalculatorAfterCi(f.store, f.reader, f.request, { ...f.options, persistBarrier: async () => { throw Error("Upload interrupted"); } });
+    assert.equal(first.status, "blocked"); assert.equal(f.savedNext(), undefined); assert.equal(f.counts().generations, 0);
+    const before = f.counts(), second = await runCalculatorAfterCi(f.store, f.reader, f.request, f.options);
+    assert.equal(second.reasonCode, "after_ci_event_already_recorded_no_replay"); assert.deepEqual(f.counts(), before); f.unchanged();
+  } finally { f.cleanup(); }
+});
+
+test("CI changed while persisting the barrier stops before the first successor request", async () => {
+  const f = fixture();
+  try {
+    f.setCi(call => call < 3 ? f.evidence(B) : { ...f.evidence(B), runs: [] });
+    const result = await runCalculatorAfterCi(f.store, f.reader, f.request, { ...f.options, persistBarrier: async () => undefined });
+    assert.equal(result.status, "blocked"); assert.equal(f.savedNext(), undefined); assert.equal(f.counts().generations, 0);
+    assert.equal(readdirSync(f.events).filter(n => n.endsWith(".json")).length, 1); f.unchanged();
+  } finally { f.cleanup(); }
+});
+
+test("live execution cannot omit a trusted external barrier persistence tool", async () => {
+  const f = fixture();
+  try {
+    const result = await runCalculatorAfterCi(f.store, f.reader, f.request, { ...f.options,
+      execution: { ...f.options.execution, execution: "live" } });
+    assert.equal(result.reasonCode, "after_ci_configuration_unverified"); assert.equal(f.counts().ciCalls, 0);
+    assert.equal(f.counts().generations, 0); assert.deepEqual(readdirSync(f.events), []);
+  } finally { f.cleanup(); }
+});

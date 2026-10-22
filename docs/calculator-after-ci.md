@@ -15,7 +15,11 @@ task. A failed, pending, skipped or stale check cannot authorize a model call.
 The old task receipt, approvals and historical model charges are not rewritten.
 The expected successor cannot be replaced with a different task during selection.
 
-The runtime entry is host-only. Its dependency checker must authenticate archived
+The runtime entry is host-only. It now also requires a trusted `persistBarrier`
+tool that durably saves the claimed event outside the current worker before
+the successor is claimed or any model is called. Upload failure consumes the
+event and blocks execution. CI/head/receipt are checked again after persistence.
+Its dependency checker must authenticate archived
 approvals, bind them to the unchanged proposal and current sources, and actually
 run host tests. Receipt labels and model JSON cannot supply that capability.
 The after-CI entry requires four-request limits with no repair and cannot be
@@ -40,8 +44,11 @@ committed sources without model calls. Its separate audit workflow validates
 this path with the private artifact. Before a live successor run, the trusted
 host must persist/upload the new one-use barrier, and preserve and
 restore the after-CI event receipts as well as task receipts across runners.
-The legacy flat private-execution exporter does not export nested event state;
-it must not be reused unchanged for the new runner. A trusted callback or
+`calculatorAfterCiEventState.ts` separately exports and restores one consumed
+event receipt and/or crash lock, preserving its identity across worker paths.
+The legacy flat private-execution exporter must still not be used to silently
+drop event state. The dedicated artifact requires a host-pinned digest and
+origin, and does not authorize a retry. A trusted callback or
 registered observer is also needed for future unattended event delivery.
 
 Step 8 stays open until that live path and its independent verification pass.

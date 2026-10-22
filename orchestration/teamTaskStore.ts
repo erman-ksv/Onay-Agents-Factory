@@ -74,6 +74,16 @@ function missing(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }
 
+/** Read-only import validation. This supplies data, never a claim or permission
+ * to resume. External artifact provenance and filesystem checks stay with host. */
+export function parseTeamTaskSnapshotBytes(raw: Uint8Array, identity: { id: string; fingerprint: string }): TeamTaskSnapshot {
+  try {
+    if (!(raw instanceof Uint8Array) || raw.byteLength < 1 || raw.byteLength > MAX_BYTES ||
+        !plain(identity) || !keys(identity, ["id", "fingerprint"]) || !ID.test(identity.id) || !FINGERPRINT.test(identity.fingerprint)) throw Error(INVALID);
+    return validateSnapshot(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(raw))), identity);
+  } catch { throw new Error(INVALID); }
+}
+
 export class TeamTaskStore {
   private readonly directory: string;
   private readonly identity: { id: string; fingerprint: string };
@@ -140,7 +150,7 @@ export class TeamTaskStore {
     catch (error) { if (missing(error)) return undefined; throw error; }
     try {
       const stat = fstatSync(fd);
-      const value = validateSnapshot(JSON.parse(readFileSync(fd, "utf8")), this.identity);
+      const value = parseTeamTaskSnapshotBytes(readFileSync(fd), this.identity);
       this.receiptDevice = stat.dev;
       this.receiptInode = stat.ino;
       return value;
@@ -158,6 +168,21 @@ export class TeamTaskStore {
       this.failed = true;
       throw new Error("Team task receipt cannot be safely inspected.");
     }
+  }
+
+  /** A crash can leave the exclusive lock before the first receipt is written.
+   * That uncertainty is a replay barrier too; inspection never removes it. */
+  inspectExistingLock(): boolean {
+    if (this.closed || this.failed) throw new Error(UNAVAILABLE);
+    let fd: number | undefined;
+    try {
+      this.checkRoot();
+      try { fd = this.openPrivateFile(this.lockPath); }
+      catch (error) { if (missing(error)) return false; throw error; }
+      if (fstatSync(fd).size !== 0) throw Error(INVALID);
+      return true;
+    } catch { this.failed = true; throw new Error("Team task lock cannot be safely inspected."); }
+    finally { if (fd !== undefined) closeSync(fd); }
   }
 
   claim(): "claimed" | "already-recorded" {

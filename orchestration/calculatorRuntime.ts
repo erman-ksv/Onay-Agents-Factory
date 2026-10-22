@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync } from "node:fs";
-import { dirname, join, parse, resolve } from "node:path";
+import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { createCalculatorSnapshotReader, loadCalculatorSnapshot, calculatorSources, type CalculatorSnapshot, type CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import { createCalculatorPublisher } from "../github/calculatorPublisher.js";
@@ -20,7 +20,7 @@ import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
 import { calculatorProposalDigest, validateCalculatorProposalTests } from "./calculatorExecutionEvidence.js";
 import { selectProviderConfig } from "../commander/providerConfig.js";
 import { evaluateTestExecutionEvidence } from "../agents/tester/agent.js";
-import { prepareCalculatorAfterCiRequest, runCalculatorAfterCi, type CalculatorAfterCiRequest } from "./calculatorAfterCi.js";
+import { prepareCalculatorAfterCiRequest, runCalculatorAfterCi, type CalculatorAfterCiRequest, type CalculatorAfterCiBarrierPersistence } from "./calculatorAfterCi.js";
 
 export const CALCULATOR_RUNTIME_ERROR = "Calculator live runtime is not ready. Inspect private state, provider, sandbox, workflow pins and GitHub access; no replay.";
 function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
@@ -29,17 +29,20 @@ function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
  * The checker must verify archived approvals and actual current host tests. */
 export type CalculatorRuntimeAfterCi = Readonly<{
   request: CalculatorAfterCiRequest; verifyDependencies: CalculatorCheckRunner;
+  persistBarrier: CalculatorAfterCiBarrierPersistence;
 }>;
 export function prepareCalculatorRuntimeAfterCi(value: unknown): CalculatorRuntimeAfterCi | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return refuse();
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).length !== 2 || !Object.hasOwn(descriptors, "request") || !Object.hasOwn(descriptors, "verifyDependencies") ||
+  if (Reflect.ownKeys(value).length !== 3 || !Object.hasOwn(descriptors, "request") || !Object.hasOwn(descriptors, "verifyDependencies") ||
+      !Object.hasOwn(descriptors, "persistBarrier") ||
       !Object.values(descriptors).every(item => Object.hasOwn(item, "value")) ||
-      typeof descriptors.verifyDependencies.value !== "function") return refuse();
+      typeof descriptors.verifyDependencies.value !== "function" || typeof descriptors.persistBarrier.value !== "function") return refuse();
   try { return Object.freeze({ request: prepareCalculatorAfterCiRequest(descriptors.request.value),
-    verifyDependencies: descriptors.verifyDependencies.value as CalculatorCheckRunner }); }
+    verifyDependencies: descriptors.verifyDependencies.value as CalculatorCheckRunner,
+    persistBarrier: descriptors.persistBarrier.value as CalculatorAfterCiBarrierPersistence }); }
   catch { return refuse(); }
 }
 /** Host-only additional allowance. These literals lower the normal limits;
@@ -183,6 +186,12 @@ export function createCalculatorRuntimeAssessmentRejection(input: Readonly<{
   };
 }
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
+/** Worker-local pathname only. The event identity inside the directory is
+ * location independent, so an authenticated artifact can restore another worker. */
+export function calculatorRuntimeAfterCiEventPath(metadataDirectory: string): string {
+  if (!isAbsolute(metadataDirectory) || resolve(metadataDirectory) !== metadataDirectory || metadataDirectory === parse(metadataDirectory).root) return refuse();
+  return join(dirname(metadataDirectory), "execution-private", digest(metadataDirectory), "after-ci-events");
+}
 /** Private evidence is never placed in the source-free receipt/artifact tree.
  * Namespace by metadata directory, so sibling runs cannot share task filenames.
  * Identity changes stay in the same namespace and fail closed in the store. */
@@ -460,14 +469,14 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       if (afterCi) {
         // This directory survives with private evidence. It never sits inside
         // the strict source-free task metadata capsule or replaces old state.
-        const eventDirectory = join(privateDirectory, "after-ci-events");
+        const eventDirectory = calculatorRuntimeAfterCiEventPath(directory);
         try { mkdirSync(eventDirectory, { mode: 0o700 }); }
         catch (error) { if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") return refuse(); }
         const stat = lstatSync(eventDirectory);
         if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700 ||
             (process.getuid && stat.uid !== process.getuid())) return refuse();
         const transition = await runCalculatorAfterCi(store, reader, afterCi.request, { eventDirectory, ci,
-          verifyDependencies: afterCi.verifyDependencies, execution: executionOptions });
+          verifyDependencies: afterCi.verifyDependencies, persistBarrier: afterCi.persistBarrier, execution: executionOptions });
         result = transition.execution ?? { status: transition.status === "blocked" ? "blocked" as const : "needs-review" as const,
           reasonCode: transition.reasonCode, attempts: 0, repairs: 0, proposalTestsExecuted: false,
           candidateTestsExecuted: false, wholeAppCompleted: false as const, finalCalculatorCiVerified: false as const, legalEnabled: false as const };
