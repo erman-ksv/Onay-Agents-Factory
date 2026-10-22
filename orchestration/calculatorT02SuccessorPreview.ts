@@ -118,6 +118,20 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
     const difference = [...new Set([...currentFiles.keys(),...oldFiles.keys()])]
       .filter(path=>currentFiles.get(path)!==oldFiles.get(path)).sort();
     if (JSON.stringify(difference)!==JSON.stringify([...changed].sort())) return refuse();
+    // A same-SHA permission/type change is still an unauthorized repository
+    // change. Compare every tree entry, not merely blob digests or task paths.
+    const approved = new Set(changed);
+    for (const [path, prior] of old) {
+      if (approved.has(path)) continue;
+      const current = cur.get(path);
+      if (!current || current.sha !== prior.sha || current.mode !== prior.mode ||
+          current.type !== prior.type) return refuse();
+    }
+    for (const [path, current] of cur) {
+      if (approved.has(path)) {
+        if (current.type !== "blob" || current.mode !== "100644") return refuse();
+      } else if (!old.has(path)) return refuse();
+    }
 
     for (const [index, taskId] of [T01,T02].entries()) {
       const task=plan.tasks[index]!;
