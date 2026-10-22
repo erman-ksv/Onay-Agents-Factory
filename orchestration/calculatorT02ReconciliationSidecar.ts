@@ -96,7 +96,11 @@ export function inspectCalculatorT02ReconciliationSidecar(directory: string): Ca
   try {
     store = new TeamTaskStore(directory, { id: ID, fingerprint: FINGERPRINT });
     const receipt = store.inspectExisting();
-    if (!receipt && !store.inspectExistingLock()) return undefined;
+    // A dangling or concurrent writer lock is never a completed handoff,
+    // even if a prior receipt happens to have a valid finished shape.
+    const locked = store.inspectExistingLock();
+    if (locked) return refuse();
+    if (!receipt) return undefined;
     if (!validated(receipt)) return refuse();
     return report("already-recorded");
   } catch { return refuse(); }
