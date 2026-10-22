@@ -1,0 +1,17 @@
+name: Stop manual Calculator pilot on owner steering
+on:
+  push:
+    branches: ['feat/calculator-step7-regeneration-20261020']
+    paths: ['.factory/calculator-manual-pilot-stop.json']
+permissions:
+  contents: read
+concurrency:
+  group: calculator-one-cycle
+  cancel-in-progress: true
+jobs:
+  stop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Record owner scope correction without model calls or repository writes
+        run: echo 'Manual Calculator pilot stopped. Continue Factory self-repair only. No replay, merge or deployment.'
