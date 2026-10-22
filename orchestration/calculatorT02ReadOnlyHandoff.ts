@@ -16,6 +16,7 @@ const REPO = "erman-ksv/Onay-Factory-Calculator";
 const BRANCH = "feat/calculator-agent/calculator-pilot-step7-v1";
 const BASE = "5c4bc71b3119a50d2ca7ce1dbdf12bcaa000ce75";
 const CAPSULE = "b49a7295bb014e25f601c04608e6c1cefb20818f27af474369dad71c25c240a7";
+const ORIGINAL_RECEIPT_SHA256 = "eb920ca04fead67298f7443102ee118c0f9300fc623ef36af1aa42cd00cd375b";
 const PROPOSAL = "bc1e0790d5d4c54c06ea1abe8b6f5d8f6eca767a9a477f4146947d59f3fd6f5b";
 const CI_RUN = 39791054276;
 const refuse = (): never => { throw Error(CALCULATOR_T02_HANDOFF_ERROR); };
@@ -94,6 +95,7 @@ export async function inspectCalculatorT02ReadOnlyHandoff(input: Readonly<{
       return refuse();
     const prior = inspectCalculatorT02ConservativeCharge(input.charges);
     if (prior.manifestSha256 !== archive.manifestSha256 || prior.candidateSha !== candidate.sha) return refuse();
+    if (sha(input.archivedReceiptBytes) !== ORIGINAL_RECEIPT_SHA256) return refuse();
     const receipt = parseTeamTaskSnapshotBytes(input.archivedReceiptBytes, {
       id: "calc-" + TASK, fingerprint: calculatorPlanDigest({ planFingerprint: PLAN, taskId: TASK }),
     });
