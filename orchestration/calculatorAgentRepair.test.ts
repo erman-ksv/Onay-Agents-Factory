@@ -285,7 +285,13 @@ test("pre-HTTP persistence and exported checkpoints retain old plus newly reserv
   await team.generate(plan, task.id, f.snapshot);
   assert.equal(calls, 1); assert.equal(persisted.length, 1);
   assert.equal(team.checkpointCharge()!.attemptedRequests, priorCharge.attemptedRequests + 1);
-  assert.deepEqual(team.checkpointCharge(), team.snapshot().aggregateCharge);
+  // Two consecutive timing snapshots may legitimately differ by 1+ ms.
+  // Require exact cost accounting and monotonically retained elapsed time.
+  const before = team.checkpointCharge()!, after = team.snapshot().aggregateCharge!;
+  assert.equal(after.attemptedRequests, before.attemptedRequests);
+  assert.equal(after.totalRequestBytes, before.totalRequestBytes);
+  assert.equal(after.reservedRunTokens, before.reservedRunTokens);
+  assert.ok(after.elapsedMs >= before.elapsedMs);
   assert.equal(team.snapshot().modelBudget.attemptedRequests, 1);
 });
 test("a failed cumulative checkpoint write prevents HTTP without refunding old or new charges", async () => {
