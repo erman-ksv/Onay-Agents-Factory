@@ -10,7 +10,7 @@ import { buildCalculatorRoleInstructions, prepareCalculatorRoleChanges, validate
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_ACCEPTANCE, buildCalculatorPlanningInstructions, createCalculatorPlan, prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { calculatorProposalDigest, validateCalculatorRepairRequest, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
-import { CALCULATOR_SUCCESSOR_TASK_BUDGET, DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
+import { calculatorHostModelBudget, type CalculatorHostPreset, DEFAULT_TASK_MODEL_BUDGET, createTaskModelBudgetFetch } from "./taskModelBudget.js";
 import { CalculatorModelAdmissionError, createCalculatorGroqPacer, type CalculatorModelAdmissionDiagnostic, type CalculatorModelTiming } from "./calculatorGroqPacing.js";
 
 export const CALCULATOR_MODEL_ERROR = "Calculator model team stopped: configuration, evidence, response or context budget is unverified. No retry or write is authorized.";
@@ -94,7 +94,7 @@ function privateRejectedAssessment(result: unknown, providerKey: string): unknow
  * installs, automatic retries, or legal role. One instance owns one run's ledger. */
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
   transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}, priorCharge?: CalculatorPriorModelCharge,
-  checkpointHooks?: CalculatorModelCheckpointHooks, hostPreset?: "calculator-successor-four-roles") {
+  checkpointHooks?: CalculatorModelCheckpointHooks, hostPreset?: CalculatorHostPreset) {
   const owner = prepareCalculatorGoal(ownerRequest);
   const requestOwner = Object.freeze({ version: 1 as const, id: owner.id, goal: owner.goal,
     baseRef: owner.baseRef, baseSha: owner.baseSha, provider: owner.provider });
@@ -116,8 +116,9 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       Object.values(prior).some(value => !Number.isSafeInteger(value) || value < 1) ||
       prior.attemptedRequests >= DEFAULT_TASK_MODEL_BUDGET.maxRequests || prior.totalRequestBytes >= DEFAULT_TASK_MODEL_BUDGET.maxRunBytes ||
       prior.elapsedMs >= DEFAULT_TASK_MODEL_BUDGET.wallTimeMs || prior.reservedRunTokens >= 16000 - 1200)) return refuse();
-  if (hostPreset !== undefined && (hostPreset !== "calculator-successor-four-roles" || prior || config.provider !== "groq")) return refuse();
-  const wallTimeMs = (hostPreset ? CALCULATOR_SUCCESSOR_TASK_BUDGET.wallTimeMs : DEFAULT_TASK_MODEL_BUDGET.wallTimeMs) - (prior?.elapsedMs ?? 0);
+  const hostBudget = hostPreset === undefined ? undefined : calculatorHostModelBudget(hostPreset);
+  if (hostBudget && (prior || config.provider !== "groq")) return refuse();
+  const wallTimeMs = (hostBudget?.wallTimeMs ?? DEFAULT_TASK_MODEL_BUDGET.wallTimeMs) - (prior?.elapsedMs ?? 0);
   let stopped = false, planned = false, httpRequestsSent = 0;
   let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   let admissionDiagnostic: CalculatorModelAdmissionDiagnostic | undefined;
@@ -138,12 +139,12 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     httpRequestsSent++;
     return transport(input, init);
   };
-  const budget = createTaskModelBudgetFetch({ now, ...(hostPreset ? { ...CALCULATOR_SUCCESSOR_TASK_BUDGET, hostPreset } : {}), ...(prior ? {
+  const budget = createTaskModelBudgetFetch({ now, ...(hostBudget ? { ...hostBudget, hostPreset } : {}), ...(prior ? {
     maxRequests: DEFAULT_TASK_MODEL_BUDGET.maxRequests - prior.attemptedRequests,
     maxRunBytes: DEFAULT_TASK_MODEL_BUDGET.maxRunBytes - prior.totalRequestBytes,
     wallTimeMs: DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - prior.elapsedMs,
   } : {}) }, guardedTransport);
-  const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: 1200, now,
+  const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: hostBudget?.maxOutputTokens ?? 1200, now,
     ...(prior ? { maxRunTokens: 16000 - prior.reservedRunTokens } : {}) }) : undefined;
   const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs, hostPreset) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
@@ -166,14 +167,14 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     return Object.freeze(charge);
   }
 
-  async function call(instructions: string, packet: unknown): Promise<unknown> {
+  async function call(instructions: string, packet: unknown, outputTokens: 1200 | 2048 = 1200): Promise<unknown> {
     let phase = "request_preparation_failed";
     try {
       if (stopped) return refuse();
       httpStatus = undefined; providerHttpStatus = undefined; finishReason = undefined; admissionDiagnostic = undefined;
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
-      const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: 1200,
+      const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: outputTokens,
         messages: [{ role: "system", content: instructions + (config.provider === "groq" && model === "openai/gpt-oss-120b" ? "\n\nReturn one JSON object matching the requested schema. No Markdown or surrounding text." : "") }, { role: "user", content: input }],
         ...(config.provider === "groq" && model === "openai/gpt-oss-120b" ? {
           reasoning_effort: "low", response_format: { type: "json_object" },
@@ -184,7 +185,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       const requestNumber = contextBudget ? contextBudget.snapshot().attemptedRequests + 1 : undefined;
       phase = "model_transport_failed";
       const attemptsBefore = budget.snapshot().attemptedRequests;
-      const response = await request(endpoint, { method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
+      const response = await request(endpoint, { method: "POST", redirect: "error", signal: AbortSignal.timeout(outputTokens === 2048 ? 45_000 : 30_000),
         headers: { Authorization: "Bearer " + apiKey, "content-type": "application/json" },
         body });
       httpStatus = response.status;
@@ -260,9 +261,10 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
           unverified: file.exists ? "Remaining original source is omitted; use exact anchored patches only." : "Runtime behavior is unverified." };
       });
       if (excerptBytes > 6_000) return refuse();
-      const output = await call(buildCalculatorRoleInstructions(task.role), { repository: owner.repository,
+      const outputTokens = hostPreset === "calculator-frontend-2048-four-roles" && task.role === "frontend" && !repair ? 2048 : 1200;
+      const output = await call(buildCalculatorRoleInstructions(task.role, outputTokens), { repository: owner.repository,
         task, acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), baseSha: snapshot.baseSha, requirementsSha256: owner.requirementsSha256, evidence, ...(repair ? { repair: repairEvidence } : {}),
-        unverifiedAreas: ["Unshown originals and other files", "Independent security/review", "Actual tests and browser behavior"] });
+        unverifiedAreas: ["Unshown originals and other files", "Independent security/review", "Actual tests and browser behavior"] }, outputTokens);
       const prepared = prepareCalculatorRoleChanges(task.role, output, snapshot);
       proposals.set(prepared, { taskId, planFingerprint: plan.fingerprint, snapshot }); return prepared;
     } catch { stopped = true; return refuse(); }
