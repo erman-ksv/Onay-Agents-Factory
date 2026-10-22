@@ -99,10 +99,10 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
     // running event is also consumed; no receipt is overwritten or removed.
     if (barrier.inspectExisting()) return answer("needs-review", "after_ci_event_already_recorded_no_replay");
     const previousTask = plan.tasks.find(task => task.id === request.previousTaskId)!;
-    function previous(): TeamTaskSnapshot | undefined {
+    const previous = (): TeamTaskSnapshot | undefined => {
       const receipt = store.taskReceipt(plan, previousTask);
       try { return receipt.inspectExisting(); } finally { receipt.close(); }
-    }
+    };
     const prior = previous();
     if (!validPrevious(prior, plan.branch, plan.owner.repository, request.candidateSha))
       return answer("blocked", "after_ci_previous_candidate_unverified");
