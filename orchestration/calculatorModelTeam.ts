@@ -83,7 +83,7 @@ export type CalculatorModelCheckpointHooks = Readonly<{
   /** Private untrusted JSON DATA only. No return value can approve or retry it. */
   afterAssessmentRejected?: (rejection: CalculatorRejectedAssessment) => void | Promise<void>;
   /** Preserve parsed but invalid author output as private untrusted data; never authorize replay. */
-  afterProposalRejected?: (rejection: Readonly<{taskId:string;kind:"generation"|"repair";validationCode:"proposal_changes_invalid";result:unknown}>) => void | Promise<void>;
+  afterProposalRejected?: (rejection: Readonly<{taskId:string;kind:"generation"|"repair";validationCode:"proposal_changes_invalid"|"model_declined_proposal";result:unknown}>) => void | Promise<void>;
 }>;
 function privateRejectedAssessment(result: unknown, providerKey: string): unknown {
   const copy: unknown = structuredClone(result), pending: unknown[] = [copy];
@@ -132,6 +132,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   let stopped = false, planned = false, httpRequestsSent = 0;
   let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   let admissionDiagnostic: CalculatorModelAdmissionDiagnostic | undefined;
+  let declinedProposal:Readonly<{proposalBlocked:true;blockedReason?:string}>|undefined;
   let previewRepairOnly=false, repairPreview: Readonly<{status:"ready"|"refused";requestBytes:number;estimatedInputTokens:number;reservedOutputTokens:number}>|undefined;
   let assessmentDiagnostic: Readonly<{ assessmentRole: "security" | "reviewer" | "tester"; validationCode: CalculatorAssessmentValidationCode }> | undefined;
   const guardedTransport: typeof fetch = async (input, init) => {
@@ -302,7 +303,6 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         const tail = task.acceptanceIds.includes("keyboard") && file.path === "src/app.mjs" && source && tailStart < source.length ?
           { startCharacter: tailStart, endCharacter: source.length, text: source.slice(tailStart) } : undefined;
         if (tail) excerptBytes += Buffer.byteLength(tail.text);
-        if(repairOnly && repair && task.acceptanceIds.includes('keyboard')) return {...file,unverified:'Original text excerpts omitted during repair; only previous anchored edits and SHA metadata are supplied. Remaining original source is unverified.'};
         return { ...file, ...(tail ? { relatedExcerpt: tail } : {}), ...(excerpt ? { excerpt: { startCharacter: 0, endCharacter: end, text: excerpt } } : {}),
           unverified: file.exists ? "Remaining original source is omitted; use exact anchored patches only." : "Runtime behavior is unverified." };
       });
@@ -316,9 +316,19 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       let prepared:PreparedCalculatorChanges;
       try { prepared=prepareCalculatorRoleChanges(task.role,output,snapshot); }
       catch {
-        stopped=true;failureCode='proposal_changes_invalid';
+        stopped=true;
+        const declined=plain(output)&&exact(output,['summary','changes'])&&typeof output.summary==='string'&&Array.isArray(output.changes)&&output.changes.length===0;
+        failureCode=declined?'model_declined_proposal':'proposal_changes_invalid';
+        if(declined){
+          declinedProposal=Object.freeze({proposalBlocked:true});
+          try{const reason=privateRejectedAssessment(output.summary,apiKey);
+            if(typeof reason==='string'&&reason.length<=200&&!/[\u0000-\u001f\u007f]/.test(reason)&&
+              ![...sources.values(),...(savedRepair?.privateDependencySource?[savedRepair.privateDependencySource]:[])].some(source=>source.trim()&&reason.includes(source)))
+              declinedProposal=Object.freeze({proposalBlocked:true,blockedReason:reason});
+          }catch{/* Keep the source-free blocked classification only. */}
+        }
         if(checkpointHooks?.afterProposalRejected){
-          try { await checkpointHooks.afterProposalRejected(Object.freeze({taskId,kind:repair?'repair':'generation',validationCode:'proposal_changes_invalid',result:privateRejectedAssessment(output,apiKey)})); }
+          try { await checkpointHooks.afterProposalRejected(Object.freeze({taskId,kind:repair?'repair':'generation',validationCode:declined?'model_declined_proposal':'proposal_changes_invalid',result:privateRejectedAssessment(output,apiKey)})); }
           catch { failureCode='proposal_rejection_persistence_failed'; }
         }
         return refuse();
@@ -585,7 +595,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     diagnostic: () => Object.freeze({ reasonCode: failureCode ?? "model_failure_unclassified", ...(httpStatus !== undefined ? { httpStatus } : {}),
       ...(providerHttpStatus !== undefined ? { providerHttpStatus } : {}),
       ...(finishReason ? { finishReason } : {}), ...(admissionDiagnostic ? { admission: admissionDiagnostic } : {}),
-      ...(assessmentDiagnostic ?? {}),
+      ...(assessmentDiagnostic ?? {}),...(declinedProposal??{}),
       httpRequestsAttempted: budget.snapshot().attemptedRequests, httpRequestsSent,
       ...(budget.failure ? { taskBudgetCode: budget.failure.code } : {}), ...(contextBudget?.failure ? { contextBudgetCode: contextBudget.failure.code } : {}) }),
     snapshot: () => ({ provider: owner.provider, stopped, planned, generatedTasks: generated.size - restored.size, repairedTasks: repaired.size, restoredTasks: restored.size,
