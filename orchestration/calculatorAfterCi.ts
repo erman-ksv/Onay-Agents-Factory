@@ -71,7 +71,7 @@ function validPrevious(receipt: TeamTaskSnapshot | undefined, branch: string, re
       ["security", "reviewer", "tester"].every(role => passed(role + "_" + attempt) || passed("restore_" + role + "_" + attempt)) &&
       passed("host_tests_" + attempt));
 }
-function positiveCi(evidence: CalculatorCiEvidence, repository: string, branch: string, sha: string): boolean {
+export function verifyCalculatorAfterCiCandidateCi(evidence: CalculatorCiEvidence, repository: string, branch: string, sha: string): boolean {
   if (!evidence || evidence.repository !== repository || evidence.branch !== branch || evidence.candidateSha !== sha ||
       evidence.provenance?.candidateSha !== sha || !Array.isArray(evidence.runs) || !Array.isArray(evidence.jobs) ||
       !Array.isArray(evidence.provenance.workflowPins) ||
@@ -122,7 +122,7 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
       return answer("blocked", "after_ci_previous_candidate_unverified");
     if (await reader.getHead(plan.branch) !== request.candidateSha) return answer("needs-review", "after_ci_candidate_no_longer_current");
     const ciInput = { repository: plan.owner.repository, branch: plan.branch, candidateSha: request.candidateSha };
-    if (!positiveCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha))
+    if (!verifyCalculatorAfterCiCandidateCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha))
       return answer("needs-review", "after_ci_required_checks_unverified");
     const workspace = await openCalculatorWorkspace(store, reader, plan.branch, request.candidateSha);
     const proofs = new Map<string, CalculatorCurrentChecks>();
@@ -148,7 +148,7 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
         !selection.verifiedTaskIds.includes(request.previousTaskId)) return answer("needs-review", "after_ci_next_task_not_ready");
     // Dependency checks can take time. Fresh API evidence and head are checked
     // again before consuming the transition or making any next-task model call.
-    if (!positiveCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha))
+    if (!verifyCalculatorAfterCiCandidateCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha))
       return answer("needs-review", "after_ci_required_checks_changed");
     await assertCalculatorWorkspaceCurrent(workspace);
     if (digest(previous()) !== digest(prior)) return answer("blocked", "after_ci_previous_receipt_changed");
@@ -158,7 +158,7 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
       await options.persistBarrier(Object.freeze({ eventDirectory: options.eventDirectory, request, eventKey }));
       // Uploading state may take time. Refuse a changed CI/head/receipt before
       // claiming the successor or letting its first model request leave.
-      if (!positiveCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha)) return refuse();
+      if (!verifyCalculatorAfterCiCandidateCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha)) return refuse();
       await assertCalculatorWorkspaceCurrent(workspace);
       if (digest(previous()) !== digest(prior)) return refuse();
     }
