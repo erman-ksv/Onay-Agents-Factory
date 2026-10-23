@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitHistoricalT02OneSuccessor } from "./calculatorT02Admission.js";
+import { admitHistoricalT02OneSuccessor, createHistoricalT03ExecutionCallback, consumeCalculatorT02ExecutionPermit } from "./calculatorT02Admission.js";
 
 test("historical admission never consumes an event or calls models from unbranded JSON",async()=>{
  const root=mkdtempSync(join(tmpdir(),"calculator-historical-admission-"));
@@ -19,4 +19,17 @@ test("historical admission never consumes an event or calls models from unbrande
   assert.equal(result.wholeStep8Closed,false);assert.equal(calls,0);
   assert.deepEqual(readdirSync(events),[]);
  }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test("forged permit and absent execution tools cannot start a historic successor",async()=>{
+ const fake={kind:"t02-to-t03-admitted"} as const;
+ assert.throws(()=>consumeCalculatorT02ExecutionPermit({} as never,fake),/admission refused/);
+ let invoked=0;
+ const callback=createHistoricalT03ExecutionCallback({
+   team:{} as never,tools:{} as never,verifyDependencies:async()=>{invoked++;return undefined;},
+   execution:"offline-test",
+ });
+ await assert.rejects(()=>callback("calculator-pilot-step7-v1-34ee03-t03",{} as never,fake),
+   /admission refused/);
+ assert.equal(invoked,0);
 });
