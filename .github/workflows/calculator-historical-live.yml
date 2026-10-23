@@ -28,12 +28,12 @@ jobs:
           node --input-type=module - <<'JS'
           import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
           const value=JSON.parse(readFileSync('request/.factory/calculator-historical-live-request.json','utf8'));
-          assert.deepEqual(value,{version:1,runtimeSha:'81da3a07ad362aad21fce5060d2cde3d32652b70',sourceCiRunId:39941470065,taskId:'calculator-pilot-step7-v1-34ee03-t03',baseSha:'949a0bf874722fd8cbd886c2cb0af8f2b502ac05',maxRequests:8,maxRepairs:1,legalEnabled:false,automaticReplay:false});
+          assert.deepEqual(value,{version:1,runtimeSha:'ab154f67bff55b819db2d44d8f09e6f30f6cfa34',sourceCiRunId:39942165658,taskId:'calculator-pilot-step7-v1-34ee03-t03',baseSha:'949a0bf874722fd8cbd886c2cb0af8f2b502ac05',maxRequests:8,maxRepairs:1,legalEnabled:false,automaticReplay:false});
           JS
       - name: Checkout immutable live runtime
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 81da3a07ad362aad21fce5060d2cde3d32652b70
+          ref: ab154f67bff55b819db2d44d8f09e6f30f6cfa34
           path: runtime
           persist-credentials: false
       - uses: pnpm/action-setup@v4
@@ -52,8 +52,8 @@ jobs:
       - name: Admit one historical event and execute the actual t03 team
         working-directory: runtime
         env:
-          FACTORY_RUNTIME_SHA: 81da3a07ad362aad21fce5060d2cde3d32652b70
-          FACTORY_SOURCE_CI_RUN: '39941470065'
+          FACTORY_RUNTIME_SHA: ab154f67bff55b819db2d44d8f09e6f30f6cfa34
+          FACTORY_SOURCE_CI_RUN: '39942165658'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
