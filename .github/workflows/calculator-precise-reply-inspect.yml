@@ -37,5 +37,7 @@ jobs:
             row['edits']=[{'beforeLength':len(e.get('before','')),'afterLength':len(e.get('after','')),'exactOccurrences':source.count(e.get('before','')) if e.get('before') else -1,'wholeFileExact':e.get('before')==source} for e in c.get('edits',[])]
             if isinstance(c.get('content'),str):row['contentLength']=len(c['content'])
             result['changes'].append(row)
+          summary=raw.get('summary','')
+          if isinstance(summary,str) and len(summary)<=200 and not any(x in summary for x in ['gsk_','ghp_','ghs_']):result['blockedSummary']=summary
           print(json.dumps(result))
           PY
