@@ -627,7 +627,12 @@ test("historical admission runs the ordinary t03 executor with guarded task clai
       verifyDependencies:x.verify,persistBarrier:async()=>{persisted++;},
       executeOne:adapter,
     });
-    assert.equal(result.status,"consumed",result.reason);
+    const debugging=x.store.taskReceipt(x.plan,x.plan.tasks[2]!);
+    const snapshot=debugging.inspectExisting();
+    debugging.close();
+    assert.equal(result.status,"consumed",JSON.stringify({reason:result.reason,generated,
+      hostTests,publishes,candidateCi,roles,receiptStatus:snapshot?.status,
+      receiptReason:snapshot?.reasonCode,stages:snapshot?.stages.map(s=>s.stage+":"+s.status)}));
     assert.equal(result.callbackInvoked,true);
     assert.equal(generated,1);assert.equal(publishes,1);assert.equal(hostTests,1);
     assert.equal(candidateCi,1);assert.equal(persisted,1);
