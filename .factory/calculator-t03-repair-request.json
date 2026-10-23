@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "runtimeSha": "54b6c3847cfc3a2f568a6a317fcf86dc77102003",
+  "sourceCiRunId": 39949264440,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceRunId": 39942417242,
+  "sourceArtifactId": 12497425333,
+  "sourceCapsuleSha256": "0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7",
+  "maxNewRequests": 4,
+  "maxAdditionalRepairs": 0,
+  "automaticReplay": false,
+  "legalEnabled": false
+}
