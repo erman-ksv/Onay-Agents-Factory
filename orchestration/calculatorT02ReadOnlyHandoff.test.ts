@@ -7,7 +7,7 @@ import { CALCULATOR_T02_CHARGE_PIN as PIN, type CalculatorT02ChargeObservation }
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import { admitHistoricalT02OneSuccessor, type HistoricalT02AdmissionTools } from "./calculatorT02Admission.js";
 import type { CalculatorCiEvidence } from "../github/calculatorCi.js";
-import { openCalculatorWorkspace, selectCalculatorWorkspaceTask } from "./calculatorWorkspace.js";
+import { openCalculatorWorkspace, selectCalculatorWorkspaceTask, claimHistoricalCalculatorT03 } from "./calculatorWorkspace.js";
 import { TeamTaskStore } from "./teamTaskStore.js";
 import type { CalculatorSnapshotReader, CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
@@ -372,7 +372,7 @@ async function admissionFixture(root:string) {
       } finally {event.close();}
       if(failPersistence)throw Error("Simulated external save rejection");
     },
-    executeOne:async id=>{
+    executeOne:async(id,workspace,permit)=>{
       assert.equal(id,x.plan.tasks[2]!.id);
       const ev=calculatorAfterCiEventIdentity({version:1,planFingerprint:x.plan.fingerprint,
         previousTaskId:x.plan.tasks[1]!.id,candidateSha:PIN.candidateSha,
@@ -382,9 +382,11 @@ async function admissionFixture(root:string) {
       assert.deepEqual(readdirSync(x.state).filter(name=>name.includes("-t03")),[]);
       modelCalls++;
       if(failExecution)throw Error("Simulated executor crash");
-      const successor=x.store.taskReceipt(x.plan,x.plan.tasks[2]!);
+      const claimed=await claimHistoricalCalculatorT03(workspace,permit,x.verify);
+      assert.equal(claimed.selection.status,"ready");
+      assert.equal(claimed.selection.task?.id,id);
+      const successor=claimed.store!;
       try {
-        assert.equal(successor.claim(),"claimed");
         for(const stage of ["load_current_source","generate_1","security_1","reviewer_1","tester_1",
           "host_tests_1","publish_candidate","verify_candidate_ci"]){
           successor.recordStage(stage,"running");
