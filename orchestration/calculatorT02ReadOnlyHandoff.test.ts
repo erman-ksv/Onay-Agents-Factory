@@ -228,6 +228,17 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
       inspectedT02:structuredClone(selected)});
     assert.equal(forged.status,"needs-review");
     assert.equal(forged.reasonCode,"historical_publication_unverified");
+    const racing=await x.store.select({currentBaseSha:PIN.candidateSha,inspectedT02:selected,
+      verifyTask:async(task,receipt,currentBaseSha)=>{
+        if(task.id===x.plan.tasks[1]!.id)
+          writeFileSync(x.t03LockPath(),"",{flag:"wx",mode:0o600});
+        return {repository:x.plan.owner.repository,taskId:task.id,
+          candidateSha:receipt.publication!.headSha,integratedAtSha:currentBaseSha,
+          securityReady:true,independentReviewReady:true,taskChecksPassed:true,testsExecuted:true};
+      }});
+    assert.equal(racing.status,"needs-review");
+    assert.equal(racing.reasonCode,"historical_state_changed_during_verification");
+    unlinkSync(x.t03LockPath());
     assert.equal(selected.previousTaskId,x.plan.tasks[1]!.id);
     assert.equal(selected.nextTaskId,x.plan.tasks[2]!.id);
     assert.equal(selected.candidateSha,PIN.candidateSha);
