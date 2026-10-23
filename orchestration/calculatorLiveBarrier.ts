@@ -41,21 +41,25 @@ export function createCalculatorLiveBarrier(config: Readonly<{
     },
     async claim() {
       if (stopped || attempted) throw Error(ERROR); attempted = true;
+      let phase = "source_ci";
       try {
         const run = await request("/actions/runs/" + c.sourceCiRunId);
         if (run.head_sha !== c.runtimeSha || run.path !== ".github/workflows/ci.yml" || run.run_attempt !== 1 ||
             run.status !== "completed" || run.conclusion !== "success" || run.repository?.full_name !== FACTORY)
           throw Error(ERROR);
+        phase = "source_ci_jobs";
         const evidence = await request("/actions/runs/" + c.sourceCiRunId + "/jobs?per_page=100");
         if (evidence.total_count !== 1 || evidence.jobs?.length !== 1) throw Error(ERROR);
         const job = evidence.jobs[0];
         if (job.head_sha !== c.runtimeSha || job.status !== "completed" || job.conclusion !== "success" ||
             ["Typecheck", "Test"].some(name => job.steps?.filter((s: any) => s.name === name && s.status === "completed" && s.conclusion === "success").length !== 1))
           throw Error(ERROR);
+        phase = "remote_absence";
         if (await request(path, "GET", undefined, true) !== undefined) throw Error(ERROR);
+        phase = "remote_compare_create";
         if (!matches(await request("/git/refs", "POST", { ref, sha: c.runtimeSha })) || !matches(await request(path))) throw Error(ERROR);
         admitted = true;
-      } catch { stopped = true; throw Error(ERROR); }
+      } catch { stopped = true; throw Object.assign(Error(ERROR), { code: "live_barrier_" + phase }); }
     },
     async assertClaimed() {
       if (stopped || !admitted) throw Error(ERROR);

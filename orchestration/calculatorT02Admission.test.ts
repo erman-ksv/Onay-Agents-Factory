@@ -16,6 +16,7 @@ test("historical admission never consumes an event or calls models from unbrande
    nextTaskId:"calculator-pilot-step7-v1-34ee03-t03",readOnly:true,executionAuthorized:false};
   const result=await admitHistoricalT02OneSuccessor({} as never,{} as never,forged as never,options as never);
   assert.equal(result.status,"blocked");assert.equal(result.callbackInvoked,false);
+  assert.equal(result.failurePhase,"preview");
   assert.equal(result.wholeStep8Closed,false);assert.equal(calls,0);
   assert.deepEqual(readdirSync(events),[]);
  }finally{rmSync(root,{recursive:true,force:true});}

@@ -67,7 +67,7 @@ export function inspectAdmittedCalculatorT02Event(permit:CalculatorT02ExecutionP
   }catch{return false;}finally{event?.close();}
 }
 
-type Report = Readonly<{status:"blocked"|"consumed";reason:string;callbackInvoked:boolean;wholeStep8Closed:false}>;
+type Report = Readonly<{status:"blocked"|"consumed";reason:string;callbackInvoked:boolean;wholeStep8Closed:false;failurePhase?:string}>;
 /** Connects the host-verified one-use historical transition to the existing
  * calculator executor. No alternate claim route, model implementation or
  * privileged publication tool is provided by this adapter. */
@@ -128,6 +128,7 @@ export async function admitHistoricalT02OneSuccessor(store:CalculatorPlanStore,
   reader:CalculatorSnapshotReader, preview:CalculatorT02ReadOnlyPreselection,
   tools:HistoricalT02AdmissionTools):Promise<Report> {
   let barrier:TeamTaskStore|undefined,claimed=false,invoked=false;
+  let failurePhase="preview";
   try {
     assertCalculatorT02InspectedSuccessorPreview(preview);
     if(!tools || typeof tools.ci!=="function" || typeof tools.verifyDependencies!=="function" ||
@@ -135,31 +136,42 @@ export async function admitHistoricalT02OneSuccessor(store:CalculatorPlanStore,
        preview.executionAuthorized!==false || preview.readOnly!==true ||
        preview.nextTaskId!=="calculator-pilot-step7-v1-34ee03-t03" ||
        preview.previousTaskId!=="calculator-pilot-step7-v1-34ee03-t02")return blocked("configuration_unverified");
+    failurePhase="plan";
     const plan=store.inspect();
     if(!plan || plan.status!=="planned" || plan.fingerprint!==preview.planFingerprint)return blocked("plan_changed");
+    failurePhase="request";
     const request=prepareCalculatorAfterCiRequest({version:1,planFingerprint:preview.planFingerprint,
       previousTaskId:preview.previousTaskId,candidateSha:preview.candidateSha,
       expectedNextTaskId:preview.nextTaskId});
     const id=calculatorAfterCiEventIdentity(request);
+    failurePhase="local_event_inspection";
     barrier=new TeamTaskStore(tools.eventDirectory,id);
     if(barrier.inspectExisting()||barrier.inspectExistingLock())return blocked("event_already_consumed");
+    failurePhase="candidate_ci";
     const ciInput={repository:plan.owner.repository,branch:plan.branch,candidateSha:preview.candidateSha};
     if(!verifyCalculatorAfterCiCandidateCi(await tools.ci(ciInput),ciInput.repository,ciInput.branch,ciInput.candidateSha))
       return blocked("ci_unverified");
+    failurePhase="open_workspace";
     const workspace=await openCalculatorWorkspace(store,reader,plan.branch,preview.candidateSha);
+    failurePhase="select_successor";
     const chosen=await selectCalculatorWorkspaceTask(workspace,tools.verifyDependencies,
       {inspectedT02:preview,eventDirectory:tools.eventDirectory});
     if(chosen.status!=="ready" || chosen.task?.id!==preview.nextTaskId ||
        !chosen.verifiedTaskIds.includes(preview.previousTaskId))return blocked("successor_unverified");
+    failurePhase="recheck_ci";
     if(!verifyCalculatorAfterCiCandidateCi(await tools.ci(ciInput),ciInput.repository,ciInput.branch,ciInput.candidateSha))
       return blocked("ci_changed");
+    failurePhase="recheck_workspace";
     await assertCalculatorWorkspaceCurrent(workspace);
     if(inspectCalculatorT02AfterCiEvent(tools.eventDirectory,preview).status!=="not-consumed-read-only")
       return blocked("event_changed");
+    failurePhase="claim_local_event";
     if(barrier.claim()!=="claimed")return blocked("event_already_consumed");
     claimed=true;
     barrier.recordStage("execute_next_task","running");
+    failurePhase="persist_remote_event";
     await tools.persistBarrier(id);
+    failurePhase="post_persistence_recheck";
     // Nothing is executed until this host recheck returns positive.
     if(!verifyCalculatorAfterCiCandidateCi(await tools.ci(ciInput),ciInput.repository,ciInput.branch,ciInput.candidateSha))
       throw Error("CI changed after persistence");
@@ -167,6 +179,7 @@ export async function admitHistoricalT02OneSuccessor(store:CalculatorPlanStore,
     // NOTE: caller is responsible for a second pre-model barrier in its own executor.
     const permit=issuePermit(workspace,preview,tools.eventDirectory);
     invoked=true;
+    failurePhase="execute_one";
     const outcome=await tools.executeOne(preview.nextTaskId,workspace,permit);
     if(!calculatorT02ExecutionPermitConsumed(permit))
       throw Error("Success without consuming the one-use executor permit");
@@ -185,6 +198,6 @@ export async function admitHistoricalT02OneSuccessor(store:CalculatorPlanStore,
     return Object.freeze({status:"consumed",reason:"one_host_callback_completed",callbackInvoked:true,wholeStep8Closed:false});
   }catch{
     if(claimed)try{barrier!.recordStage("execute_next_task","blocked");barrier!.finish("blocked","after_ci_interrupted_no_replay");}catch{}
-    return Object.freeze({status:"blocked",reason:"admission_unverified_no_replay",callbackInvoked:invoked,wholeStep8Closed:false});
+    return Object.freeze({status:"blocked",reason:"admission_unverified_no_replay",callbackInvoked:invoked,wholeStep8Closed:false,failurePhase});
   }finally{barrier?.close();}
 }
