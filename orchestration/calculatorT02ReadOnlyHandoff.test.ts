@@ -448,3 +448,40 @@ test("host executor interruption consumes barrier; no second callback or t02 rep
     assert.deepEqual(f.x.receiptBytes(),f.original);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+test("simultaneous historical after-CI deliveries admit at most one host execution callback",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-admission-concurrent-"));
+  try{
+    const f=await admissionFixture(root);
+    let release!:()=>void,notify!:()=>void;
+    const held=new Promise<void>(resolve=>{release=resolve;});
+    const entered=new Promise<void>(resolve=>{notify=resolve;});
+    let persistCalls=0;
+    const options:HistoricalT02AdmissionTools={...f.options,
+      persistBarrier:async identity=>{
+        persistCalls++;
+        const inspect=new TeamTaskStore(f.events,identity);
+        try{
+          assert.equal(inspect.inspectExisting()?.status,"running");
+        }finally{inspect.close();}
+        notify();
+        await held;
+      },
+    };
+    const first=admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,options);
+    await entered;
+    const second=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,options);
+    assert.equal(second.status,"blocked");
+    assert.equal(second.reason,"event_already_consumed");
+    assert.equal(second.callbackInvoked,false);
+    assert.equal(persistCalls,1);
+    assert.deepEqual(f.counters,{ciCalls:2,modelCalls:0,persistCalls:0});
+    release();
+    const completed=await first;
+    assert.equal(completed.status,"consumed");
+    assert.equal(completed.callbackInvoked,true);
+    assert.equal(persistCalls,1);
+    assert.deepEqual(f.counters,{ciCalls:3,modelCalls:1,persistCalls:0});
+    assert.deepEqual(f.x.receiptBytes(),f.original);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
