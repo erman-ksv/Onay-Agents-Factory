@@ -121,20 +121,7 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
     const difference = [...new Set([...currentFiles.keys(),...oldFiles.keys()])]
       .filter(path=>currentFiles.get(path)!==oldFiles.get(path)).sort();
     if (JSON.stringify(difference)!==JSON.stringify([...changed].sort())) return refuse();
-    // A same-SHA permission/type change is still an unauthorized repository
-    // change. Compare every tree entry, not merely blob digests or task paths.
-    const approved = new Set(changed);
-    for (const [path, prior] of old) {
-      if (approved.has(path)) continue;
-      const current = cur.get(path);
-      if (!current || current.sha !== prior.sha || current.mode !== prior.mode ||
-          current.type !== prior.type) return refuse();
-    }
-    for (const [path, current] of cur) {
-      if (approved.has(path)) {
-        if (current.type !== "blob" || current.mode !== "100644") return refuse();
-      } else if (!old.has(path)) return refuse();
-    }
+    if (!calculatorT02TreeDeltaMatches(before.tree, now.tree, changed)) return refuse();
 
     for (const [index, taskId] of [T01,T02].entries()) {
       const task=plan.tasks[index]!;
@@ -180,4 +167,37 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
 export function assertCalculatorT02InspectedSuccessorPreview(value: unknown): CalculatorT02ReadOnlyPreselection {
   if (!value || typeof value !== "object" || !inspectedPreviews.has(value)) return refuse();
   return value as CalculatorT02ReadOnlyPreselection;
+}
+
+/** Git tree hashes include descendants: an approved file changes ancestor tree
+ * hashes too. Only those ancestors may change SHA; entry type/mode and every
+ * unrelated entry remain exact. This predicate conveys no execution authority. */
+type DeltaEntry = Readonly<{ path: string; sha: string; mode: string; type: string }>;
+export function calculatorT02TreeDeltaMatches(before: readonly DeltaEntry[], now: readonly DeltaEntry[],
+  approvedPaths: readonly string[]): boolean {
+  if (!approvedPaths.length || new Set(approvedPaths).size !== approvedPaths.length ||
+      before.length > 512 || now.length > 512) return false;
+  const valid = (entry: DeltaEntry) => SHA.test(entry.sha) &&
+    entry.path.split('/').every(part => /^[A-Za-z0-9_.-]+$/.test(part) && part !== '.' && part !== '..') &&
+    (entry.type === 'tree' ? entry.mode === '040000' : entry.type === 'blob' && entry.mode === '100644');
+  if (![...before, ...now].every(valid)) return false;
+  const old = new Map(before.map(e => [e.path, e])), cur = new Map(now.map(e => [e.path, e]));
+  if (old.size !== before.length || cur.size !== now.length) return false;
+  const approved = new Set(approvedPaths), ancestors = new Set<string>();
+  for (const path of approved) {
+    const entry = cur.get(path);
+    if (!entry || entry.type !== 'blob' || entry.sha === old.get(path)?.sha) return false;
+    const parts = path.split('/'); parts.pop();
+    while (parts.length) { ancestors.add(parts.join('/')); parts.pop(); }
+  }
+  for (const [path, prior] of old) {
+    const current = cur.get(path);
+    if (!current || current.mode !== prior.mode || current.type !== prior.type) return false;
+    if (approved.has(path)) continue;
+    if (current.sha !== prior.sha && !(ancestors.has(path) && prior.type === 'tree')) return false;
+  }
+  for (const [path, current] of cur) {
+    if (!old.has(path) && !approved.has(path) && !(ancestors.has(path) && current.type === 'tree')) return false;
+  }
+  return true;
 }
