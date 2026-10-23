@@ -21,3 +21,10 @@ test('correction carries unrelated agent changes unchanged and never transfers a
  assert.deepEqual(JSON.parse(corrected.reviewEvidence).changes[1],JSON.parse(previous.reviewEvidence).changes[1]);
  assert.equal(corrected.gates.independentReview,'required');assert.equal(corrected.gates.tests,'required');assert.equal(corrected.gates.publicationAuthorized,false);
 });
+
+test('quote-escaped whole-file representation requires the exact original SHA and preserves all after bytes',async()=>{
+ const f=await fixture();f.raw.changes[0]!.edits[0]!.before=content.replaceAll('"','\\"');
+ const corrected=prepare(f.raw,f.previous,f.snapshot);assert.equal(corrected.files[0]!.content,next);
+ const changed=structuredClone(f.raw);changed.changes[0]!.edits[0]!.before+=' ';assert.throws(()=>prepare(changed,f.previous,f.snapshot));
+ const wrong=structuredClone(f.raw);wrong.changes[0]!.sourceSha256='0'.repeat(64);assert.throws(()=>prepare(wrong,f.previous,f.snapshot));
+});

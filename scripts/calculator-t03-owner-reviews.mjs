@@ -173,8 +173,11 @@ try{
   providerCalls++;report.newProviderCalls=providerCalls;report.modelCalls=6+providerCalls;
   const response=await fetch(url,options);put('provider-'+providerCalls+'.json',{provider:'groq',sequence:providerCalls,model:body.model,status:response.status});return response;
  },{},undefined,{beforeRequest:async current=>{await barrier.assertClaimed();await assertOriginalMarker();assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);const aggregate=addPrior(current);assertT03OwnerCorrection2Charge(aggregate);charge(aggregate);save({...active,httpInFlight:true});},afterAssessmentRejected:async rejection=>{put('private-rejected-assessment.json',rejection);save({...active,httpInFlight:false});}},'calculator-restored-repair-four-roles',()=>hostEvidence.get(adopted));
+ phase='restore_original_proposal_without_http';
  const rebuilt=coreTeam.restoreProposal(plan,TASK,taskSnapshot,failure.proposal,calculatorProposalDigest(failure.proposal),[]);
+ phase='restore_failed_feedback_without_http';
  const request=coreTeam.importRepairFeedback(plan,TASK,rebuilt,failure.assessments,undefined,sourcesSnapshot);
+ phase='adopt_saved_correction_without_http';
  adopted=coreTeam.adoptSavedUnpublishedCorrection(plan,TASK,taskSnapshot,request,rawReply.result);
  assert.equal(coreTeam.diagnostic().httpRequestsSent,0);report.savedResponseNormalized=true;report.savedAgentCorrectionAdopted=true;report.normalizedProposalDigest=calculatorProposalDigest(adopted);
  phase='actual_saved_correction_tests_before_review_admission';

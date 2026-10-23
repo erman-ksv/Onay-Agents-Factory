@@ -24,8 +24,9 @@ export function prepareUnpublishedCalculatorCorrection(raw:unknown,previous:Prep
   if(!created||!file||created.content!==file.content||c.sourceSha256!==createHash('sha256').update(file.content).digest('hex')||!Array.isArray(c.edits)||c.edits.length!==1)return refuse();
   const e=c.edits[0];
   if(!plain(e)||!keys(e,['before','after'])||typeof e.before!=='string'||typeof e.after!=='string'||!e.after.trim()||e.after===file.content)return refuse();
-  // Two explicit lossless representations only. Never fuzzy/trim/substring match.
-  if(e.before!==file.content&&e.before!==file.content.replace(/\\/g,'\\\\'))return refuse();
+  // Explicit quote/backslash representations only. Never fuzzy/trim/substring match.
+  // The exact full-file source SHA remains mandatory; replacement bytes are untouched.
+  if(e.before!==file.content&&e.before!==file.content.replace(/\\/g,'\\\\')&&e.before.replace(/\\(["'])/g,'$1')!==file.content)return refuse();
   replacements.set(c.path,{operation:'create',path:c.path,content:e.after,message:c.message});
  }
  const changes=priorInput.changes.map((c:any)=>replacements.get(c.path)??c);
