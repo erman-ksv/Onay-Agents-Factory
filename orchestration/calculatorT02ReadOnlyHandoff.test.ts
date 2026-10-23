@@ -9,6 +9,7 @@ import { TeamTaskStore } from "./teamTaskStore.js";
 import type { CalculatorSnapshotReader, CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
 import { CALCULATOR_T02_PRESELECTION_ERROR, previewCalculatorT02Successor } from "./calculatorT02SuccessorPreview.js";
+import { CALCULATOR_T02_EVENT_PREFLIGHT_ERROR, inspectCalculatorT02AfterCiEvent } from "./calculatorT02AfterCiEventPreflight.js";
 import { CALCULATOR_T02_SIDECAR_ERROR, inspectCalculatorT02ReconciliationSidecar,
   recordCalculatorT02ReconciliationSidecar } from "./calculatorT02ReconciliationSidecar.js";
 import { CALCULATOR_T02_HANDOFF_ERROR, inspectCalculatorT02ReadOnlyHandoff,
@@ -215,6 +216,19 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
     assert.equal(selected.executionAuthorized,false);assert.equal(selected.publicationAuthorized,false);
     assert.equal(selected.resumeAuthorized,false);assert.equal(selected.wholeStep8Closed,false);
     assert.deepEqual(selected.conservativePriorCharges,PIN.conservative);
+    const eventDir=join(root,"events");mkdirSync(eventDir,{mode:0o700});
+    const event=inspectCalculatorT02AfterCiEvent(eventDir,selected);
+    assert.equal(event.status,"not-consumed-read-only");
+    assert.equal(event.previousTaskId,x.plan.tasks[1]!.id);
+    assert.equal(event.expectedNextTaskId,x.plan.tasks[2]!.id);
+    assert.equal(event.eventClaimed,false);assert.equal(event.executionAuthorized,false);
+    assert.deepEqual(readdirSync(eventDir),[]);
+    assert.throws(()=>inspectCalculatorT02AfterCiEvent(eventDir,structuredClone(selected)),
+      {message:CALCULATOR_T02_PRESELECTION_ERROR});
+    writeFileSync(join(eventDir,event.eventId+".lock"),"",{mode:0o600,flag:"wx"});
+    assert.throws(()=>inspectCalculatorT02AfterCiEvent(eventDir,selected),
+      {message:CALCULATOR_T02_EVENT_PREFLIGHT_ERROR});
+    assert.deepEqual(readdirSync(eventDir),[event.eventId+".lock"]);
     assert.equal(x.checks,2);assert.deepEqual(x.receiptBytes(),before);
     assert.deepEqual(readdirSync(x.state).filter(name=>name.includes("-t03")),[]);
     // Repeated read-only preview may be performed, but still never claims t03.
