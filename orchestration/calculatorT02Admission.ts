@@ -3,7 +3,7 @@
  * The historical receipt is never edited, and the durable event is consumed
  * before the callback can be invoked. */
 import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
-import type { CalculatorExecutionReport } from "./calculatorExecution.js";
+import { runCalculatorExecution, type CalculatorExecutionReport } from "./calculatorExecution.js";
 import type { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import type { CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import type { CalculatorCiEvidence } from "../github/calculatorCi.js";
@@ -68,6 +68,22 @@ export function inspectAdmittedCalculatorT02Event(permit:CalculatorT02ExecutionP
 }
 
 type Report = Readonly<{status:"blocked"|"consumed";reason:string;callbackInvoked:boolean;wholeStep8Closed:false}>;
+/** Connects the host-verified one-use historical transition to the existing
+ * calculator executor. No alternate claim route, model implementation or
+ * privileged publication tool is provided by this adapter. */
+export function createHistoricalT03ExecutionCallback(
+  options: Omit<Parameters<typeof runCalculatorExecution>[1],"historicalT03Permit"> &
+    Required<Pick<Parameters<typeof runCalculatorExecution>[1],"verifyDependencies">>
+):HistoricalT02AdmissionTools["executeOne"] {
+  if(!options || typeof options.verifyDependencies!=="function" ||
+     !options.team || !options.tools)return async()=>{throw Error(CALCULATOR_T02_ADMISSION_ERROR);};
+  return async(taskId,workspace,permit)=>{
+    const result=await runCalculatorExecution(workspace,{...options,historicalT03Permit:permit});
+    if(result.taskId!==taskId || result.status!=="candidate-verified")
+      throw Error(CALCULATOR_T02_ADMISSION_ERROR);
+    return result;
+  };
+}
 export type HistoricalT02AdmissionTools = Readonly<{
   eventDirectory:string;
   ci:(input:{repository:string;branch:string;candidateSha:string})=>Promise<CalculatorCiEvidence>;
