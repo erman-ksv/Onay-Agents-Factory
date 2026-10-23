@@ -5,6 +5,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { CALCULATOR_T02_CHARGE_PIN as PIN, type CalculatorT02ChargeObservation } from "./calculatorT02ChargeReconciliation.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
+import { openCalculatorWorkspace, selectCalculatorWorkspaceTask } from "./calculatorWorkspace.js";
 import { TeamTaskStore } from "./teamTaskStore.js";
 import type { CalculatorSnapshotReader, CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
@@ -210,6 +211,12 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
     const before=x.receiptBytes();
     const selected=await previewCalculatorT02Successor(x.store,x.reader,x.sidecarDir,checked,x.verify);
     assert.equal(selected.status,"candidate-preview-only");
+    // End-to-end READ-ONLY workspace selection uses actual commit/blob ancestry.
+    const workspace=await openCalculatorWorkspace(x.store,x.reader,x.plan.branch,PIN.candidateSha);
+    const workspaceSelection=await selectCalculatorWorkspaceTask(workspace,x.verify,
+      {inspectedT02:selected,eventDirectory:join(root,"events-workspace")});
+    // The event directory must preexist; an absent host event store fails closed.
+    assert.equal(workspaceSelection.status,"needs-review");
     const eventDir=join(root,"events");mkdirSync(eventDir,{mode:0o700});
     // Selector accepts the *in-process* checked preview for display only.
     const inspected=await x.store.select({currentBaseSha:PIN.candidateSha,
