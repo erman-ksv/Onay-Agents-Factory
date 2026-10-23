@@ -42,3 +42,11 @@ test('keyboard repair receives bounded original excerpts with exact SHA and expl
  const evidence=packet.evidence.find((v:any)=>v.path==='src/app.mjs');assert.equal(evidence.sourceSha256,createHash('sha256').update(source).digest('hex'));assert.ok(evidence.excerpt.text.length>0&&evidence.excerpt.text.length<=1000);assert.ok(evidence.relatedExcerpt.text.length<=750);
  assert.equal(JSON.stringify(packet).includes(source),false);assert.equal(JSON.stringify(packet).includes(core),false);assert.ok(evidence.relatedExcerpt.startCharacter>evidence.excerpt.endCharacter);assert.match(evidence.unverified,/Remaining original source is omitted/);
 });
+
+test('rejected draft feedback is private host-bound data with validator reasons, never an approval or retry',async()=>{
+ const f=await setup();const request=f.team.importFailedHostTestRepair(plan,task.id,f.restored,f.token,f.dependency);
+ const raw={summary:'Untrusted rejected candidate',changes:[{operation:'patch',path:'test/ui.test.mjs',sourceSha256:'0'.repeat(64),edits:[{before:'x',after:'y'}],message:'Draft'}]};
+ f.team.attachRejectedProposalFeedback(plan,task.id,request,raw);await f.team.repair(plan,task.id,f.snapshot,request);
+ const packet=JSON.parse(f.packets[0]!.messages[1].content);assert.deepEqual(packet.repair.rejectedProposal,raw);assert.deepEqual(packet.repair.proposalValidation,[{code:'patch_target_absent',path:'test/ui.test.mjs'}]);assert.deepEqual(packet.repair.specialistFeedback,[]);assert.equal(f.calls(),1);
+ const other=await setup();const another=other.team.importFailedHostTestRepair(plan,task.id,other.restored,other.token,other.dependency);assert.throws(()=>other.team.attachRejectedProposalFeedback(plan,task.id,{...another},raw));assert.equal(other.calls(),0);
+});
