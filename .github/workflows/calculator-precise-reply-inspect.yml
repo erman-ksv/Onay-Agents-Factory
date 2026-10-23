@@ -1,0 +1,41 @@
+name: Inspect saved precise repair without model calls
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-precise-reply-inspect.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12516625382'
+          run-id: '39987019627'
+          github-token: ${{ github.token }}
+          path: reply
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12514596755'
+          run-id: '39983292798'
+          github-token: ${{ github.token }}
+          path: previous
+          merge-multiple: true
+      - name: Inspect metadata and exact anchors only
+        run: |
+          python - <<'PY'
+          import json,pathlib,hashlib
+          data=pathlib.Path('reply/private-rejected-proposal.json').read_bytes();r=json.loads(data);raw=r['result']
+          previous=json.loads(pathlib.Path('previous/private-saved-agent-proposal.json').read_bytes());files={f['path']:f['content'] for f in previous['files']}
+          result={'modelsRun':False,'targetWrites':False,'replySha256':hashlib.sha256(data).hexdigest(),'taskMatches':r['taskId']=='calculator-pilot-step7-v1-34ee03-t03','kindMatches':r['kind']=='repair','topSchema':set(raw)=={'summary','changes'},'summaryLength':len(raw.get('summary','')),'changes':[]}
+          for c in raw.get('changes',[]):
+            p=c.get('path');source=files.get(p,'');row={'path':p if p in files else 'unapproved','operation':c.get('operation') if c.get('operation') in ['patch','create'] else 'invalid','sourceShaMatches':bool(source) and c.get('sourceSha256')==hashlib.sha256(source.encode()).hexdigest(),'patchSchema':set(c)=={'operation','path','sourceSha256','edits','message'},'createSchema':set(c)=={'operation','path','content','message'}}
+            row['edits']=[{'beforeLength':len(e.get('before','')),'afterLength':len(e.get('after','')),'exactOccurrences':source.count(e.get('before','')) if e.get('before') else -1,'wholeFileExact':e.get('before')==source} for e in c.get('edits',[])]
+            if isinstance(c.get('content'),str):row['contentLength']=len(c['content'])
+            result['changes'].append(row)
+          print(json.dumps(result))
+          PY
