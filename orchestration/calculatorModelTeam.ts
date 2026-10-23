@@ -1,3 +1,4 @@
+import {consumeCalculatorFailedTestEvidence,type CalculatorFailedTestEvidence} from './calculatorFailedTestRepair.js';
 import {prepareUnpublishedCalculatorCorrection} from './calculatorUnpublishedCorrection.js';
 import {calculatorKeyboardRepairInstructions} from './calculatorKeyboardRepairContext.js';
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
@@ -422,6 +423,24 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         generated.add(taskId); restored.add(taskId); planned = true;
         return rebuilt;
       } catch { failureCode ??= "proposal_restore_invalid"; stopped = true; return refuse(); }
+    },
+    /** Fresh executed failure only: no fabricated specialist assessments or prior approvals. */
+    importFailedHostTestRepair(plan:CalculatorPlan,taskId:string,changes:PreparedCalculatorChanges,
+      evidence:CalculatorFailedTestEvidence,dependency:CalculatorSnapshot):CalculatorRepairRequest {
+      try{
+        taskIn(plan,taskId);const identity=proposals.get(changes);
+        if(stopped||!repairOnly||!restored.has(taskId)||repaired.has(taskId)||budget.snapshot().attemptedRequests||
+          !identity||identity.taskId!==taskId||identity.planFingerprint!==plan.fingerprint||(assessed.get(changes)?.size??0)!==0||feedbackImported.has(changes))return refuse();
+        if(dependency.repository!==changes.repository||dependency.baseRef!==changes.baseRef||dependency.baseSha!==changes.baseSha)return refuse();
+        const source=calculatorSources(dependency).get('src/calculator.mjs'),metadata=dependency.files.find(f=>f.path==='src/calculator.mjs');
+        if(!source||!metadata?.exists||!metadata.blobSha||!metadata.sourceSha256||!/^export[ \t]+function[ \t]+calculate[ \t]*\([ \t]*left[ \t]*,[ \t]*operator[ \t]*,[ \t]*right[ \t]*\)[ \t]*\{/.test(source))return refuse();
+        const tests=consumeCalculatorFailedTestEvidence(evidence,taskId,changes);
+        const request=Object.freeze({previous:changes,proposalDigest:calculatorProposalDigest(changes),issues:Object.freeze(['Real isolated project tests failed; see actualProposalTests. Specialist review of this correction has not run.'])});
+        validateCalculatorRepairRequest(request);feedbackImported.add(changes);
+        repairFeedback.set(request,{taskId,previous:changes,assessments:Object.freeze([]),tests,privateDependencySource:source,
+          dependencyContract:Object.freeze({path:'src/calculator.mjs',blobSha:metadata.blobSha,sourceSha256:metadata.sourceSha256,baseSha:dependency.baseSha,signature:'calculate(left, operator, right)'})});
+        return request;
+      }catch{failureCode??='failed_host_test_repair_invalid';stopped=true;return refuse();}
     },
     /** Host-only import after authenticating the stopped private capsule and a
      * fresh one-use repair allowance. These are FAILURE DATA, never approvals.
