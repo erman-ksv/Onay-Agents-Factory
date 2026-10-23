@@ -1,3 +1,4 @@
+import {prepareUnpublishedCalculatorCorrection} from './calculatorUnpublishedCorrection.js';
 import {calculatorKeyboardRepairInstructions} from './calculatorKeyboardRepairContext.js';
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { selectProviderConfig } from "../commander/providerConfig.js";
@@ -336,6 +337,14 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     },
     generate: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot) => propose(plan, taskId, snapshot),
     repair: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest) => propose(plan, taskId, snapshot, request),
+    adoptSavedUnpublishedCorrection(plan:CalculatorPlan,taskId:string,snapshot:CalculatorSnapshot,request:CalculatorRepairRequest,raw:unknown){
+      try{
+        taskIn(plan,taskId);const saved=repairFeedback.get(request),prior=proposals.get(request.previous);
+        if(stopped||!repairOnly||!restored.has(taskId)||repaired.has(taskId)||budget.snapshot().attemptedRequests||!saved||!prior||saved.previous!==request.previous||saved.taskId!==taskId||prior.taskId!==taskId||prior.planFingerprint!==plan.fingerprint||prior.snapshot!==snapshot||(assessed.get(request.previous)?.size??0)!==0)return refuse();
+        const prepared=prepareUnpublishedCalculatorCorrection(raw,request.previous,snapshot);
+        proposals.set(prepared,{taskId,planFingerprint:plan.fingerprint,snapshot});corrected.set(taskId,prepared);repaired.add(taskId);return prepared;
+      }catch{failureCode??='saved_correction_invalid';stopped=true;return refuse();}
+    },
     async inspectRepairContext(plan:CalculatorPlan,taskId:string,snapshot:CalculatorSnapshot,request:CalculatorRepairRequest){
       if(stopped||!repairOnly||budget.snapshot().attemptedRequests||!repairFeedback.has(request)||previewRepairOnly)return refuse();
       previewRepairOnly=true;
