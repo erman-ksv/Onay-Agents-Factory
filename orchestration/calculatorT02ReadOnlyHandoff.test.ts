@@ -382,6 +382,23 @@ async function admissionFixture(root:string) {
       assert.deepEqual(readdirSync(x.state).filter(name=>name.includes("-t03")),[]);
       modelCalls++;
       if(failExecution)throw Error("Simulated executor crash");
+      const successor=x.store.taskReceipt(x.plan,x.plan.tasks[2]!);
+      try {
+        assert.equal(successor.claim(),"claimed");
+        for(const stage of ["load_current_source","generate_1","security_1","reviewer_1","tester_1",
+          "host_tests_1","publish_candidate","verify_candidate_ci"]){
+          successor.recordStage(stage,"running");
+          successor.recordStage(stage,"passed");
+        }
+        const publication={branch:x.plan.branch,headSha:"c".repeat(40),number:1,
+          url:"https://github.com/"+x.plan.owner.repository+"/pull/1"};
+        successor.recordPublication(publication);
+        successor.finish("needs-review","task_candidate_verified_not_whole_app");
+        return {status:"candidate-verified" as const,reasonCode:"task_candidate_verified_not_whole_app",
+          taskId:id,attempts:1,repairs:0,publication,proposalTestsExecuted:true,
+          candidateTestsExecuted:true,wholeAppCompleted:false as const,
+          finalCalculatorCiVerified:false as const,legalEnabled:false as const};
+      }finally{successor.close();}
     },
   };
   return {x,preview,events,options,original,
@@ -406,7 +423,7 @@ test("historical t02 admission requires durable one-use event before one host ca
     assert.equal(duplicate.reason,"event_already_consumed");
     assert.deepEqual(f.counters,{ciCalls:3,modelCalls:1,persistCalls:1});
     assert.deepEqual(f.x.receiptBytes(),f.original);
-    assert.deepEqual(readdirSync(f.x.state).filter(name=>name.includes("-t03")),[]);
+    assert.equal(readdirSync(f.x.state).filter(name=>name.includes("-t03")&&name.endsWith(".json")).length,1);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
 test("failed external persistence consumes event without invoking host executor",async()=>{
