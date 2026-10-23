@@ -5,6 +5,8 @@ import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
 import { CALCULATOR_PLAN_ERROR, createCalculatorPlan, prepareCalculatorGoal, calculatorPlanDigest, planObject, planKeys, refuseCalculatorPlan,
   type CalculatorPlan, type CalculatorPlanTask, type PreparedCalculatorGoal, type CalculatorGoalRequest } from "./calculatorPlan.js";
 import { scanForSecrets } from "../github/secretScanner.js";
+import { assertCalculatorT02InspectedSuccessorPreview,
+  type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
 
 /** A trusted host callback rechecks actual tools/integration. Model JSON and
  * old receipts cannot supply this authority; full-app acceptance stays separate. */
@@ -15,6 +17,8 @@ export type CalculatorDependencyEvidence = {
 export type CalculatorSelectionOptions = {
   currentBaseSha: string;
   verifyTask?: (task: CalculatorPlanTask, receipt: TeamTaskSnapshot, currentBaseSha: string) => Promise<CalculatorDependencyEvidence | undefined>;
+  /** Read-only historical inspection: NEVER a task-claim or executor permit. */
+  inspectedT02?: CalculatorT02ReadOnlyPreselection;
 };
 export type CalculatorSelection = {
   status: "ready" | "blocked" | "needs-review" | "all-candidates-verified";
@@ -132,6 +136,20 @@ export class CalculatorPlanStore {
       status, reasonCode, ...(task ? { task } : {}), verifiedTaskIds: [...verified], wholeAppCompleted: false, publicationAuthorized: false,
     });
     if (plan.status === "blocked") return answer("blocked", "plan_has_unresolved_blockers");
+    const historical = options.inspectedT02;
+    if (historical) {
+      try { assertCalculatorT02InspectedSuccessorPreview(historical); }
+      catch { return answer("needs-review", "historical_publication_unverified"); }
+      if (historical.status !== "candidate-preview-only" || historical.readOnly !== true ||
+          historical.executionAuthorized !== false || historical.publicationAuthorized !== false ||
+          historical.resumeAuthorized !== false || historical.budgetResetAuthorized !== false ||
+          historical.planFingerprint !== plan.fingerprint ||
+          historical.candidateSha !== options.currentBaseSha ||
+          historical.previousTaskId !== plan.tasks[1]?.id ||
+          historical.nextTaskId !== plan.tasks[2]?.id ||
+          !plan.tasks[2]?.dependsOn.includes(historical.previousTaskId))
+        return answer("needs-review", "historical_publication_unverified");
+    }
     const saved = new Map<string, TeamTaskSnapshot>();
     for (const task of plan.tasks) {
       const store = this.taskReceipt(plan, task);
@@ -143,11 +161,21 @@ export class CalculatorPlanStore {
     if (!saved.size && options.currentBaseSha !== plan.owner.baseSha) return answer("needs-review", "initial_base_changed");
     for (const task of plan.tasks) {
       const receipt = saved.get(task.id); if (!receipt) continue;
-      const pub = receipt.publication;
+      let pub = receipt.publication;
+      if (!pub && historical && task.id === historical.previousTaskId) {
+        if (receipt.status !== "needs-review" ||
+            receipt.reasonCode !== "publication_or_ci_uncertain_inspect_no_replay" ||
+            !receipt.stages.some(stage => stage.stage === "host_tests_1" && stage.status === "passed") ||
+            !receipt.stages.some(stage => stage.stage === "publish_candidate" && stage.status === "blocked"))
+          return answer("needs-review", "historical_publication_unverified");
+        pub = { branch: plan.branch, headSha: historical.candidateSha,
+          number: 1, url: "https://github.com/" + plan.owner.repository + "/pull/1" };
+      }
       if (!pub || pub.branch !== plan.branch || pub.url !== "https://github.com/" + plan.owner.repository + "/pull/" + pub.number ||
           !SHA.test(pub.headSha) || !options.verifyTask) return answer("needs-review", "candidate_needs_fresh_host_verification");
       let evidence: CalculatorDependencyEvidence | undefined;
-      try { evidence = await options.verifyTask(task, structuredClone(receipt), options.currentBaseSha); } catch { /* No raw diagnostics. */ }
+      try { evidence = await options.verifyTask(task, { ...structuredClone(receipt), publication: pub }, options.currentBaseSha); }
+      catch { /* No raw diagnostics. */ }
       if (!evidence || evidence.repository !== plan.owner.repository || evidence.taskId !== task.id ||
           evidence.candidateSha !== pub.headSha || evidence.integratedAtSha !== options.currentBaseSha ||
           evidence.securityReady !== true || evidence.independentReviewReady !== true || evidence.taskChecksPassed !== true || evidence.testsExecuted !== true)
@@ -160,6 +188,12 @@ export class CalculatorPlanStore {
       answer("needs-review", "dependencies_not_ready");
   }
   async claimNext(options: CalculatorSelectionOptions): Promise<{ selection: CalculatorSelection; store?: TeamTaskStore }> {
+    // A reconciled historical preview is for display/inspection only. It never
+    // grants permission to execute, publish, or issue a new model request.
+    if (options.inspectedT02 !== undefined) return {
+      selection: { status: "needs-review", reasonCode: "historical_preview_cannot_claim",
+        verifiedTaskIds: [], wholeAppCompleted: false, publicationAuthorized: false }
+    };
     const selection = await this.select(options);
     if (selection.status !== "ready" || !selection.task) return { selection };
     const plan = this.inspect()!; const store = this.taskReceipt(plan, selection.task);
