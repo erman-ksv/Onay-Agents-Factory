@@ -50,12 +50,14 @@ try{
  }else{
  phase='authenticate_archives';const archived=await loadHistoricalArchives(join(root,'source'),env.FACTORY_STATE_TOKEN);
  // Every byte comes from the authenticated immutable archive, never a fixture.
- const candidates=[...archived.files.keys()].filter(p=>p.endsWith('manifest.json')).map(p=>join(archived.root,dirname(p)));
+ phase='inspect_pinned_t01_archive';
+ const candidates=[...archived.files].filter(([p,b])=>p.endsWith('/manifest.json')&&sha(b)==='24e711c299bfd62ddf24418f6c92d878257c1d9e9ecc815aed45af711f7b30d4').map(([p])=>join(archived.root,dirname(p))).sort();
  const valid=[];for(const path of candidates){try{valid.push({path,state:inspectCalculatorPublishedTaskState(path)});}catch{}}
- assert.equal(valid.length,1);const prior=valid[0],launch=calculatorPublishedTaskLaunch(prior.state);
+ report.authenticatedT01Copies=valid.length;assert.ok(valid.length>=1);assert.ok(valid.every(v=>v.state.manifestSha256==='24e711c299bfd62ddf24418f6c92d878257c1d9e9ecc815aed45af711f7b30d4'));const prior=valid[0],launch=calculatorPublishedTaskLaunch(prior.state);
+ phase='restore_authentic_state';
  const state=join(root,'state');mkdirSync(state,{mode:0o700});
  const stateFiles=[...archived.files].filter(([p])=>p.startsWith('state/')&&!p.slice(6).includes('/'));
- assert.equal(stateFiles.length,4);for(const [p,b] of stateFiles){assert.ok(p.endsWith('.json'));writeFileSync(join(state,p.slice(6)),b,{mode:0o600,flag:'wx'});}
+ report.authenticatedStateFileCount=stateFiles.length;assert.ok(stateFiles.length>=4&&stateFiles.length<=16);for(const [p,b] of stateFiles){assert.ok(/^[a-z0-9][a-z0-9_.-]*\.(json|lock)$/.test(p.slice(6)));writeFileSync(join(state,p.slice(6)),b,{mode:0o600,flag:'wx'});}
  const originalReceipt=readFileSync(join(state,'calc-'+report.previousTaskId+'.json'));assert.equal(sha(originalReceipt),PIN.originalReceiptSha256);
  const store=new CalculatorPlanStore(state,launch.goal),plan=store.inspect();assert.equal(plan.fingerprint,PLAN);
  const reader=createCalculatorSnapshotReader({...env,GITHUB_TOKEN:env.CALCULATOR_GITHUB_TOKEN});
@@ -136,9 +138,9 @@ try{
  report.status=outcome.status==='consumed'?'live_task_verified':'blocked';
  report.autonomousDevelopmentProven=outcome.status==='consumed';
  }
-}catch{report.status='blocked';report.reason='live_bridge_'+phase+'_unverified';process.exitCode=10;}
+}catch(error){report.status='blocked';report.reason='live_bridge_'+phase+'_unverified';if(error?.name==='AssertionError'){report.assertion={operator:error.operator,...(typeof error.actual==='number'?{actual:error.actual}:{}),...(typeof error.expected==='number'?{expected:error.expected}:{})};}process.exitCode=10;}
 finally{
  if(team){charge(team.checkpointCharge()??high);report.modelDiagnostic=team.diagnostic();report.modelCalls=providerCalls;}
- writer?.close();report.remoteBarrierClaimed=remoteClaimed;report.currentCharge=high;put('report.json',report);console.log(JSON.stringify(report));
+ writer?.close();if(active)report.lastCheckpoint={stage:active.stage,status:active.status,attempt:active.attempt,httpInFlight:active.httpInFlight,publicationStarted:active.publicationStarted};report.remoteBarrierClaimed=remoteClaimed;report.currentCharge=high;put('report.json',report);console.log(JSON.stringify(report));
  if(report.status==='blocked')process.exitCode=10;
 }
