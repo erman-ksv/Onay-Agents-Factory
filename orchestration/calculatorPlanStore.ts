@@ -7,6 +7,7 @@ import { CALCULATOR_PLAN_ERROR, createCalculatorPlan, prepareCalculatorGoal, cal
 import { scanForSecrets } from "../github/secretScanner.js";
 import { CALCULATOR_T02_CHARGE_PIN } from "./calculatorT02ChargeReconciliation.js";
 import { inspectCalculatorT02AfterCiEvent } from "./calculatorT02AfterCiEventPreflight.js";
+import { inspectAdmittedCalculatorT02Event, type CalculatorT02ExecutionPermit } from "./calculatorT02Admission.js";
 import { assertCalculatorT02InspectedSuccessorPreview,
   type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
 
@@ -23,6 +24,8 @@ export type CalculatorSelectionOptions = {
   inspectedT02?: CalculatorT02ReadOnlyPreselection;
   /** Existing host-owned private barrier directory; read-only inspection only. */
   eventDirectory?: string;
+  /** Bound to the original claimed event; not transferable to another worker. */
+  admittedPermit?: CalculatorT02ExecutionPermit;
 };
 export type CalculatorSelection = {
   status: "ready" | "blocked" | "needs-review" | "all-candidates-verified";
@@ -146,7 +149,9 @@ export class CalculatorPlanStore {
       catch { return answer("needs-review", "historical_publication_unverified"); }
       try {
         if (typeof options.eventDirectory !== "string" ||
-            inspectCalculatorT02AfterCiEvent(options.eventDirectory, historical).status !== "not-consumed-read-only")
+            !(options.admittedPermit ?
+              inspectAdmittedCalculatorT02Event(options.admittedPermit,historical,options.eventDirectory,options.currentBaseSha) :
+              inspectCalculatorT02AfterCiEvent(options.eventDirectory,historical).status === "not-consumed-read-only"))
           return answer("needs-review", "historical_after_ci_event_unverified");
       } catch { return answer("needs-review", "historical_after_ci_event_unverified"); }
       if (historical.status !== "candidate-preview-only" || historical.readOnly !== true ||
@@ -224,7 +229,9 @@ export class CalculatorPlanStore {
       // Reinspect the canonical after-CI barrier after asynchronous host checks.
       // An event claimed by a concurrent worker must not appear as "ready".
       try {
-        if (inspectCalculatorT02AfterCiEvent(options.eventDirectory!, historical).status !== "not-consumed-read-only")
+        if (!(options.admittedPermit ?
+            inspectAdmittedCalculatorT02Event(options.admittedPermit,historical,options.eventDirectory!,options.currentBaseSha) :
+            inspectCalculatorT02AfterCiEvent(options.eventDirectory!,historical).status === "not-consumed-read-only"))
           return answer("needs-review", "historical_after_ci_event_changed");
       } catch { return answer("needs-review", "historical_after_ci_event_changed"); }
     }
