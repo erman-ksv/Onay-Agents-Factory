@@ -14,6 +14,9 @@ import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
 export const CALCULATOR_T02_PRESELECTION_ERROR =
   "Calculator t02 successor preselection refused; no replay, publication or next-task claim is authorized.";
 const refuse = (): never => { throw Error(CALCULATOR_T02_PRESELECTION_ERROR); };
+/** A structurally identical JSON object is never an in-process host check. */
+const inspectedPreviews = new WeakSet<object>();
+
 const PLAN = "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2";
 const T01 = "calculator-pilot-step7-v1-34ee03-t01";
 const T02 = "calculator-pilot-step7-v1-34ee03-t02";
@@ -159,7 +162,7 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
     }
     if (inspectCalculatorT02ReconciliationSidecar(sidecarDirectory)?.status !== "already-recorded" ||
         await reader.getHead(plan.branch)!==PIN.candidateSha) return refuse();
-    return Object.freeze({
+    const checked = Object.freeze({
       status:"candidate-preview-only" as const, previousTaskId:T02, nextTaskId:T03,
       planFingerprint:PLAN, candidateSha:PIN.candidateSha,
       conservativePriorCharges:PIN.conservative, readOnly:true as const,
@@ -167,5 +170,14 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
       resumeAuthorized:false as const, budgetResetAuthorized:false as const,
       wholeStep8Closed:false as const,
     });
+    inspectedPreviews.add(checked);
+    return checked;
   } catch { return refuse(); }
+}
+
+/** Brand check only. In particular this does not confer the right to claim a
+ * next-task receipt, to replay a model call, or to consume an after-CI event. */
+export function assertCalculatorT02InspectedSuccessorPreview(value: unknown): CalculatorT02ReadOnlyPreselection {
+  if (!value || typeof value !== "object" || !inspectedPreviews.has(value)) return refuse();
+  return value as CalculatorT02ReadOnlyPreselection;
 }
