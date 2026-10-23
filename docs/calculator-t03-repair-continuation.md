@@ -15,3 +15,9 @@ The first continuation stopped with zero HTTP because the reserved input+output 
 Live run 39966515860 proved the compact request fits (10678 bytes; estimated input3816+output2048=5864). One corrective HTTP returned200/stop but proposed changes failed validation. No candidate was published; original receipts/markers remain unchanged. The allowed corrective attempt is consumed. It must not be automatically repeated. Five total t03 HTTP attempts and all prior charges remain recorded.
 
 Future invalid proposals are latched terminal before a host-only afterProposalRejected persistence hook. Only secret-scanned bounded untrusted JSON is saved; it cannot approve/retry anything. The already rejected reply in run39966515860 was not saved by its older runtime and cannot be reconstructed from metadata.
+
+## Owner-approved separate correction cycle 2
+
+The owner explicitly approved up to four further Groq Free requests after the first corrective reply was rejected: at most nine total t03 requests. This is a new bounded correction from the original authenticated failure and full findings, not a replay/restore of the unavailable rejected reply. Its immutable report63b2c524… and run39966515860 artifact must verify all five prior calls, no publication and cumulative prior costs5/43254/17705/216625. All three older markers remain required and immutable; a separate stable r2 key admits the new cycle only once.
+
+New phase ceiling: four requests (one correction plus three fresh independent assessments),16000 reserved tokens,96000 request bytes,300000ms. Total t03 ceilings:9requests,34000reserved tokens,192000bytes,600000ms. The context/TPM limit remains6000. Additional repairs inside this cycle remain0. Any failure consumes its actual charges; it cannot silently buy another cycle. Future rejected outputs are preserved as secret-scanned untrusted evidence only.
