@@ -502,3 +502,31 @@ test("simultaneous historical after-CI deliveries admit at most one host executi
     assert.deepEqual(f.x.receiptBytes(),f.original);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+test("a callback returning a success-shaped report without persisted t03 receipt cannot complete admission",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-admission-false-success-"));
+  try {
+    const f=await admissionFixture(root);
+    let calls=0;
+    const options:HistoricalT02AdmissionTools={...f.options,
+      executeOne:async id=>{
+        calls++;
+        return {status:"candidate-verified",reasonCode:"task_candidate_verified_not_whole_app",
+          taskId:id,attempts:1,repairs:0,
+          publication:{branch:f.x.plan.branch,headSha:"c".repeat(40),
+            number:1,url:"https://github.com/"+f.x.plan.owner.repository+"/pull/1"},
+          proposalTestsExecuted:true,candidateTestsExecuted:true,
+          wholeAppCompleted:false,finalCalculatorCiVerified:false,legalEnabled:false};
+      },
+    };
+    const result=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,options);
+    assert.equal(result.status,"blocked");
+    assert.equal(result.callbackInvoked,true);
+    assert.equal(calls,1);
+    assert.deepEqual(readdirSync(f.x.state).filter(name=>name.includes("-t03")),[]);
+    const again=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,options);
+    assert.equal(again.reason,"event_already_consumed");
+    assert.equal(calls,1);
+    assert.deepEqual(f.x.receiptBytes(),f.original);
+  } finally {rmSync(root,{recursive:true,force:true});}
+});
