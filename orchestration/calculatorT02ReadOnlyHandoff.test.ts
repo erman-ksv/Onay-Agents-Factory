@@ -11,6 +11,7 @@ import type { CalculatorSnapshotReader, CalculatorTreeEntry } from "../github/ca
 import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
 import { CALCULATOR_T02_PRESELECTION_ERROR, previewCalculatorT02Successor } from "./calculatorT02SuccessorPreview.js";
 import { CALCULATOR_T02_EVENT_PREFLIGHT_ERROR, inspectCalculatorT02AfterCiEvent } from "./calculatorT02AfterCiEventPreflight.js";
+import { calculatorAfterCiEventIdentity } from "./calculatorAfterCi.js";
 import { CALCULATOR_T02_SIDECAR_ERROR, inspectCalculatorT02ReconciliationSidecar,
   recordCalculatorT02ReconciliationSidecar } from "./calculatorT02ReconciliationSidecar.js";
 import { CALCULATOR_T02_HANDOFF_ERROR, inspectCalculatorT02ReadOnlyHandoff,
@@ -217,6 +218,25 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
       {inspectedT02:selected,eventDirectory:join(root,"events-workspace")});
     // The event directory must preexist; an absent host event store fails closed.
     assert.equal(workspaceSelection.status,"needs-review");
+    const workspaceEvents=join(root,"events-workspace");
+    mkdirSync(workspaceEvents,{mode:0o700});
+    const workspaceReady=await selectCalculatorWorkspaceTask(workspace,x.verify,
+      {inspectedT02:selected,eventDirectory:workspaceEvents});
+    assert.equal(workspaceReady.status,"ready");
+    assert.equal(workspaceReady.task?.id,x.plan.tasks[2]!.id);
+    assert.deepEqual(workspaceReady.verifiedTaskIds.slice(-2),
+      [x.plan.tasks[0]!.id,x.plan.tasks[1]!.id]);
+    assert.deepEqual(readdirSync(workspaceEvents),[]);
+    assert.deepEqual(readdirSync(x.state).filter(name=>name.includes("-t03")),[]);
+    const eventKey=calculatorAfterCiEventIdentity({version:1,planFingerprint:x.plan.fingerprint,
+      previousTaskId:x.plan.tasks[1]!.id,expectedNextTaskId:x.plan.tasks[2]!.id,
+      candidateSha:PIN.candidateSha});
+    writeFileSync(join(workspaceEvents,eventKey.id+".lock"),"",{mode:0o600,flag:"wx"});
+    const consumed=await selectCalculatorWorkspaceTask(workspace,x.verify,
+      {inspectedT02:selected,eventDirectory:workspaceEvents});
+    assert.equal(consumed.status,"needs-review");
+    assert.equal(consumed.reasonCode,"historical_after_ci_event_unverified");
+    unlinkSync(join(workspaceEvents,eventKey.id+".lock"));
     const eventDir=join(root,"events");mkdirSync(eventDir,{mode:0o700});
     // Selector accepts the *in-process* checked preview for display only.
     const inspected=await x.store.select({currentBaseSha:PIN.candidateSha,
@@ -277,12 +297,12 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
     assert.throws(()=>inspectCalculatorT02AfterCiEvent(eventDir,selected),
       {message:CALCULATOR_T02_EVENT_PREFLIGHT_ERROR});
     assert.deepEqual(readdirSync(eventDir),[event.eventId+".lock"]);
-    assert.equal(x.checks,2);assert.deepEqual(x.receiptBytes(),before);
+    assert.equal(x.checks,4);assert.deepEqual(x.receiptBytes(),before);
     assert.deepEqual(readdirSync(x.state).filter(name=>name.includes("-t03")),[]);
     // Repeated read-only preview may be performed, but still never claims t03.
     const twice=await previewCalculatorT02Successor(x.store,x.reader,x.sidecarDir,checked,x.verify);
     assert.equal(twice.executionAuthorized,false);
-    assert.equal(x.checks,4);
+    assert.equal(x.checks,6);
     assert.deepEqual(readdirSync(x.state).filter(name=>name.includes("-t03")),[]);
   }finally{rmSync(root,{recursive:true,force:true});}
 });
