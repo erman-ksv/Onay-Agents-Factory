@@ -8,7 +8,8 @@ import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import type { CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import type { CalculatorCiEvidence } from "../github/calculatorCi.js";
 import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
-import { openCalculatorWorkspace, selectCalculatorWorkspaceTask, assertCalculatorWorkspaceCurrent } from "./calculatorWorkspace.js";
+import { openCalculatorWorkspace, selectCalculatorWorkspaceTask, assertCalculatorWorkspaceCurrent,
+  type CalculatorWorkspace } from "./calculatorWorkspace.js";
 import { calculatorAfterCiEventIdentity, prepareCalculatorAfterCiRequest,
   verifyCalculatorAfterCiCandidateCi } from "./calculatorAfterCi.js";
 import { assertCalculatorT02InspectedSuccessorPreview,
@@ -16,6 +17,35 @@ import { assertCalculatorT02InspectedSuccessorPreview,
 import { inspectCalculatorT02AfterCiEvent } from "./calculatorT02AfterCiEventPreflight.js";
 
 export const CALCULATOR_T02_ADMISSION_ERROR = "Historical t02 admission refused; no replay or model request authorized.";
+export type CalculatorT02ExecutionPermit = Readonly<{ kind:"t02-to-t03-admitted" }>;
+type PermitState = { workspace:CalculatorWorkspace; preview:CalculatorT02ReadOnlyPreselection;
+  eventDirectory:string; taskId:string; consumed:boolean };
+const executionPermits=new WeakMap<CalculatorT02ExecutionPermit,PermitState>();
+function issuePermit(workspace:CalculatorWorkspace,preview:CalculatorT02ReadOnlyPreselection,
+  eventDirectory:string):CalculatorT02ExecutionPermit {
+  const permit=Object.freeze({kind:"t02-to-t03-admitted" as const});
+  executionPermits.set(permit,{workspace,preview,eventDirectory,taskId:preview.nextTaskId,consumed:false});
+  return permit;
+}
+/** A permit is single-use and bound to the exact in-process Workspace and task.
+ * The executor consumes it before a task claim or any provider request. */
+export function consumeCalculatorT02ExecutionPermit(workspace:CalculatorWorkspace,
+  candidate:CalculatorT02ExecutionPermit):Readonly<{
+    inspectedT02:CalculatorT02ReadOnlyPreselection; eventDirectory:string; taskId:string
+  }> {
+  const state=executionPermits.get(candidate);
+  if(!state || state.consumed || state.workspace!==workspace ||
+     state.preview.status!=="candidate-preview-only" || state.preview.readOnly!==true ||
+     state.preview.executionAuthorized!==false || state.taskId!==state.preview.nextTaskId ||
+     state.preview.planFingerprint!==workspace.planFingerprint ||
+     state.preview.candidateSha!==workspace.sha)throw Error(CALCULATOR_T02_ADMISSION_ERROR);
+  state.consumed=true;
+  return Object.freeze({inspectedT02:state.preview,eventDirectory:state.eventDirectory,taskId:state.taskId});
+}
+export function calculatorT02ExecutionPermitConsumed(permit:CalculatorT02ExecutionPermit):boolean {
+  return executionPermits.get(permit)?.consumed===true;
+}
+
 type Report = Readonly<{status:"blocked"|"consumed";reason:string;callbackInvoked:boolean;wholeStep8Closed:false}>;
 export type HistoricalT02AdmissionTools = Readonly<{
   eventDirectory:string;
@@ -24,7 +54,7 @@ export type HistoricalT02AdmissionTools = Readonly<{
   /** Must persist the claimed event to external durable state before any callback. */
   persistBarrier:(identity:Readonly<{id:string;fingerprint:string}>)=>Promise<void>;
   /** Host-owned callback; this adapter neither provides nor invokes a model itself. */
-  executeOne:(taskId:string)=>Promise<CalculatorExecutionReport>;
+  executeOne:(taskId:string,workspace:CalculatorWorkspace,permit:CalculatorT02ExecutionPermit)=>Promise<CalculatorExecutionReport>;
 }>;
 const blocked=(reason:string):Report=>Object.freeze({status:"blocked",reason,callbackInvoked:false,wholeStep8Closed:false});
 /** Executor success must be supported by its independently persisted task
@@ -98,8 +128,11 @@ export async function admitHistoricalT02OneSuccessor(store:CalculatorPlanStore,
       throw Error("CI changed after persistence");
     await assertCalculatorWorkspaceCurrent(workspace);
     // NOTE: caller is responsible for a second pre-model barrier in its own executor.
+    const permit=issuePermit(workspace,preview,tools.eventDirectory);
     invoked=true;
-    const outcome=await tools.executeOne(preview.nextTaskId);
+    const outcome=await tools.executeOne(preview.nextTaskId,workspace,permit);
+    if(!calculatorT02ExecutionPermitConsumed(permit))
+      throw Error("Success without consuming the one-use executor permit");
     const target=plan.tasks.find(task=>task.id===preview.nextTaskId);
     if (!target) throw Error("Expected successor missing");
     const saved=store.taskReceipt(plan,target);
