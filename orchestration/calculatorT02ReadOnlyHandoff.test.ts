@@ -210,6 +210,24 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
     const before=x.receiptBytes();
     const selected=await previewCalculatorT02Successor(x.store,x.reader,x.sidecarDir,checked,x.verify);
     assert.equal(selected.status,"candidate-preview-only");
+    // Selector accepts the *in-process* checked preview for display only.
+    const inspected=await x.store.select({currentBaseSha:PIN.candidateSha,
+      inspectedT02:selected,verifyTask:async(task,receipt,currentBaseSha)=>({
+        repository:x.plan.owner.repository,taskId:task.id,
+        candidateSha:receipt.publication!.headSha,integratedAtSha:currentBaseSha,
+        securityReady:true,independentReviewReady:true,taskChecksPassed:true,testsExecuted:true,
+      })});
+    assert.equal(inspected.status,"ready");
+    assert.equal(inspected.task?.id,x.plan.tasks[2]!.id);
+    const refused=await x.store.claimNext({currentBaseSha:PIN.candidateSha,
+      inspectedT02:selected,verifyTask:async()=>{throw Error("claim callback must not run");}});
+    assert.equal(refused.selection.status,"needs-review");
+    assert.equal(refused.selection.reasonCode,"historical_preview_cannot_claim");
+    assert.equal(refused.store,undefined);
+    const forged=await x.store.select({currentBaseSha:PIN.candidateSha,
+      inspectedT02:structuredClone(selected)});
+    assert.equal(forged.status,"needs-review");
+    assert.equal(forged.reasonCode,"historical_publication_unverified");
     assert.equal(selected.previousTaskId,x.plan.tasks[1]!.id);
     assert.equal(selected.nextTaskId,x.plan.tasks[2]!.id);
     assert.equal(selected.candidateSha,PIN.candidateSha);
