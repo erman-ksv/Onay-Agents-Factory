@@ -568,3 +568,75 @@ test("a callback returning a success-shaped report without persisted t03 receipt
     assert.deepEqual(f.x.receiptBytes(),f.original);
   } finally {rmSync(root,{recursive:true,force:true});}
 });
+
+test("historical admission runs the ordinary t03 executor with guarded task claim and exact candidate CI",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-real-executor-integration-"));
+  try{
+    const x=preselectionFixture(root,true),source=fixture();
+    const checked=await inspectCalculatorT02ReadOnlyHandoff(source.data,source.host);
+    recordCalculatorT02ReconciliationSidecar(x.sidecarDir,checked);
+    const preview=await previewCalculatorT02Successor(x.store,x.reader,x.sidecarDir,checked,x.verify);
+    const events=join(root,"events");mkdirSync(events,{mode:0o700});
+    const before=x.receiptBytes(),roles:string[]=[];
+    let generated=0,hostTests=0,publishes=0,candidateCi=0;
+    const successorSha="c".repeat(40);
+    const team={
+      generate:async(_plan:typeof x.plan,id:string,snapshot:Parameters<typeof prepareCalculatorRoleChanges>[2])=>{
+        generated++;assert.equal(id,x.plan.tasks[2]!.id);
+        return prepareCalculatorRoleChanges("frontend",{summary:"Keyboard input and UI tests",
+          changes:[
+            {operation:"create",path:"test/ui.test.mjs",content:"import test from 'node:test'; test('keyboard',()=>{});",
+              message:"Test keyboard"},
+            {operation:"edit",path:"src/app.mjs",sourceSha256:snapshot.files.find(f=>f.path==="src/app.mjs")!.sourceSha256!,
+              edits:[{oldText:"false",newText:"true"}],message:"Enable keyboard"},
+          ]},snapshot);
+      },
+      repair:async()=>{throw Error("repair was not needed in this fixture");},
+      assess:async(role:"security"|"reviewer"|"tester",_plan:typeof x.plan,id:string)=>{
+        roles.push(role);assert.equal(id,x.plan.tasks[2]!.id);
+        return validateCalculatorAssessment(role,{ready:true,summary:"Scoped fixture reviewed",
+          findings:[],unverifiedAreas:[]},["changes@"+PIN.candidateSha]);
+      },
+    };
+    const adapter=createHistoricalT03ExecutionCallback({
+      team,verifyDependencies:x.verify,maxRepairs:0,execution:"offline-test",
+      tools:{
+        checkProposal:async input=>{
+          hostTests++;return {repository:x.plan.owner.repository,taskId:input.task.id,
+            baseSha:PIN.candidateSha,proposalDigest:input.proposalDigest,
+            status:"passed" as const,testsExecuted:true,failures:[]};
+        },
+        publish:async input=>{
+          publishes++;assert.equal(input.expectedSha,PIN.candidateSha);
+          assert.equal(input.task.id,x.plan.tasks[2]!.id);
+          const sha=x.publishSuccessor(input.changes.files);
+          return {branch:x.plan.branch,headSha:sha,number:1,
+            url:"https://github.com/"+x.plan.owner.repository+"/pull/1"};
+        },
+        ci:async input=>{
+          candidateCi++;assert.equal(input.candidateSha,successorSha);
+          const evidence=successfulT02Ci(successorSha);
+          return {repository:evidence.repository,branch:evidence.branch,candidateSha:successorSha,
+            runs:evidence.runs,jobs:evidence.jobs};
+        },
+      },
+    });
+    let persisted=0;
+    const result=await admitHistoricalT02OneSuccessor(x.store,x.reader,preview,{
+      eventDirectory:events,ci:async()=>successfulT02Ci(PIN.candidateSha),
+      verifyDependencies:x.verify,persistBarrier:async()=>{persisted++;},
+      executeOne:adapter,
+    });
+    assert.equal(result.status,"consumed",result.reason);
+    assert.equal(result.callbackInvoked,true);
+    assert.equal(generated,1);assert.equal(publishes,1);assert.equal(hostTests,1);
+    assert.equal(candidateCi,1);assert.equal(persisted,1);
+    assert.deepEqual(roles,["security","reviewer","tester"]);
+    assert.deepEqual(x.receiptBytes(),before);
+    const receipt=x.store.taskReceipt(x.plan,x.plan.tasks[2]!);
+    try{
+      assert.equal(receipt.inspectExisting()?.publication?.headSha,successorSha);
+      assert.equal(receipt.inspectExisting()?.status,"needs-review");
+    }finally{receipt.close();}
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
