@@ -18,12 +18,13 @@ export function createCalculatorLiveBarrier(config: Readonly<{
   let attempted = false, admitted = false, stopped = false;
   async function request(path: string, method = "GET", body?: unknown, absent = false): Promise<any> {
     const response = await transport("https://api.github.com/repos/" + FACTORY + path, {
-      method, redirect: "error", signal: AbortSignal.timeout(10000), headers: {
+      method, redirect: "error", signal: AbortSignal.timeout(method === "POST" ? 30000 : 10000), headers: {
         Authorization: "Bearer " + token, Accept: "application/vnd.github+json", "Content-Type": "application/json",
       }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (absent && response.status === 404) return undefined;
-    if (response.status !== (method === "POST" ? 201 : 200)) throw Error(ERROR);
+    if (response.status !== (method === "POST" ? 201 : 200))
+      throw Object.assign(Error(ERROR), { httpStatus: response.status });
     let bytes = 0; const chunks: Uint8Array[] = [];
     if (!response.body) throw Error(ERROR);
     const reader = response.body.getReader();
@@ -57,9 +58,18 @@ export function createCalculatorLiveBarrier(config: Readonly<{
         phase = "remote_absence";
         if (await request(path, "GET", undefined, true) !== undefined) throw Error(ERROR);
         phase = "remote_compare_create";
-        if (!matches(await request("/git/refs", "POST", { ref, sha: c.runtimeSha })) || !matches(await request(path))) throw Error(ERROR);
+        if (!matches(await request("/git/refs", "POST", { ref, sha: c.runtimeSha }))) throw Error(ERROR);
+        phase = "remote_readback";
+        if (!matches(await request(path))) throw Error(ERROR);
         admitted = true;
-      } catch { stopped = true; throw Object.assign(Error(ERROR), { code: "live_barrier_" + phase }); }
+      } catch (error) {
+        stopped = true;
+        const e = error as { httpStatus?: unknown; name?: unknown };
+        throw Object.assign(Error(ERROR), { code: "live_barrier_" + phase,
+          ...(typeof e?.httpStatus === "number" && Number.isInteger(e.httpStatus) ? { httpStatus: e.httpStatus } : {}),
+          ...(e?.name === "TimeoutError" || e?.name === "AbortError" ? { transportFailure: "timeout" } : {}),
+        });
+      }
     },
     async assertClaimed() {
       if (stopped || !admitted) throw Error(ERROR);

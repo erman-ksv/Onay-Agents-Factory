@@ -9,7 +9,7 @@ function fixture(mode="ready") {
   assert.ok(String(url).startsWith("https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/"));
   assert.equal(init?.redirect,"error");
   if(init?.method==="POST"){
-   posts++;if(ref)return new Response("{}",{status:422});
+   posts++;if(mode==="forbidden")return new Response("PRIVATE_UPSTREAM_BODY",{status:403});if(ref)return new Response("{}",{status:422});
    const b=JSON.parse(String(init.body));assert.ok(b.ref.startsWith("refs/heads/state/calculator-live-event/"));assert.equal(b.sha,config.runtimeSha);
    ref={ref:b.ref,object:{type:"commit",sha:b.sha}};
    if(mode==="lost-response")throw Error("Lost acknowledgement");
@@ -37,4 +37,14 @@ test("lost acknowledgement retains the remote lock and blocks restart without re
 test("stale source CI, skipped tests and run attempt 2 refuse before a remote write",async()=>{
  for(const mode of ["stale-source","missing-tests"]){const f=fixture(mode);await assert.rejects(()=>createCalculatorLiveBarrier(config,env,f.transport).claim());assert.equal(f.posts,0);}
  assert.throws(()=>createCalculatorLiveBarrier(config,{...env,GITHUB_RUN_ATTEMPT:"2"}));
+});
+
+test("HTTP refusal reports only bounded status and phase; it never exposes response bodies or retries",async()=>{
+ const f=fixture("forbidden"),barrier=createCalculatorLiveBarrier(config,env,f.transport);
+ await assert.rejects(()=>barrier.claim(),(error:any)=>{
+  assert.equal(error.code,"live_barrier_remote_compare_create");assert.equal(error.httpStatus,403);
+  assert.equal(JSON.stringify(error).includes("PRIVATE_UPSTREAM_BODY"),false);
+  assert.equal(error.message.includes("PRIVATE_UPSTREAM_BODY"),false);return true;
+ });
+ await assert.rejects(()=>barrier.claim());assert.equal(f.posts,1);
 });
