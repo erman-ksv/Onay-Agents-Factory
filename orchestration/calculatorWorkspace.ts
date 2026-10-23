@@ -3,7 +3,7 @@ import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.j
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader, type CalculatorSnapshot, type CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
-import type { CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
+import { assertCalculatorT02InspectedSuccessorPreview, type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
 import { CalculatorPlanStore, type CalculatorDependencyEvidence, type CalculatorSelection } from "./calculatorPlanStore.js";
 import type { TeamTaskSnapshot, TeamTaskStore } from "./teamTaskStore.js";
 
@@ -97,8 +97,18 @@ async function taskBlobs(reader: CalculatorSnapshotReader, commitSha: string, ta
   return blobs;
 }
 async function verifyDependency(workspace: CalculatorWorkspace, task: CalculatorPlanTask, receipt: TeamTaskSnapshot,
-  runner?: CalculatorCheckRunner): Promise<CalculatorDependencyEvidence | undefined> {
-  const host = await fresh(workspace), candidateSha = receipt.publication?.headSha;
+  runner?: CalculatorCheckRunner, historical?: CalculatorT02ReadOnlyPreselection): Promise<CalculatorDependencyEvidence | undefined> {
+  const host = await fresh(workspace);
+  let candidateSha = receipt.publication?.headSha;
+  if (!candidateSha && historical && task.id === historical.previousTaskId) {
+    assertCalculatorT02InspectedSuccessorPreview(historical);
+    if (historical.status !== "candidate-preview-only" || historical.readOnly !== true ||
+        historical.executionAuthorized !== false || historical.planFingerprint !== workspace.planFingerprint ||
+        historical.candidateSha !== workspace.sha ||
+        receipt.status !== "needs-review" ||
+        receipt.reasonCode !== "publication_or_ci_uncertain_inspect_no_replay") return undefined;
+    candidateSha = historical.candidateSha;
+  }
   if (!runner || !sha(candidateSha)) return undefined;
   await ancestors(host.reader, workspace.sha, [host.plan.owner.baseSha, candidateSha]);
   await ancestors(host.reader, candidateSha, [host.plan.owner.baseSha]);
@@ -122,7 +132,7 @@ export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspa
     const host = await fresh(workspace);
     const selection = await host.store.select({ currentBaseSha: workspace.sha,
       ...(historical ? { inspectedT02: historical.inspectedT02, eventDirectory: historical.eventDirectory } : {}),
-      verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner) });
+      verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner, historical?.inspectedT02) });
     await fresh(workspace); return selection;
   } catch { return refuse(); }
 }
