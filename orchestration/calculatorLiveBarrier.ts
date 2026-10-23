@@ -15,6 +15,16 @@ export function createCalculatorLiveBarrier(config: Readonly<{
     planFingerprint: c.planFingerprint, previousTaskId: c.previousTaskId, candidateSha: c.candidateSha })).digest("hex");
   const ref = "refs/heads/state/calculator-live-event/" + key;
   const path = "/git/ref/heads/" + encodeURIComponent(ref.slice("refs/heads/".length));
+  // The durable marker contains metadata only, with no workflow or source
+  // history. A state write must never require permission to create workflows.
+  const marker = JSON.stringify({ version: 1, repository: FACTORY, eventKey: key,
+    runtimeSha: c.runtimeSha, sourceCiRunId: c.sourceCiRunId, planFingerprint: c.planFingerprint,
+    previousTaskId: c.previousTaskId, candidateSha: c.candidateSha }) + "\n";
+  const gitHash = (kind: string, bytes: Buffer) => createHash("sha1")
+    .update(Buffer.concat([Buffer.from(kind + " " + bytes.length + "\0"), bytes])).digest("hex");
+  const blobSha = gitHash("blob", Buffer.from(marker));
+  const treeSha = gitHash("tree", Buffer.concat([Buffer.from("100644 calculator-live-event.json\0"), Buffer.from(blobSha, "hex")]));
+  let markerSha: string | undefined;
   let attempted = false, admitted = false, stopped = false;
   async function request(path: string, method = "GET", body?: unknown, absent = false): Promise<any> {
     const response = await transport("https://api.github.com/repos/" + FACTORY + path, {
@@ -33,7 +43,7 @@ export function createCalculatorLiveBarrier(config: Readonly<{
     } } finally { reader.releaseLock(); }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   }
-  const matches = (r: any) => r?.ref === ref && r.object?.type === "commit" && r.object.sha === c.runtimeSha;
+  const matches = (r: any) => r?.ref === ref && r.object?.type === "commit" && r.object.sha === markerSha && markerSha !== undefined;
   return Object.freeze({ ref,
     async inspectAbsent() {
       if (stopped || attempted) throw Error(ERROR);
@@ -57,8 +67,19 @@ export function createCalculatorLiveBarrier(config: Readonly<{
           throw Error(ERROR);
         phase = "remote_absence";
         if (await request(path, "GET", undefined, true) !== undefined) throw Error(ERROR);
+        phase = "metadata_blob";
+        const blob = await request("/git/blobs", "POST", { content: marker, encoding: "utf-8" });
+        if (blob?.sha !== blobSha) throw Error(ERROR);
+        phase = "metadata_tree";
+        const tree = await request("/git/trees", "POST", { tree: [{ path: "calculator-live-event.json", mode: "100644", type: "blob", sha: blobSha }] });
+        if (tree?.sha !== treeSha) throw Error(ERROR);
+        phase = "metadata_commit";
+        const commit = await request("/git/commits", "POST", { message: "Record bounded Calculator live admission", tree: treeSha, parents: [] });
+        if (!/^[a-f0-9]{40}$/.test(commit?.sha) || commit?.tree?.sha !== treeSha ||
+            !Array.isArray(commit.parents) || commit.parents.length !== 0) throw Error(ERROR);
+        markerSha = commit.sha;
         phase = "remote_compare_create";
-        if (!matches(await request("/git/refs", "POST", { ref, sha: c.runtimeSha }))) throw Error(ERROR);
+        if (!matches(await request("/git/refs", "POST", { ref, sha: markerSha }))) throw Error(ERROR);
         phase = "remote_readback";
         if (!matches(await request(path))) throw Error(ERROR);
         admitted = true;

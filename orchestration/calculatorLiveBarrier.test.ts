@@ -1,16 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createCalculatorLiveBarrier } from "./calculatorLiveBarrier.js";
 const config={runtimeSha:"a".repeat(40),sourceCiRunId:123,planFingerprint:"b".repeat(64),previousTaskId:"calculator-pilot-step7-v1-34ee03-t02",candidateSha:"c".repeat(40)};
 const env={FACTORY_STATE_TOKEN:"fixture-secret",GITHUB_REPOSITORY:"erman-ksv/Onay-Agents-Factory",GITHUB_RUN_ATTEMPT:"1"};
 function fixture(mode="ready") {
- let ref: any,posts=0;
+ let ref: any,posts=0,treeSha="",commitSha="";
+ const metadata: any[]=[];
+ const gitHash=(kind:string,bytes:Buffer)=>createHash("sha1").update(Buffer.concat([Buffer.from(kind+" "+bytes.length+"\0"),bytes])).digest("hex");
  const transport:typeof fetch=async(url,init)=>{
   assert.ok(String(url).startsWith("https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/"));
   assert.equal(init?.redirect,"error");
   if(init?.method==="POST"){
+   const b=JSON.parse(String(init.body));
+   if(String(url).endsWith("/git/blobs")) {
+    metadata.push(b);const m=JSON.parse(b.content);assert.equal(m.runtimeSha,config.runtimeSha);assert.equal(m.candidateSha,config.candidateSha);
+    assert.deepEqual(Object.keys(m).sort(),["version","repository","eventKey","runtimeSha","sourceCiRunId","planFingerprint","previousTaskId","candidateSha"].sort());
+    return Response.json({sha:gitHash("blob",Buffer.from(b.content))},{status:201});
+   }
+   if(String(url).endsWith("/git/trees")) {
+    metadata.push(b);assert.equal(b.base_tree,undefined);assert.equal(b.tree.length,1);assert.equal(b.tree[0].path,"calculator-live-event.json");
+    assert.equal(b.tree[0].mode,"100644");assert.equal(b.tree[0].type,"blob");
+    treeSha=gitHash("tree",Buffer.concat([Buffer.from("100644 calculator-live-event.json\0"),Buffer.from(b.tree[0].sha,"hex")]));
+    return Response.json({sha:treeSha},{status:201});
+   }
+   if(String(url).endsWith("/git/commits")) {
+    metadata.push(b);assert.deepEqual(b.parents,[]);assert.equal(b.tree,treeSha);commitSha="e".repeat(40);
+    return Response.json({sha:commitSha,tree:{sha:treeSha},parents:[]},{status:201});
+   }
    posts++;if(mode==="forbidden")return new Response("PRIVATE_UPSTREAM_BODY",{status:403});if(ref)return new Response("{}",{status:422});
-   const b=JSON.parse(String(init.body));assert.ok(b.ref.startsWith("refs/heads/state/calculator-live-event/"));assert.equal(b.sha,config.runtimeSha);
+   assert.ok(b.ref.startsWith("refs/heads/state/calculator-live-event/"));assert.equal(b.sha,commitSha);assert.notEqual(b.sha,config.runtimeSha);
    ref={ref:b.ref,object:{type:"commit",sha:b.sha}};
    if(mode==="lost-response")throw Error("Lost acknowledgement");
    return Response.json(ref,{status:201});
@@ -19,7 +38,7 @@ function fixture(mode="ready") {
   if(String(url).includes("/actions/runs/"))return Response.json({head_sha:mode==="stale-source"?"d".repeat(40):config.runtimeSha,path:".github/workflows/ci.yml",run_attempt:1,status:"completed",conclusion:"success",repository:{full_name:env.GITHUB_REPOSITORY}});
   return ref?Response.json(ref):new Response("{}",{status:404});
  };
- return {transport,get posts(){return posts;}};
+ return {transport,metadata,get posts(){return posts;}};
 }
 test("remote admission survives a new worker and cannot be claimed twice",async()=>{
  const f=fixture(),a=createCalculatorLiveBarrier(config,env,f.transport);assert.equal(await a.inspectAbsent(),true);
@@ -47,4 +66,11 @@ test("HTTP refusal reports only bounded status and phase; it never exposes respo
   assert.equal(error.message.includes("PRIVATE_UPSTREAM_BODY"),false);return true;
  });
  await assert.rejects(()=>barrier.claim());assert.equal(f.posts,1);
+});
+
+test("durable marker has only SHA metadata and an orphan tree; no workflow/source permission is requested",async()=>{
+ const f=fixture();await createCalculatorLiveBarrier(config,env,f.transport).claim();
+ assert.equal(f.metadata.length,3);assert.deepEqual(f.metadata[2].parents,[]);
+ assert.equal(f.metadata[1].tree[0].path,"calculator-live-event.json");
+ assert.equal(JSON.stringify(f.metadata).includes("fixture-secret"),false);
 });

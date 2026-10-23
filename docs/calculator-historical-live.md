@@ -14,12 +14,12 @@ before the historical admission.
 The reviewed workflow must check out an immutable runtime that has successful
 Factory Typecheck/Test CI. It runs only on the approved Factory feature branch;
 PR code/forks cannot supply the runtime, request, or credentials. It explicitly
-requires Factory `contents:write` for a host-only remote reference, and
-`actions:read` for private evidence. The Calculator token is separate. Neither
+requires Factory `contents:write` for metadata-only Git objects and a host-only remote reference, and
+`actions:read` for authenticated evidence. The Calculator token is separate. Neither
 token is passed to sandboxed app/test/browser processes or model packets.
 
 The remote key hashes repository, plan, predecessor task and exact predecessor
-candidate. It excludes runtime, run ID and CI rerun ID. A single atomic POST to
+candidate. It excludes runtime, run ID and CI rerun ID. The marker is an orphan commit with one `calculator-live-event.json` blob containing only event identity, runtime SHA, source CI, plan fingerprint and candidate SHA. Its blob/tree Git hashes and empty parent list are checked. No workflow or application history is copied. A single atomic POST to
 `refs/heads/state/calculator-live-event/<hash>` is read back before any model
 request. A duplicate, 403/429, competing writer or lost acknowledgement stops;
 there is no delete/update/retry API. A new ephemeral worker cannot reset it.
@@ -57,3 +57,5 @@ deployment, main change, legal agent or claim of whole-app completion is allowed
 Passing unit tests, a source CI, or a read-only browser probe does not close any
 live acceptance gate. Gate 2 needs a genuine t03 commit and exact candidate CI;
 gate 3 needs an actual AI-owned repair; gate 4 needs real automatic continuation.
+
+When the repository is public, uploaded artifacts and logs must be treated as public too; filesystem-private evidence is not access-private on GitHub.

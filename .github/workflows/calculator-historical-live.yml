@@ -3,7 +3,7 @@ on:
   push:
     branches: ['feat/calculator-t02-charge-reconcile-20261022']
     paths: ['.factory/calculator-historical-live-request.json']
-# Explicit host-only scope: the sole Factory write is an atomic state reference.
+# Explicit host-only scope: Factory writes only metadata objects and an atomic state reference.
 permissions:
   contents: write
   actions: read
@@ -67,7 +67,7 @@ jobs:
           AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
           AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
         run: pnpm exec tsx scripts/calculator-historical-live.mjs
-      - name: Preserve private immutable evidence even on failure
+      - name: Preserve immutable evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
