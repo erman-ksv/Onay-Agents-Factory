@@ -38,5 +38,5 @@ jobs:
             result['all255FilesVerified']=len(m['files'])==255
             result['statePaths']=[f['path'] for f in m['files'] if f['path'].startswith('state/')]
             result['t01ArchiveCopies']=[f['path'] for f in m['files'] if f['path'].endswith('manifest.json') and f['sha256']=='24e711c299bfd62ddf24418f6c92d878257c1d9e9ecc815aed45af711f7b30d4']
-          print(json.dumps(result))
+          print('::notice title=Authenticated archive structure::'+json.dumps(result))
           PY
