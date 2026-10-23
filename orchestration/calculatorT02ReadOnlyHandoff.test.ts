@@ -587,8 +587,8 @@ test("historical admission runs the ordinary t03 executor with guarded task clai
           changes:[
             {operation:"create",path:"test/ui.test.mjs",content:"import test from 'node:test'; test('keyboard',()=>{});",
               message:"Test keyboard"},
-            {operation:"edit",path:"src/app.mjs",sourceSha256:snapshot.files.find(f=>f.path==="src/app.mjs")!.sourceSha256!,
-              edits:[{oldText:"false",newText:"true"}],message:"Enable keyboard"},
+            {operation:"patch",path:"src/app.mjs",sourceSha256:snapshot.files.find(f=>f.path==="src/app.mjs")!.sourceSha256!,
+              edits:[{before:"false",after:"true"}],message:"Enable keyboard"},
           ]},snapshot);
       },
       repair:async()=>{throw Error("repair was not needed in this fixture");},
