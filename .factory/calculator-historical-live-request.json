@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "runtimeSha": "b79de426533ebb4ad9ee430285fcc1e448c93700",
+  "sourceCiRunId": 39929502640,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "baseSha": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+  "maxRequests": 8,
+  "maxRepairs": 1,
+  "legalEnabled": false,
+  "automaticReplay": false
+}

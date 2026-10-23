@@ -1,0 +1,78 @@
+name: Calculator protected historical live t03
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-historical-live-request.json']
+# Explicit host-only scope: the sole Factory write is an atomic state reference.
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: calculator-protected-live-plan-step7
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-historical-live-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate the fixed host request
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          const value=JSON.parse(readFileSync('request/.factory/calculator-historical-live-request.json','utf8'));
+          assert.deepEqual(value,{version:1,runtimeSha:'b79de426533ebb4ad9ee430285fcc1e448c93700',sourceCiRunId:39929502640,taskId:'calculator-pilot-step7-v1-34ee03-t03',baseSha:'949a0bf874722fd8cbd886c2cb0af8f2b502ac05',maxRequests:8,maxRepairs:1,legalEnabled:false,automaticReplay:false});
+          JS
+      - name: Checkout immutable live runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: b79de426533ebb4ad9ee430285fcc1e448c93700
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install trusted runtime dependencies
+        working-directory: runtime
+        run: pnpm install --frozen-lockfile
+      - name: Prepare exact isolated runtime images
+        run: |
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Admit one historical event and execute the actual t03 team
+        working-directory: runtime
+        env:
+          FACTORY_RUNTIME_SHA: b79de426533ebb4ad9ee430285fcc1e448c93700
+          FACTORY_SOURCE_CI_RUN: '39929502640'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CALCULATOR_EXECUTION_LIVE_APPROVED: RUN_ONE_FREE_CALCULATOR_TASK
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: groq
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
+        run: pnpm exec tsx scripts/calculator-historical-live.mjs
+      - name: Preserve private immutable evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-historical-live-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-historical-live/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
