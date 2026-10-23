@@ -80,6 +80,8 @@ export type CalculatorModelCheckpointHooks = Readonly<{
   beforeRequest?: (state: CalculatorPriorModelCharge) => void | Promise<void>;
   /** Private untrusted JSON DATA only. No return value can approve or retry it. */
   afterAssessmentRejected?: (rejection: CalculatorRejectedAssessment) => void | Promise<void>;
+  /** Preserve parsed but invalid author output as private untrusted data; never authorize replay. */
+  afterProposalRejected?: (rejection: Readonly<{taskId:string;kind:"generation"|"repair";validationCode:"proposal_changes_invalid";result:unknown}>) => void | Promise<void>;
 }>;
 function privateRejectedAssessment(result: unknown, providerKey: string): unknown {
   const copy: unknown = structuredClone(result), pending: unknown[] = [copy];
@@ -113,9 +115,10 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   // Capture identity/configuration once. No later process.env lookup can switch it.
   const endpoint = config.baseURL.replace(/\/$/, "") + "/chat/completions", model = config.model, apiKey = config.apiKey;
   const now = timing.now ?? (() => performance.now());
-  if (checkpointHooks && (Object.keys(checkpointHooks).some(key => !["beforeRequest", "afterAssessmentRejected"].includes(key)) ||
+  if (checkpointHooks && (Object.keys(checkpointHooks).some(key => !["beforeRequest", "afterAssessmentRejected", "afterProposalRejected"].includes(key)) ||
       (checkpointHooks.beforeRequest !== undefined && typeof checkpointHooks.beforeRequest !== "function") ||
-      (checkpointHooks.afterAssessmentRejected !== undefined && typeof checkpointHooks.afterAssessmentRejected !== "function"))) return refuse();
+      (checkpointHooks.afterAssessmentRejected !== undefined && typeof checkpointHooks.afterAssessmentRejected !== "function") ||
+      (checkpointHooks.afterProposalRejected !== undefined && typeof checkpointHooks.afterProposalRejected !== "function"))) return refuse();
   const prior = priorCharge ? Object.freeze({ ...priorCharge }) : undefined;
   if (prior && (config.provider !== "groq" || Object.keys(prior).sort().join(",") !== "attemptedRequests,elapsedMs,reservedRunTokens,totalRequestBytes" ||
       Object.values(prior).some(value => !Number.isSafeInteger(value) || value < 1) ||
@@ -308,7 +311,16 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       const output = await call(instructions, { repository: owner.repository,
         task, acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), baseSha: snapshot.baseSha, requirementsSha256: owner.requirementsSha256, evidence, ...(repair ? { repair: repairEvidence } : {}),
         unverifiedAreas: ["Unshown originals and other files", "Independent security/review", "Actual tests and browser behavior"] }, outputTokens);
-      const prepared = prepareCalculatorRoleChanges(task.role, output, snapshot);
+      let prepared:PreparedCalculatorChanges;
+      try { prepared=prepareCalculatorRoleChanges(task.role,output,snapshot); }
+      catch {
+        stopped=true;failureCode='proposal_changes_invalid';
+        if(checkpointHooks?.afterProposalRejected){
+          try { await checkpointHooks.afterProposalRejected(Object.freeze({taskId,kind:repair?'repair':'generation',validationCode:'proposal_changes_invalid',result:privateRejectedAssessment(output,apiKey)})); }
+          catch { failureCode='proposal_rejection_persistence_failed'; }
+        }
+        return refuse();
+      }
       proposals.set(prepared, { taskId, planFingerprint: plan.fingerprint, snapshot });
       if (repairOnly && repair) corrected.set(taskId, prepared); return prepared;
     } catch { failureCode ??= repair ? "repair_validation_failed" : "proposal_validation_failed"; stopped = true; return refuse(); }

@@ -61,3 +61,16 @@ test('a cloned repair request cannot discard the host-bound complete specialist 
  const f=await longFeedbackFixture();
  await assert.rejects(()=>f.team.repair(f.plan,f.task.id,f.snapshot,{...f.request}));assert.equal(f.calls,4);
 });
+
+test('invalid author output is preserved as untrusted evidence after latching stop; the hook cannot replay generation',async()=>{
+ const plan=createCalculatorPlan(saved.request,saved.proposal),task=plan.tasks[2]!;
+ const snapshot=await loadCalculatorSnapshot({repository:plan.owner.repository,baseRef:plan.branch,baseSha:plan.owner.baseSha,changePaths:task.paths},{getHead:async()=>plan.owner.baseSha,readCommit:async()=>({sha:plan.owner.baseSha,treeSha:'b'.repeat(40)}),readTree:async()=>({sha:'b'.repeat(40),truncated:false,tree:[]}),readBlob:async()=>{throw Error('absent');}});
+ let calls=0,savedRejection:any,team:ReturnType<typeof createCalculatorModelTeam>;
+ team=createCalculatorModelTeam(saved.request,{AGENT_FACTORY_TARGET_PROFILE:'calculator',AGENT_FACTORY_PROVIDER:'groq',GROQ_API_KEY:'fixture-key',CALCULATOR_MODEL_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_LEGAL_ENABLED:'false'},async()=>{calls++;return Response.json({choices:[{finish_reason:'stop',message:{role:'assistant',content:JSON.stringify({summary:'Evidence missing',changes:[]})}}]});},{},undefined,{afterProposalRejected:async rejection=>{
+  savedRejection=rejection;await assert.rejects(()=>team.generate(plan,task.id,snapshot));
+ }},'calculator-keyboard-eight-roles');
+ await assert.rejects(()=>team.generate(plan,task.id,snapshot));
+ assert.equal(calls,1);assert.equal(savedRejection.kind,'generation');assert.equal(savedRejection.validationCode,'proposal_changes_invalid');
+ assert.deepEqual(savedRejection.result,{summary:'Evidence missing',changes:[]});assert.equal(team.diagnostic().reasonCode,'proposal_changes_invalid');
+ assert.equal(team.checkpointCharge()!.attemptedRequests,1);
+});

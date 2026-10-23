@@ -164,7 +164,7 @@ try{
  },{transport:async(url,options)=>{
   assert.equal(String(url),'https://api.groq.com/openai/v1/chat/completions');providerCalls++;report.newProviderCalls=providerCalls;report.modelCalls=4+providerCalls;
   const response=await fetch(url,options);put('provider-'+providerCalls+'.json',{provider:'groq',sequence:providerCalls,model:JSON.parse(options.body).model,status:response.status});return response;
- },checkpoints:{beforeRequest:async current=>{await barrier.assertClaimed();await assertOriginalMarker();assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);const state=charge(current);assert.ok(state.attemptedRequests<=8&&state.totalRequestBytes<=192000&&state.reservedRunTokens<=32000&&state.elapsedMs<=600000);save({...active,modelState:state,httpInFlight:true});}}});
+ },checkpoints:{afterProposalRejected:async rejection=>{put('private-rejected-proposal.json',rejection);save({...active,httpInFlight:false});},beforeRequest:async current=>{await barrier.assertClaimed();await assertOriginalMarker();assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);const state=charge(current);assert.ok(state.attemptedRequests<=8&&state.totalRequestBytes<=192000&&state.reservedRunTokens<=32000&&state.elapsedMs<=600000);save({...active,modelState:state,httpInFlight:true});}}});
  const publisher=createCalculatorPublisher({plan,reader,env:{...env,GITHUB_TOKEN:env.CALCULATOR_GITHUB_TOKEN}});
  phase='execute_original_repair';
  const result=await runCalculatorExecution(workspace,{team,repairContinuationPermit:permit,maxRepairs:0,execution:'live',env,tools:{checkProposal:testProposal,publish:publisher.publish,ci:async query=>{

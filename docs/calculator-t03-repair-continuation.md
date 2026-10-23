@@ -9,3 +9,9 @@ The existing createCalculatorAgentRepairTeam supplies one corrective call follow
 Prior t03 charge remains 4 requests/32576 bytes/11841 reserved tokens/207312 ms, plus the separate historical t02 charge. The existing four-role preset fits the remaining original limits: total at most 8 requests, 192000 bytes, 32000 tokens and 600000 ms. Before every provider call, cumulative charges are fsynced and both remote claims/current source are rechecked. Duplicate, uncertainty, rate limit or failure stops without replay.
 
 This is not automatic next-task advancement and does not declare Step 8 complete. A failed continuation remains blocked. Artifacts/logs in these public repositories must be treated as public.
+
+The first continuation stopped with zero HTTP because the reserved input+output exceeded 6000 tokens. Its immutable report (9eb221b6…) and existing marker are required by the following explicitly bounded context continuation; its 3062ms overhead is carried forward, not refunded. That continuation uses compact Frontend instructions and omits repeated originals, retains complete feedback, and performs a no-HTTP context preview before another remote claim. Independent gates and token limits do not change.
+
+Live run 39966515860 proved the compact request fits (10678 bytes; estimated input3816+output2048=5864). One corrective HTTP returned200/stop but proposed changes failed validation. No candidate was published; original receipts/markers remain unchanged. The allowed corrective attempt is consumed. It must not be automatically repeated. Five total t03 HTTP attempts and all prior charges remain recorded.
+
+Future invalid proposals are latched terminal before a host-only afterProposalRejected persistence hook. Only secret-scanned bounded untrusted JSON is saved; it cannot approve/retry anything. The already rejected reply in run39966515860 was not saved by its older runtime and cannot be reconstructed from metadata.
