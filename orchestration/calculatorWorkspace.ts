@@ -127,12 +127,12 @@ async function verifyDependency(workspace: CalculatorWorkspace, task: Calculator
     securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
 }
 export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner,
-  historical?: Readonly<{ inspectedT02: CalculatorT02ReadOnlyPreselection; eventDirectory: string }>
+  historical?: Readonly<{ inspectedT02: CalculatorT02ReadOnlyPreselection; eventDirectory: string; admittedPermit?:CalculatorT02ExecutionPermit }>
 ): Promise<CalculatorSelection> {
   try {
     const host = await fresh(workspace);
     const selection = await host.store.select({ currentBaseSha: workspace.sha,
-      ...(historical ? { inspectedT02: historical.inspectedT02, eventDirectory: historical.eventDirectory } : {}),
+      ...(historical ? { inspectedT02: historical.inspectedT02, eventDirectory: historical.eventDirectory, ...(historical.admittedPermit?{admittedPermit:historical.admittedPermit}:{}) } : {}),
       verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner, historical?.inspectedT02) });
     await fresh(workspace); return selection;
   } catch { return refuse(); }
@@ -166,7 +166,7 @@ export async function claimHistoricalCalculatorT03(workspace:CalculatorWorkspace
     const context=consumeCalculatorT02ExecutionPermit(workspace,permit);
     const host=await fresh(workspace);
     if(workspace.ref!==host.plan.branch || !runner) return refuse();
-    const selection=await selectCalculatorWorkspaceTask(workspace,runner,context);
+    const selection=await selectCalculatorWorkspaceTask(workspace,runner,{...context,admittedPermit:permit});
     if(selection.status!=="ready" || selection.task?.id!==context.taskId ||
        !selection.verifiedTaskIds.includes(context.inspectedT02.previousTaskId))return {selection};
     const receipt=host.store.taskReceipt(host.plan,selection.task);
