@@ -1,3 +1,4 @@
+import { claimCalculatorT03RepairContinuation, type CalculatorT03RepairPermit } from './calculatorT03RepairContinuation.js';
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { prepareCalculatorRoleChanges } from "../commander/calculatorTeam.js";
@@ -57,6 +58,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   /** Only canonical assessments revalidated by the host team are eligible. */
   restoreAssessments?: (plan: CalculatorPlan, id: string, changes: PreparedCalculatorChanges) => readonly CalculatorAssessment[] | Promise<readonly CalculatorAssessment[]>;
   historicalT03Permit?: CalculatorT02ExecutionPermit;
+  repairContinuationPermit?: CalculatorT03RepairPermit;
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
@@ -92,6 +94,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     if (options.restoreProposal !== undefined && (typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
     if (options.restoreAssessments !== undefined && (typeof options.restoreAssessments !== "function" ||
         typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
+    if (options.repairContinuationPermit && (options.maxRepairs !== 0 || options.historicalT03Permit || options.restoreProposal || options.restoreAssessments)) return refuseCalculatorExecution();
     const maxRepairs = options.maxRepairs ?? 1;
     const env = options.env ?? process.env;
     if ((options.execution ?? "live") === "live" && (env.CALCULATOR_EXECUTION_LIVE_APPROVED !== "RUN_ONE_FREE_CALCULATOR_TASK" ||
@@ -102,7 +105,8 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     if (!options.team || !options.tools || [options.tools.checkProposal, options.tools.publish, options.tools.ci,
         options.team.generate, options.team.repair, options.team.assess].some(value => typeof value !== "function")) return refuseCalculatorExecution();
     const plan = await calculatorWorkspacePlan(workspace);
-    const claimed = options.historicalT03Permit ?
+    const claimed = options.repairContinuationPermit ?
+      await claimCalculatorT03RepairContinuation(workspace,options.repairContinuationPermit) : options.historicalT03Permit ?
       await claimHistoricalCalculatorT03(workspace,options.historicalT03Permit,options.verifyDependencies) :
       await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies);
     receipt = claimed.store; task = claimed.selection.task;
