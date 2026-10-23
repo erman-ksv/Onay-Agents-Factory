@@ -29,7 +29,7 @@ jobs:
       - name: Inspect only hashes, schema, limits and anchor counts
         run: |
           python3 - <<'PY'
-          import pathlib,json,hashlib
+          import pathlib,json,hashlib,difflib
           root=pathlib.Path('evidence');rejected=root/'private-rejected-proposal.json'
           assert rejected.is_file() and rejected.stat().st_size<100000
           b=rejected.read_bytes();r=json.loads(b);o=r['result']
@@ -59,7 +59,13 @@ jobs:
                     if pos<0:break
                     n+=1;start=pos+1
                 total+=max(0,count(before))+max(0,count(after))
-                row['edits'].append({'exactSchema':set(e)=={'before','after'},'beforeCharacters':count(before),'afterCharacters':count(after),'originalAnchorOccurrences':n,'unchangedEdit':before==after,'wholePreviousCandidateExact':candidate is not None and before==candidate,'wholePreviousCandidateTrimEqual':candidate is not None and isinstance(before,str) and before.strip()==candidate.strip()})
+                differences=[]
+                if candidate is not None and isinstance(before,str):
+                  for tag,a,b,c,d in difflib.SequenceMatcher(None,candidate,before,autojunk=False).get_opcodes():
+                    if tag!='equal':
+                      safe=lambda text: text if all(ch in "\\\\'\"\\n\\r\\t " for ch in text) else '<non-punctuation>'
+                      differences.append({'kind':tag,'oldCharacters':b-a,'newCharacters':d-c,'oldPunctuation':safe(candidate[a:b]),'newPunctuation':safe(before[c:d])})
+                row['edits'].append({'exactSchema':set(e)=={'before','after'},'beforeCharacters':count(before),'afterCharacters':count(after),'originalAnchorOccurrences':n,'unchangedEdit':before==after,'wholePreviousCandidateExact':candidate is not None and before==candidate,'wholePreviousCandidateTrimEqual':candidate is not None and isinstance(before,str) and before.strip()==candidate.strip(),'differences':differences})
             elif op=='create':
               row['exactSchema']=set(c)=={'operation','path','content','message'};row['sourceExists']=src is not None
               row['contentCharacters']=count(c.get('content'));row['contentBytes']=len(c.get('content','').encode());total+=max(0,count(c.get('content')))
