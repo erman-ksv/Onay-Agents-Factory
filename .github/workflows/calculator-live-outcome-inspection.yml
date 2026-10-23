@@ -1,0 +1,39 @@
+name: Inspect authenticated live t03 outcome
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-live-outcome-inspection.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12497425333'
+          run-id: '39942417242'
+          github-token: ${{ github.token }}
+          path: evidence
+          merge-multiple: true
+      - name: Report source-free checkpoint and repair validation metrics
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,hashlib,re
+          root=pathlib.Path('evidence')
+          report=json.loads((root/'report.json').read_text())
+          path=root/'execution-private/calculator-pilot-step7-v1-34ee03-t03.execution.json'
+          assert path.is_file() and path.stat().st_size<524288
+          raw=path.read_bytes();c=json.loads(raw);p=c['payload']
+          result={'originalRun':39942417242,'modelsRun':False,'writesPerformed':False,'capsuleSha256':hashlib.sha256(raw).hexdigest(),'capsuleIdentity':c['identity'],'stage':p['stage'],'status':p['status'],'httpInFlight':p['httpInFlight'],'publicationStarted':p['publicationStarted'],'charge':p['modelState']}
+          rows=[]
+          for a in p['assessments']:
+            issue=a['role']+': '+a['summary']
+            rows.append({'role':a['role'],'ready':a['ready'],'summaryCharacters':len(a['summary']),'repairIssueCharacters':len(issue),'repairIssueHasControl':bool(re.search(r'[\x00-\x1f\x7f]',issue)),'highFindings':sum(f['severity'] in ['high','blocker'] for f in a['findings']),'findings':len(a['findings'])})
+          result['assessments']=rows
+          result['proposalFiles']=[{'path':f['path'],'bytes':len(f['content'].encode()),'sha256':hashlib.sha256(f['content'].encode()).hexdigest()} for f in p.get('proposal',{}).get('files',[])]
+          result['providerStatuses']=[{'sequence':j['sequence'],'status':j['status']} for q in sorted(root.glob('provider-*.json')) for j in [json.loads(q.read_text())]]
+          print('::notice title=Authenticated live repair diagnosis::'+json.dumps(result))
+          PY

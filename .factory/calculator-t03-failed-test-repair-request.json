@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "allowanceId": "owner-add-one-t03-request-20261023",
+  "runtimeSha": "aa00a16d886c0f358adab4fd8b18c801a58a87d2",
+  "sourceCiRunId": 39981594583,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceCapsuleSha256": "0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7",
+  "priorFailedRunId": 39966515860,
+  "priorFailedReportSha256": "63b2c524dc65074a455e061db1e614081e2eec8f8b2f6a61fb5ecb05b39e25df",
+  "priorRequests": 6,
+  "maxNewRequests": 4,
+  "maxTotalT03Requests": 10,
+  "maxTotalT03ReservedTokens": 34000,
+  "maxFurtherRepairs": 0,
+  "automaticReplay": false,
+  "legalEnabled": false,
+  "maxNewAuthorRequests": 1,
+  "savedAgentResponseRunId": 39973872603,
+  "savedAgentResponseSha256": "cb1f22efc82523cca64e086da10ac7c455d4d5c799c079a9ba774ce9961eb2dd",
+  "sourceFailedCandidateDigest": "2d581207421b41eac72040f64c35880eca01475945f076a5c4616534c14e07ad",
+  "sourceFailedRunId": 39978230091
+}

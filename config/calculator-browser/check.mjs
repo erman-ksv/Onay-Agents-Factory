@@ -7,6 +7,7 @@ import {readFileSync,readdirSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 const input=JSON.parse(readFileSync('/manifest.json','utf8'));
 const SCENARIOS=['Entering 123 then deleting the last digit displays 12','Clear permits a new calculation after input','Clear permits a new calculation after a result'];
+let applicationChecksStarted=false;
 let child,server,sequence=0,buffer=Buffer.alloc(0),session,errors=0,blocked=0;
 const pending=new Map();
 const rpc=(method,params={},target=session)=>new Promise((resolve,reject)=>{
@@ -31,7 +32,7 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function evaluate(expression){const r=await rpc('Runtime.evaluate',{expression,contextId:world,returnByValue:true,awaitPromise:true});assert.equal(r.exceptionDetails,undefined);return r.result.value;}
 async function isolatedWorld(){const f=await rpc('Page.getFrameTree');const r=await rpc('Page.createIsolatedWorld',{frameId:f.frameTree.frame.id,worldName:'factory-verifier'});world=r.executionContextId;}
 async function run(){
- assert.ok(process.getuid()>0);assert.equal(input.version,1);assert.ok(['preflight','check'].includes(input.mode));
+ assert.ok(process.getuid()>0);assert.equal(input.version,1);assert.ok(['preflight','check'].includes(input.mode));assert.ok(['keyboard','clear-backspace'].includes(input.suite));
  for(const key of ['GROQ_API_KEY','GEMINI_API_KEY','GITHUB_TOKEN','CALCULATOR_GITHUB_TOKEN','FACTORY_READ_TOKEN'])assert.equal(process.env[key],undefined);
  const dirs=readdirSync('/ms-playwright').filter(n=>/^chromium-[0-9]+$/.test(n));assert.equal(dirs.length,1);
  const binary=['chrome-linux64/chrome','chrome-linux/chrome'].map(p=>join('/ms-playwright',dirs[0],p)).find(existsSync);assert.ok(binary);
@@ -64,12 +65,22 @@ async function run(){
  const click=async key=>{assert.ok(['0','1','2','3','+','=','clear','backspace'].includes(key));
   assert.equal(await evaluate(`(()=>{const k=${JSON.stringify(key)};const b=Array.from(document.querySelectorAll('button')).find(b=>[b.textContent||'',b.getAttribute('aria-label')||''].map(t=>t.trim()).some(t=>k==='clear'?/^(C|AC|Clear|Очистить)$/i.test(t):k==='backspace'?/backspace|delete|удал|⌫|←|⌦|back/i.test(t):t===k));if(!b)return false;b.click();return true})()`),true);await pause(25);
  };
+ applicationChecksStarted=true;
  await click('1');await click('2');await click('3');assert.equal(await display(),'123');await click('backspace');assert.equal(await display(),'12');
  await click('clear');await click('2');assert.equal(await display(),'2');await click('+');await click('3');await click('=');assert.equal(Number(await display()),5);
  await click('clear');await click('2');assert.equal(await display(),'2');await click('+');await click('3');await click('=');assert.equal(Number(await display()),5);
+ if(input.suite==='keyboard'){
+  const key=async(k,code,keyCode)=>{await rpc('Input.dispatchKeyEvent',{type:'keyDown',key:k,code,windowsVirtualKeyCode:keyCode,nativeVirtualKeyCode:keyCode,...(/^[0-9.+*/-]$/.test(k)?{text:k}: {})});await rpc('Input.dispatchKeyEvent',{type:'keyUp',key:k,code,windowsVirtualKeyCode:keyCode,nativeVirtualKeyCode:keyCode});await pause(25);};
+  await click('clear');
+  for(const [k,c,n] of [['2','Digit2',50],['+','Equal',187],['3','Digit3',51],['Enter','Enter',13]])await key(k,c,n);
+  assert.equal(Number(await display()),5);
+  await key('Escape','Escape',27);await key('1','Digit1',49);await key('2','Digit2',50);await key('3','Digit3',51);await key('Backspace','Backspace',8);assert.equal(await display(),'12');
+  await click('clear');await key('2','Digit2',50);await click('+');await key('3','Digit3',51);await click('=');assert.equal(Number(await display()),5);
+  SCENARIOS.push('Keyboard and button calculations give the same result');
+ }
  assert.equal(errors,0);assert.equal(blocked,0);
  return {version:1,mode:'check',browser:version.product.replace(/^HeadlessChrome\//,'Chrome/'),sandboxDisabled:false,
   status:'passed',testsExecuted:true,pageErrors:0,blockedRequests:0,scenarios:SCENARIOS};
 }
-try{console.log(JSON.stringify(await run()));}catch(error){console.log(JSON.stringify({version:1,status:'unverified',reason:error?.message==='browser_sandbox_unavailable'?'browser_sandbox_unavailable':'browser_checks_unverified'}));process.exitCode=1;}
+try{console.log(JSON.stringify(await run()));}catch(error){console.log(JSON.stringify({version:1,status:'unverified',reason:error?.message==='browser_sandbox_unavailable'?'browser_sandbox_unavailable':applicationChecksStarted?'browser_checks_failed':'browser_checks_unverified'}));process.exitCode=1;}
 finally{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('closed'));}pending.clear();child?.kill('SIGKILL');server?.close();}

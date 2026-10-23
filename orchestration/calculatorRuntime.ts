@@ -307,7 +307,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         env.AGENT_FACTORY_PROVIDER !== owner.provider || env.CALCULATOR_MODEL_LIVE_APPROVED !== "ONE_FREE_BOUNDED_RUN" ||
         provider.provider !== owner.provider) return refuse();
     const reader = createCalculatorSnapshotReader(env);
-    const sandbox = createCalculatorSandbox({ image: config.sandboxImage, baseSha: owner.baseSha, baseSources: new Map() }, env);
+    const sandbox = createCalculatorSandbox({ image: config.sandboxImage, baseSha: owner.baseSha, baseSources: new Map(), includeFailureDetails: true }, env);
     phase = "sandbox_readiness_unverified";
     const readiness = await sandbox.preflight();
     if (!readiness.ready) return { mode, status: "blocked", reasonCode: readiness.reasonCode, wholeAppCompleted: false, legalEnabled: false };
@@ -360,7 +360,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
     phase = "current_sources_unverified";
     const sources = await loadCalculatorRuntimeSources(reader, saved.branch, currentSha);
-    const checks = createCalculatorSandbox({ image: config.sandboxImage, baseSha: currentSha, baseSources: sources }, env);
+    const checks = createCalculatorSandbox({ image: config.sandboxImage, baseSha: currentSha, baseSources: sources, includeFailureDetails: true }, env);
     phase = "private_execution_checkpoint_unverified";
     const privateDirectory = privateExecutionDirectory(directory);
     // Runtime checkout provenance is pinned by the host workflow barrier. This

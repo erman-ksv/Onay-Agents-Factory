@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "allowanceId": "owner-precise-jsdom-cycle-20261023",
+  "runtimeSha": "5e2ecc503ce9f3b10bee29f3d8ef788678b9c6b6",
+  "sourceCiRunId": 39986658417,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceAuditRunId": 39983292798,
+  "sourceArtifactId": 12514596755,
+  "sourceArtifactDigest": "sha256:9d14ce56bfc3f818696cfc93a5eaa0227b806d765dd90c141456b050b0c9b338",
+  "sourceProposalDigest": "504dc76ea4ae0d149374a1a3e07c1b4e8698895ce6d9c141ea5670e5cf6cc75d",
+  "priorRequests": 7,
+  "maxNewRequests": 4,
+  "maxNewAuthorRequests": 1,
+  "maxTotalT03Requests": 11,
+  "maxTotalT03ReservedTokens": 45000,
+  "maxFurtherRepairs": 0,
+  "automaticReplay": false,
+  "legalEnabled": false
+}

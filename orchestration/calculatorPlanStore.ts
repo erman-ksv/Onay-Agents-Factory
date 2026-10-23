@@ -1,10 +1,15 @@
 import { constants, closeSync, fstatSync, fsyncSync, linkSync, lstatSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
 import { CALCULATOR_PLAN_ERROR, createCalculatorPlan, prepareCalculatorGoal, calculatorPlanDigest, planObject, planKeys, refuseCalculatorPlan,
   type CalculatorPlan, type CalculatorPlanTask, type PreparedCalculatorGoal, type CalculatorGoalRequest } from "./calculatorPlan.js";
 import { scanForSecrets } from "../github/secretScanner.js";
+import { CALCULATOR_T02_CHARGE_PIN } from "./calculatorT02ChargeReconciliation.js";
+import { inspectCalculatorT02AfterCiEvent } from "./calculatorT02AfterCiEventPreflight.js";
+import { inspectAdmittedCalculatorT02Event, type CalculatorT02ExecutionPermit } from "./calculatorT02Admission.js";
+import { assertCalculatorT02InspectedSuccessorPreview,
+  type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
 
 /** A trusted host callback rechecks actual tools/integration. Model JSON and
  * old receipts cannot supply this authority; full-app acceptance stays separate. */
@@ -15,6 +20,12 @@ export type CalculatorDependencyEvidence = {
 export type CalculatorSelectionOptions = {
   currentBaseSha: string;
   verifyTask?: (task: CalculatorPlanTask, receipt: TeamTaskSnapshot, currentBaseSha: string) => Promise<CalculatorDependencyEvidence | undefined>;
+  /** Read-only historical inspection: NEVER a task-claim or executor permit. */
+  inspectedT02?: CalculatorT02ReadOnlyPreselection;
+  /** Existing host-owned private barrier directory; read-only inspection only. */
+  eventDirectory?: string;
+  /** Bound to the original claimed event; not transferable to another worker. */
+  admittedPermit?: CalculatorT02ExecutionPermit;
 };
 export type CalculatorSelection = {
   status: "ready" | "blocked" | "needs-review" | "all-candidates-verified";
@@ -132,10 +143,47 @@ export class CalculatorPlanStore {
       status, reasonCode, ...(task ? { task } : {}), verifiedTaskIds: [...verified], wholeAppCompleted: false, publicationAuthorized: false,
     });
     if (plan.status === "blocked") return answer("blocked", "plan_has_unresolved_blockers");
+    const historical = options.inspectedT02;
+    if (historical) {
+      try { assertCalculatorT02InspectedSuccessorPreview(historical); }
+      catch { return answer("needs-review", "historical_publication_unverified"); }
+      try {
+        if (typeof options.eventDirectory !== "string" ||
+            !(options.admittedPermit ?
+              inspectAdmittedCalculatorT02Event(options.admittedPermit,historical,options.eventDirectory,options.currentBaseSha) :
+              inspectCalculatorT02AfterCiEvent(options.eventDirectory,historical).status === "not-consumed-read-only"))
+          return answer("needs-review", "historical_after_ci_event_unverified");
+      } catch { return answer("needs-review", "historical_after_ci_event_unverified"); }
+      if (historical.status !== "candidate-preview-only" || historical.readOnly !== true ||
+          historical.executionAuthorized !== false || historical.publicationAuthorized !== false ||
+          historical.resumeAuthorized !== false || historical.budgetResetAuthorized !== false ||
+          historical.planFingerprint !== plan.fingerprint ||
+          historical.candidateSha !== options.currentBaseSha ||
+          historical.previousTaskId !== plan.tasks[1]?.id ||
+          historical.nextTaskId !== plan.tasks[2]?.id ||
+          !plan.tasks[2]?.dependsOn.includes(historical.previousTaskId))
+        return answer("needs-review", "historical_publication_unverified");
+    }
     const saved = new Map<string, TeamTaskSnapshot>();
+    const originalState = new Map<string, string | undefined>();
     for (const task of plan.tasks) {
       const store = this.taskReceipt(plan, task);
-      try { const receipt = store.inspectExisting(); if (receipt) saved.set(task.id, receipt); } finally { store.close(); }
+      try {
+        const receipt = store.inspectExisting();
+        // Historical recovery never trusts a receipt while a writer may still
+        // own it, including a crash lock without any receipt.
+        if (historical && store.inspectExistingLock()) return answer("needs-review", "historical_task_lock_present");
+        if (receipt) saved.set(task.id, receipt);
+        if (historical) originalState.set(task.id, receipt ? JSON.stringify(receipt) : undefined);
+      } finally { store.close(); }
+    }
+    if (historical) {
+      const original = saved.get(historical.previousTaskId);
+      // The exact historical file is canonical JSON plus a final newline.
+      // Require the authenticated archive digest, not merely stage labels.
+      if (!original || createHash("sha256").update(JSON.stringify(original) + "\n").digest("hex") !==
+          CALCULATOR_T02_CHARGE_PIN.originalReceiptSha256)
+        return answer("needs-review", "historical_receipt_digest_changed");
     }
     // No recorded/started task is ever selected again, regardless of a status label.
     if ([...saved.values()].some(item => item.status === "running")) return answer("needs-review", "interrupted_or_running_task_no_replay");
@@ -143,16 +191,49 @@ export class CalculatorPlanStore {
     if (!saved.size && options.currentBaseSha !== plan.owner.baseSha) return answer("needs-review", "initial_base_changed");
     for (const task of plan.tasks) {
       const receipt = saved.get(task.id); if (!receipt) continue;
-      const pub = receipt.publication;
+      let pub = receipt.publication;
+      if (!pub && historical && task.id === historical.previousTaskId) {
+        if (receipt.status !== "needs-review" ||
+            receipt.reasonCode !== "publication_or_ci_uncertain_inspect_no_replay" ||
+            !receipt.stages.some(stage => stage.stage === "host_tests_1" && stage.status === "passed") ||
+            !receipt.stages.some(stage => stage.stage === "publish_candidate" && stage.status === "blocked"))
+          return answer("needs-review", "historical_publication_unverified");
+        pub = { branch: plan.branch, headSha: historical.candidateSha,
+          number: 1, url: "https://github.com/" + plan.owner.repository + "/pull/1" };
+      }
       if (!pub || pub.branch !== plan.branch || pub.url !== "https://github.com/" + plan.owner.repository + "/pull/" + pub.number ||
           !SHA.test(pub.headSha) || !options.verifyTask) return answer("needs-review", "candidate_needs_fresh_host_verification");
       let evidence: CalculatorDependencyEvidence | undefined;
-      try { evidence = await options.verifyTask(task, structuredClone(receipt), options.currentBaseSha); } catch { /* No raw diagnostics. */ }
+      try { evidence = await options.verifyTask(task, { ...structuredClone(receipt), publication: pub }, options.currentBaseSha); }
+      catch { /* No raw diagnostics. */ }
       if (!evidence || evidence.repository !== plan.owner.repository || evidence.taskId !== task.id ||
           evidence.candidateSha !== pub.headSha || evidence.integratedAtSha !== options.currentBaseSha ||
           evidence.securityReady !== true || evidence.independentReviewReady !== true || evidence.taskChecksPassed !== true || evidence.testsExecuted !== true)
         return answer("needs-review", "dependency_or_candidate_unverified");
       verified.push(task.id);
+    }
+    if (historical) {
+      // A host verification callback is asynchronous: re-check EVERY task,
+      // including unclaimed successors, immediately before displaying ready.
+      for (const task of plan.tasks) {
+        const receipt = this.taskReceipt(plan, task);
+        try {
+          const present = receipt.inspectExisting();
+          if (receipt.inspectExistingLock() ||
+              (present ? JSON.stringify(present) : undefined) !== originalState.get(task.id))
+            return answer("needs-review", "historical_state_changed_during_verification");
+        } finally { receipt.close(); }
+      }
+    }
+    if (historical) {
+      // Reinspect the canonical after-CI barrier after asynchronous host checks.
+      // An event claimed by a concurrent worker must not appear as "ready".
+      try {
+        if (!(options.admittedPermit ?
+            inspectAdmittedCalculatorT02Event(options.admittedPermit,historical,options.eventDirectory!,options.currentBaseSha) :
+            inspectCalculatorT02AfterCiEvent(options.eventDirectory!,historical).status === "not-consumed-read-only"))
+          return answer("needs-review", "historical_after_ci_event_changed");
+      } catch { return answer("needs-review", "historical_after_ci_event_changed"); }
     }
     const next = plan.tasks.find(task => !saved.has(task.id) && task.dependsOn.every(dep => verified.includes(dep)));
     if (next) return answer("ready", "next_task_selected_not_executed", next);
@@ -160,6 +241,12 @@ export class CalculatorPlanStore {
       answer("needs-review", "dependencies_not_ready");
   }
   async claimNext(options: CalculatorSelectionOptions): Promise<{ selection: CalculatorSelection; store?: TeamTaskStore }> {
+    // A reconciled historical preview is for display/inspection only. It never
+    // grants permission to execute, publish, or issue a new model request.
+    if (options.inspectedT02 !== undefined) return {
+      selection: { status: "needs-review", reasonCode: "historical_preview_cannot_claim",
+        verifiedTaskIds: [], wholeAppCompleted: false, publicationAuthorized: false }
+    };
     const selection = await this.select(options);
     if (selection.status !== "ready" || !selection.task) return { selection };
     const plan = this.inspect()!; const store = this.taskReceipt(plan, selection.task);
