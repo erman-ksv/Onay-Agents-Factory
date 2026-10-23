@@ -168,7 +168,7 @@ export class CalculatorPlanStore {
       const original = saved.get(historical.previousTaskId);
       // The exact historical file is canonical JSON plus a final newline.
       // Require the authenticated archive digest, not merely stage labels.
-      if (!original || createHash("sha256").update(JSON.stringify(original) + "\\n").digest("hex") !==
+      if (!original || createHash("sha256").update(JSON.stringify(original) + "\n").digest("hex") !==
           CALCULATOR_T02_CHARGE_PIN.originalReceiptSha256)
         return answer("needs-review", "historical_receipt_digest_changed");
     }
