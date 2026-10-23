@@ -1,11 +1,11 @@
 {
-  "version": 1,
-  "runtimeSha": "f121debad832a37f1370f81f8a62171cd3b8d2db",
-  "sourceCiRunId": 39933225988,
-  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
-  "baseSha": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
-  "maxRequests": 8,
-  "maxRepairs": 1,
-  "legalEnabled": false,
-  "automaticReplay": false
+    "version": 1,
+    "runtimeSha": "f121debad832a37f1370f81f8a62171cd3b8d2db",
+    "sourceCiRunId": 39933225988,
+    "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+    "baseSha": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+    "maxRequests": 8,
+    "maxRepairs": 1,
+    "legalEnabled": false,
+    "automaticReplay": false
 }
