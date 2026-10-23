@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {createCalculatorSandbox,type CalculatorSandboxProcess} from './calculatorSandbox.js';import {calculatorProposalDigest} from './calculatorExecutionEvidence.js';import type {PreparedCalculatorChanges} from '../commander/calculatorChanges.js';
 import type {CalculatorPlanTask} from './calculatorPlan.js';
 const image='node@sha256:'+'a'.repeat(64),baseSha='b'.repeat(40),path='test/calculator.test.mjs';
-const task={id:'fixture-task',role:'coder',paths:['src/calculator.mjs',path]} as CalculatorPlanTask;
+const task:CalculatorPlanTask={id:'fixture-task',role:'coder',goal:'Verify isolated failing tests',acceptanceIds:['addition'],paths:['src/calculator.mjs',path],dependsOn:[]};
 const changes:PreparedCalculatorChanges={repository:'erman-ksv/Onay-Factory-Calculator',baseRef:'feat/calculator-agent/fixture',baseSha,summary:'Fixture',reviewEvidence:'{}',gates:{secretScan:'passed',policyReview:'passed',independentReview:'required',tests:'required',publicationAuthorized:false},files:[{path:'src/calculator.mjs',content:'export const calculate = () => 1;',message:'Core'},{path,content:'import "./missing.mjs";',message:'Tests'}]};
 test('opt-in isolated diagnostics retain failed verdict and container restrictions; unavailable diagnostics cannot authorize success',async()=>{
  for(const mode of ['off','details','unavailable']){
