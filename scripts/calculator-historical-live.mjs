@@ -62,9 +62,12 @@ try{
  const store=new CalculatorPlanStore(state,launch.goal),plan=store.inspect();assert.equal(plan.fingerprint,PLAN);
  const reader=createCalculatorSnapshotReader({...env,GITHUB_TOKEN:env.CALCULATOR_GITHUB_TOKEN});
  const ci=createCalculatorCiReader({trustedWorkflows:launch.config.trustedWorkflows},{...env,GITHUB_TOKEN:env.CALCULATOR_GITHUB_TOKEN});
- phase='fresh_source_and_dependencies';assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);
- const sourcesSnapshot=await loadCalculatorSnapshot({repository:REPO,baseRef:plan.branch,baseSha:PIN.candidateSha,changePaths:['src/calculator.mjs','test/calculator.test.mjs','index.html','styles.css','src/app.mjs']},reader);
- const sources=calculatorSources(sourcesSnapshot);
+ phase='fresh_source_head';assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);
+ phase='load_core_snapshot';
+ const sourcesSnapshot=await loadCalculatorSnapshot({repository:REPO,baseRef:plan.branch,baseSha:PIN.candidateSha,changePaths:['src/calculator.mjs','test/calculator.test.mjs']},reader);
+ phase='load_ui_snapshot';const uiSnapshot=await loadCalculatorSnapshot({repository:REPO,baseRef:plan.branch,baseSha:PIN.candidateSha,changePaths:['index.html','styles.css','src/app.mjs']},reader);
+ const sources=new Map([...calculatorSources(sourcesSnapshot),...calculatorSources(uiSnapshot)]);
+ phase='saved_capsules';
  const capsuleBytes=archived.files.get('execution-private/'+report.previousTaskId+'.execution.json');assert.ok(capsuleBytes);
  const capsule=parseCalculatorExecutionCheckpointBytes(capsuleBytes,JSON.parse(capsuleBytes).identity,'b49a7295bb014e25f601c04608e6c1cefb20818f27af474369dad71c25c240a7').data;
  assert.equal(capsule.payload.assessments.length,3);assert.ok(capsule.payload.assessments.every(a=>a.ready&&!a.findings.length));
@@ -72,7 +75,9 @@ try{
  assert.equal(coreCapsules.length,1);const coreBytes=coreCapsules[0][1],core=parseCalculatorExecutionCheckpointBytes(coreBytes,JSON.parse(coreBytes).identity).data;
  const proposals=[core.payload.proposal,capsule.payload.proposal];
  for(const proposal of proposals)for(const f of proposal.files)assert.equal(sources.get(f.path),f.content);
+ phase='node_sandbox_preflight';
  const checks=createCalculatorSandbox({image:NODE,baseSha:PIN.candidateSha,baseSources:sources});assert.equal((await checks.preflight()).ready,true);
+ phase='browser_sandbox_preflight';
  const browser=createCalculatorBrowserSandbox({image:BROWSER});await browser.preflight();
  const rebased=proposals.map(p=>({...p,baseSha:PIN.candidateSha}));
  const proofCache=new Map();
@@ -88,13 +93,16 @@ try{
   }
   return {repository:REPO,planFingerprint:PLAN,taskId:input.task.id,candidateSha:input.candidateSha,currentSha:PIN.candidateSha,securityReady:true,independentReviewReady:true,taskChecksPassed:true,testsExecuted:true};
  };
+ phase='fresh_t02_ci';
  const oldCI=await ci({repository:REPO,branch:plan.branch,candidateSha:PIN.candidateSha});assert.ok(verifyCalculatorAfterCiCandidateCi(oldCI,REPO,plan.branch,PIN.candidateSha));
  const input={audit:archived.audit,archivedReceiptBytes:originalReceipt,charges:{manifestSha256:PIN.manifestSha256,candidateSha:PIN.candidateSha,sourceRunId:PIN.sourceRunId,artifactId:PIN.artifactId,phases:archived.audit.charges.phaseCosts.map(({runId,settled,checkpointHighWater})=>({runId,settled,checkpointHighWater})),recordedAggregate:archived.audit.charges.recordedAggregate,finalNewCharge:archived.audit.charges.settledNew}};
+ phase='read_only_handoff';
  const handoff=await inspectCalculatorT02ReadOnlyHandoff(input,{getCurrentHead:()=>reader.getHead(plan.branch),getCandidateCI:async()=>{
   const proof=await ci({repository:REPO,branch:plan.branch,candidateSha:PIN.candidateSha});assert.ok(verifyCalculatorAfterCiCandidateCi(proof,REPO,plan.branch,PIN.candidateSha));assert.ok(proof.provenance.verifiedRunIds.includes(39791054276));
   return {runId:39791054276,headSha:PIN.candidateSha,runAttempt:1,workflowPath:'.github/workflows/calculator-task-ci.yml',completed:true,passed:true,syntaxPassed:true,taskTestsPassed:true};
  }});
  const sidecar=join(root,'sidecar'),events=join(root,'events');mkdirSync(sidecar,{mode:0o700});mkdirSync(events,{mode:0o700});recordCalculatorT02ReconciliationSidecar(sidecar,handoff);
+ phase='preview_verified_dependencies';
  const preview=await previewCalculatorT02Successor(store,reader,sidecar,handoff,verifyDependencies);
  phase='live_host_ready';report.runtimeSha=env.FACTORY_RUNTIME_SHA;report.sourceCiRunId=Number(env.FACTORY_SOURCE_CI_RUN);report.baseSha=PIN.candidateSha;
  const privateDir=join(root,'execution-private');mkdirSync(privateDir,{mode:0o700});
