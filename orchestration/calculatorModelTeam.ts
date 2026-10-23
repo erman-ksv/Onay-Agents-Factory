@@ -317,7 +317,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       try { prepared=prepareCalculatorRoleChanges(task.role,output,snapshot); }
       catch {
         stopped=true;
-        const declined=plain(output)&&exact(output,['summary','changes'])&&typeof output.summary==='string'&&Array.isArray(output.changes)&&output.changes.length===0;
+        const declined=plain(output)&&exact(output,['summary','changes'])&&typeof output.summary==='string'&&/^Blocked:/i.test(output.summary)&&Array.isArray(output.changes)&&output.changes.length===0;
         failureCode=declined?'model_declined_proposal':'proposal_changes_invalid';
         if(declined){
           declinedProposal=Object.freeze({proposalBlocked:true});
