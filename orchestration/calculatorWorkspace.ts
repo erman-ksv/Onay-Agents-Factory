@@ -3,6 +3,7 @@ import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.j
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader, type CalculatorSnapshot, type CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
+import type { CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
 import { CalculatorPlanStore, type CalculatorDependencyEvidence, type CalculatorSelection } from "./calculatorPlanStore.js";
 import type { TeamTaskSnapshot, TeamTaskStore } from "./teamTaskStore.js";
 
@@ -114,10 +115,13 @@ async function verifyDependency(workspace: CalculatorWorkspace, task: Calculator
   return { repository: workspace.repository, taskId: task.id, candidateSha, integratedAtSha: workspace.sha,
     securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
 }
-export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner): Promise<CalculatorSelection> {
+export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner,
+  historical?: Readonly<{ inspectedT02: CalculatorT02ReadOnlyPreselection; eventDirectory: string }>
+): Promise<CalculatorSelection> {
   try {
     const host = await fresh(workspace);
     const selection = await host.store.select({ currentBaseSha: workspace.sha,
+      ...(historical ? { inspectedT02: historical.inspectedT02, eventDirectory: historical.eventDirectory } : {}),
       verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner) });
     await fresh(workspace); return selection;
   } catch { return refuse(); }
