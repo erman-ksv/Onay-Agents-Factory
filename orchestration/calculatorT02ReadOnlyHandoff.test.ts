@@ -239,6 +239,8 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
       }});
     assert.equal(racing.status,"needs-review");
     assert.equal(racing.reasonCode,"historical_state_changed_during_verification");
+    unlinkSync(x.t03LockPath());
+    const event=inspectCalculatorT02AfterCiEvent(eventDir,selected);
     const eventRace=await x.store.select({currentBaseSha:PIN.candidateSha,
       inspectedT02:selected,eventDirectory:eventDir,
       verifyTask:async(task,receipt,currentBaseSha)=>{
@@ -251,14 +253,12 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
     assert.equal(eventRace.status,"needs-review");
     assert.equal(eventRace.reasonCode,"historical_after_ci_event_changed");
     unlinkSync(join(eventDir,event.eventId+".lock"));
-    unlinkSync(x.t03LockPath());
     assert.equal(selected.previousTaskId,x.plan.tasks[1]!.id);
     assert.equal(selected.nextTaskId,x.plan.tasks[2]!.id);
     assert.equal(selected.candidateSha,PIN.candidateSha);
     assert.equal(selected.executionAuthorized,false);assert.equal(selected.publicationAuthorized,false);
     assert.equal(selected.resumeAuthorized,false);assert.equal(selected.wholeStep8Closed,false);
     assert.deepEqual(selected.conservativePriorCharges,PIN.conservative);
-    const event=inspectCalculatorT02AfterCiEvent(eventDir,selected);
     assert.equal(event.status,"not-consumed-read-only");
     assert.equal(event.previousTaskId,x.plan.tasks[1]!.id);
     assert.equal(event.expectedNextTaskId,x.plan.tasks[2]!.id);
