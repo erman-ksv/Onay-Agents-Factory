@@ -175,7 +175,7 @@ function preselectionFixture(root: string, executable=false) {
     ["styles.css","body { font-family: sans-serif; }\\n"],
   ]);
   const gitBlob=(content:string)=>createHash("sha1").update(
-    Buffer.concat([Buffer.from("blob "+Buffer.byteLength(content)+"\\0"),Buffer.from(content)])).digest("hex");
+    Buffer.concat([Buffer.from("blob "+Buffer.byteLength(content)+"\0"),Buffer.from(content)])).digest("hex");
   const sourceBySha=new Map([...sources.values()].map(content=>[gitBlob(content),content]));
   const entry=(path:string,hash:string):CalculatorTreeEntry=>({path,sha:
     executable && sources.has(path)?gitBlob(sources.get(path)!):hash,type:"blob",mode:"100644"});
