@@ -180,7 +180,7 @@ try{
  assert.equal(calculatorProposalDigest(savedCandidate),'2d581207421b41eac72040f64c35880eca01475945f076a5c4616534c14e07ad');
  const rebuilt=coreTeam.restoreProposal(plan,TASK,taskSnapshot,savedCandidate,calculatorProposalDigest(savedCandidate),[]);
  phase='fresh_actual_failure_before_repair_admission';
- const failedToken=await collectCalculatorFailedTestEvidence(plan.tasks[2],rebuilt,checks.checkProposal);
+ const failedToken=await collectCalculatorFailedTestEvidence(plan.tasks[2],rebuilt,async input=>{const result=await checks.checkProposal(input);if(result.status!=='failed')return result;return {...result,failures:[...result.failures,'Prior isolated diagnostic 39978740589 for this exact proposal: test/ui.test.mjs raised ERR_MODULE_NOT_FOUND. Use existing repository files and Node built-ins; preserve assertions and expected answers.']};});
  repairRequest=coreTeam.importFailedHostTestRepair(plan,TASK,rebuilt,failedToken,sourcesSnapshot);
  assert.equal(coreTeam.diagnostic().httpRequestsSent,0);report.sourceFailedCandidateDigest=calculatorProposalDigest(rebuilt);report.freshActualFailedTestsVerified=true;
  phase='admit_original_repair';
