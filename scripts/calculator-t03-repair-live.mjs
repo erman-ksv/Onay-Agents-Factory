@@ -32,9 +32,9 @@ const PLAN='1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2';
 const NODE='node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392';
 const BROWSER='mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a';
 const sha=b=>createHash('sha256').update(b).digest('hex');
-const root=join(process.env.RUNNER_TEMP,'calculator-t03-repair');mkdirSync(root,{mode:0o700});
+const root=join(process.env.RUNNER_TEMP,'calculator-t03-repair-context');mkdirSync(root,{mode:0o700});
 let phase='configuration',team,writer,active,high={attemptedRequests:0,totalRequestBytes:0,reservedRunTokens:0,elapsedMs:0};
-let outcome,barrier,remoteClaimed=false,providerCalls=0;high={...T03_REPAIR_CHARGE};
+let outcome,barrier,remoteClaimed=false,providerCalls=0;high={...T03_REPAIR_CHARGE,elapsedMs:210374};
 const report={version:1,taskId:TASK,previousTaskId:'calculator-pilot-step7-v1-34ee03-t02',historicalCharges:PIN.conservative,
  legalEnabled:false,wholeStep8Closed:false,autonomousDevelopmentProven:false,modelCalls:4,newProviderCalls:0,continuationOfOriginalRepair:true};
 function put(name,value){const bytes=JSON.stringify(value)+'\n';assert.ok(Buffer.byteLength(bytes)<524288);const p=join(root,name);mkdirSync(dirname(p),{recursive:true,mode:0o700});const temp=p+'.tmp';const fd=openSync(temp,'wx',0o600);try{writeFileSync(fd,bytes);fsyncSync(fd);}finally{closeSync(fd);}renameSync(temp,p);}
@@ -43,26 +43,33 @@ function save(event){active={attempt:event.attempt,stage:event.stage,status:even
  ...(event.proposal?{proposal:event.proposal}:{}),modelState:charge(team?.checkpointCharge()??high),httpInFlight:event.httpInFlight,publicationStarted:event.publicationStarted};writer.save(active);}
 try{
  const env=process.env;
- assert.equal(env.CALCULATOR_T03_REPAIR_APPROVED,'CONTINUE_ONLY_ORIGINAL_T03_REPAIR');
+ assert.equal(env.CALCULATOR_T03_REPAIR_APPROVED,'CONTINUE_ORIGINAL_T03_AFTER_PROVEN_ZERO_HTTP');
  assert.equal(env.GITHUB_REPOSITORY,'erman-ksv/Onay-Agents-Factory');assert.equal(env.GITHUB_REF,'refs/heads/feat/calculator-t02-charge-reconcile-20261022');assert.equal(env.GITHUB_EVENT_NAME,'push');assert.equal(env.GITHUB_RUN_ATTEMPT,'1');
  assert.equal(execFileSync('/usr/bin/git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),env.FACTORY_RUNTIME_SHA);
  assert.ok(env.GROQ_API_KEY&&env.CALCULATOR_GITHUB_TOKEN&&env.FACTORY_STATE_TOKEN);assert.equal(env.GROQ_MODEL,undefined);
  for(const [key,value] of Object.entries({CALCULATOR_EXECUTION_LIVE_APPROVED:'RUN_ONE_FREE_CALCULATOR_TASK',CALCULATOR_MODEL_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',AGENT_FACTORY_ENABLE_GITHUB_WRITES:'true',AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES:'false',AGENT_FACTORY_LEGAL_ENABLED:'false',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_PROVIDER:'groq',AGENT_FACTORY_TARGET_PROFILE:'calculator',AGENT_ALLOWED_REPOSITORIES:REPO}))assert.equal(env[key],value);
- barrier=createCalculatorLiveBarrier({runtimeSha:env.FACTORY_RUNTIME_SHA,sourceCiRunId:Number(env.FACTORY_SOURCE_CI_RUN),planFingerprint:PLAN,previousTaskId:TASK,candidateSha:PIN.candidateSha},env);
+ barrier=createCalculatorLiveBarrier({runtimeSha:env.FACTORY_RUNTIME_SHA,sourceCiRunId:Number(env.FACTORY_SOURCE_CI_RUN),planFingerprint:PLAN,previousTaskId:TASK+'-ctx',candidateSha:PIN.candidateSha},env);
  phase='remote_duplicate_check';
  if(!await barrier.inspectAbsent()){
   report.status='duplicate_refused';report.reason='event_already_consumed_no_replay';
  }else{
+ phase='authenticate_zero_http_context_stop';
+ const contextRoot=env.CALCULATOR_T03_CONTEXT_STOP_DIRECTORY;assert.ok(contextRoot&&contextRoot.startsWith(env.RUNNER_TEMP+'/'));
+ const contextReportBytes=readFileSync(join(contextRoot,'report.json'));assert.equal(sha(contextReportBytes),'9eb221b644b46fedb0376395cb35abfdfedec9e526120fcc5e61e66cb79155ae');
+ const contextStop=JSON.parse(contextReportBytes);assert.equal(contextStop.newProviderCalls,0);assert.equal(contextStop.modelDiagnostic.httpRequestsSent,0);assert.equal(contextStop.modelDiagnostic.httpRequestsAttempted,0);assert.equal(contextStop.lastCheckpoint.httpInFlight,false);assert.equal(contextStop.lastCheckpoint.publicationStarted,false);assert.equal(contextStop.currentCharge.elapsedMs,210374);
+ report.priorZeroHttpStopRun=39949567538;
  phase='authenticate_t03_origin';
  const token=env.FACTORY_STATE_TOKEN;const api='https://api.github.com/repos/erman-ksv/Onay-Agents-Factory';
  async function get(path){const r=await fetch(api+path,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'},redirect:'error',signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);const b=await r.text();assert.ok(Buffer.byteLength(b)<1048576);return JSON.parse(b);}
+ const contextRun=await get('/actions/runs/39949567538');assert.equal(contextRun.head_sha,'4392a8c5337a7e36435c67aa3fdcfc3e06bc76f5');assert.equal(contextRun.path,'.github/workflows/calculator-t03-repair-live.yml');assert.equal(contextRun.run_attempt,1);assert.equal(contextRun.conclusion,'failure');
+ const contextArtifact=await get('/actions/artifacts/12499003755');assert.equal(contextArtifact.workflow_run.id,39949567538);assert.equal(contextArtifact.digest,'sha256:23a716a823eb2186d5a7f8c8ca299173d5c0246249e2cbf659133434f06732ae');assert.equal(contextArtifact.size_in_bytes,553244);assert.equal(contextArtifact.expired,false);
  const priorRun=await get('/actions/runs/39942417242');assert.equal(priorRun.head_sha,'4702d866dff229b61aeb0a6ae95e652f308901a5');assert.equal(priorRun.path,'.github/workflows/calculator-historical-live.yml');assert.equal(priorRun.conclusion,'failure');assert.equal(priorRun.run_attempt,1);
  const artifact=await get('/actions/artifacts/12497425333');assert.equal(artifact.workflow_run.id,39942417242);assert.equal(artifact.digest,'sha256:15059e8a0e39314d0827ae64a7606e2cb9a588c3470b321ed8f8f69081968185');assert.equal(artifact.size_in_bytes,560241);assert.equal(artifact.expired,false);
  const priorRoot=env.CALCULATOR_T03_EVIDENCE_DIRECTORY;assert.ok(priorRoot&&priorRoot.startsWith(env.RUNNER_TEMP+'/'));
  const priorCapsule=readFileSync(join(priorRoot,'execution-private/'+TASK+'.execution.json'));
  const priorReceipt=readFileSync(join(priorRoot,'state/calc-'+TASK+'.json'));
  const stopped=inspectCalculatorT03StoppedRepair(priorCapsule,priorReceipt);
- async function assertOriginalMarker(){const r=await get('/git/ref/heads/state/calculator-live-event/fd0f81eb73598174d6044742175566fa9055c95d94c03ae325c6cd99351b48ff');assert.equal(r.object.sha,'af1ec597b00c3a220310c7e233d78619b65e70d1');}
+ async function assertOriginalMarker(){const r=await get('/git/ref/heads/state/calculator-live-event/fd0f81eb73598174d6044742175566fa9055c95d94c03ae325c6cd99351b48ff');assert.equal(r.object.sha,'af1ec597b00c3a220310c7e233d78619b65e70d1');const c=await get('/git/ref/heads/state/calculator-live-event/980ba96c3789a4b5b2f14bb45845dfe42e288a1af2ee02e0e3b813a1ec090e69');assert.equal(c.object.sha,'4ef4d22487ea6bc994e937db42c7f9b675b6f795');}
  await assertOriginalMarker();
  phase='authenticate_archives';const archived=await loadHistoricalArchives(join(root,'source'),env.FACTORY_STATE_TOKEN);
  // Every byte comes from the authenticated immutable archive, never a fixture.
@@ -126,7 +133,8 @@ try{
  const taskSnapshot=await loadCalculatorSnapshot({repository:REPO,baseRef:plan.branch,baseSha:PIN.candidateSha,changePaths:plan.tasks[2].paths},reader);
  const validator=createCalculatorModelTeam(launch.goal,{...env,GITHUB_TOKEN:undefined,FACTORY_STATE_TOKEN:undefined,CALCULATOR_GITHUB_TOKEN:undefined},async()=>{throw Error('No HTTP permitted in feedback prevalidation');},{},undefined,undefined,'calculator-restored-repair-four-roles');
  const rebuilt=validator.restoreProposal(plan,TASK,taskSnapshot,failure.proposal,calculatorProposalDigest(failure.proposal),[]);
- validator.importRepairFeedback(plan,TASK,rebuilt,failure.assessments,undefined,sourcesSnapshot);
+ const validationRequest=validator.importRepairFeedback(plan,TASK,rebuilt,failure.assessments,undefined,sourcesSnapshot);
+ const requestPreview=await validator.inspectRepairContext(plan,TASK,taskSnapshot,validationRequest);report.repairRequestPreview=requestPreview;assert.equal(requestPreview.status,'ready');
  assert.equal(validator.diagnostic().httpRequestsSent,0);
  phase='admit_original_repair';
  const workspace=await openCalculatorWorkspace(store,reader,plan.branch,PIN.candidateSha);
@@ -151,7 +159,7 @@ try{
   actualChecks.set(input.changes,result);return result;
  }
  team=createCalculatorAgentRepairTeam(launch.goal,{...env,GITHUB_TOKEN:undefined,FACTORY_STATE_TOKEN:undefined,CALCULATOR_GITHUB_TOKEN:undefined},{
-  loadAuthenticatedFailure:async(_plan,task,snapshot)=>{assert.equal(task.id,TASK);assert.equal(snapshot.baseSha,PIN.candidateSha);return {taskId:TASK,planFingerprint:PLAN,baseSha:PIN.candidateSha,sourceManifestSha256:T03_REPAIR_CAPSULE_SHA,proposal:failure.proposal,proposalDigest:calculatorProposalDigest(failure.proposal),assessments:failure.assessments,dependencySnapshot:sourcesSnapshot,priorCharge:T03_REPAIR_CHARGE,httpInFlight:false,publicationStarted:false};},
+  loadAuthenticatedFailure:async(_plan,task,snapshot)=>{assert.equal(task.id,TASK);assert.equal(snapshot.baseSha,PIN.candidateSha);return {taskId:TASK,planFingerprint:PLAN,baseSha:PIN.candidateSha,sourceManifestSha256:T03_REPAIR_CAPSULE_SHA,proposal:failure.proposal,proposalDigest:calculatorProposalDigest(failure.proposal),assessments:failure.assessments,dependencySnapshot:sourcesSnapshot,priorCharge:{...T03_REPAIR_CHARGE,elapsedMs:210374},httpInFlight:false,publicationStarted:false};},
   verifyRepairedProposal:async(task,changes)=>{const checked=await testProposal({task,changes,proposalDigest:calculatorProposalDigest(changes)});assert.equal(checked.status,'passed');const evidence=hostEvidence.get(changes);assert.ok(evidence);return evidence;},
  },{transport:async(url,options)=>{
   assert.equal(String(url),'https://api.groq.com/openai/v1/chat/completions');providerCalls++;report.newProviderCalls=providerCalls;report.modelCalls=4+providerCalls;

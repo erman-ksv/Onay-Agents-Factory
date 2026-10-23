@@ -1,3 +1,4 @@
+import {calculatorKeyboardRepairInstructions} from './calculatorKeyboardRepairContext.js';
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { selectProviderConfig } from "../commander/providerConfig.js";
 import { createCloudflareCompatibleFetch } from "../commander/cloudflareCompatibility.js";
@@ -126,6 +127,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   let stopped = false, planned = false, httpRequestsSent = 0;
   let failureCode: string | undefined, httpStatus: number | undefined, providerHttpStatus: number | undefined, finishReason: "stop" | "length" | "other" | undefined;
   let admissionDiagnostic: CalculatorModelAdmissionDiagnostic | undefined;
+  let previewRepairOnly=false, repairPreview: Readonly<{status:"ready"|"refused";requestBytes:number;estimatedInputTokens:number;reservedOutputTokens:number}>|undefined;
   let assessmentDiagnostic: Readonly<{ assessmentRole: "security" | "reviewer" | "tester"; validationCode: CalculatorAssessmentValidationCode }> | undefined;
   const guardedTransport: typeof fetch = async (input, init) => {
     if (checkpointHooks?.beforeRequest) {
@@ -192,6 +194,12 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         ...(config.provider === "groq" && model === "openai/gpt-oss-120b" ? {
           reasoning_effort: "low", response_format: { type: "json_object" },
         } : {}) });
+      if(previewRepairOnly){
+        const bytes=Buffer.byteLength(body),inputTokens=Math.ceil(bytes/3)+256;
+        const check=contextBudget?.preview(inputTokens,outputTokens);
+        repairPreview=Object.freeze({status:check?.status==='ready'?'ready':'refused',requestBytes:bytes,estimatedInputTokens:inputTokens,reservedOutputTokens:outputTokens});
+        return refuse();
+      }
       phase = "model_admission_failed";
       if (admit) await admit(body);
       if (stopped || budget.failure) return refuse();
@@ -289,13 +297,15 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         const tail = task.acceptanceIds.includes("keyboard") && file.path === "src/app.mjs" && source && tailStart < source.length ?
           { startCharacter: tailStart, endCharacter: source.length, text: source.slice(tailStart) } : undefined;
         if (tail) excerptBytes += Buffer.byteLength(tail.text);
+        if(repairOnly && repair && task.acceptanceIds.includes('keyboard')) return {...file,unverified:'Original text excerpts omitted during repair; only previous anchored edits and SHA metadata are supplied. Remaining original source is unverified.'};
         return { ...file, ...(tail ? { relatedExcerpt: tail } : {}), ...(excerpt ? { excerpt: { startCharacter: 0, endCharacter: end, text: excerpt } } : {}),
           unverified: file.exists ? "Remaining original source is omitted; use exact anchored patches only." : "Runtime behavior is unverified." };
       });
       if (excerptBytes > 6_000) return refuse();
       const outputTokens = task.role === "frontend" && (((hostPreset === "calculator-frontend-2048-four-roles" && !repair) || hostPreset === "calculator-keyboard-eight-roles") ||
         (repairOnly && repair)) ? 2048 : 1200;
-      const output = await call(buildCalculatorRoleInstructions(task.role, outputTokens), { repository: owner.repository,
+      const instructions=repairOnly && repair && task.acceptanceIds.includes('keyboard')?calculatorKeyboardRepairInstructions():buildCalculatorRoleInstructions(task.role,outputTokens);
+      const output = await call(instructions, { repository: owner.repository,
         task, acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), baseSha: snapshot.baseSha, requirementsSha256: owner.requirementsSha256, evidence, ...(repair ? { repair: repairEvidence } : {}),
         unverifiedAreas: ["Unshown originals and other files", "Independent security/review", "Actual tests and browser behavior"] }, outputTokens);
       const prepared = prepareCalculatorRoleChanges(task.role, output, snapshot);
@@ -314,6 +324,12 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     },
     generate: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot) => propose(plan, taskId, snapshot),
     repair: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest) => propose(plan, taskId, snapshot, request),
+    async inspectRepairContext(plan:CalculatorPlan,taskId:string,snapshot:CalculatorSnapshot,request:CalculatorRepairRequest){
+      if(stopped||!repairOnly||budget.snapshot().attemptedRequests||!repairFeedback.has(request)||previewRepairOnly)return refuse();
+      previewRepairOnly=true;
+      try{await propose(plan,taskId,snapshot,request);}catch{/* Preview deliberately stops this validation-only client. */}
+      if(!repairPreview)return refuse();return repairPreview;
+    },
     prepareRepairFeedback(plan: CalculatorPlan, taskId: string, changes: PreparedCalculatorChanges,
       testsInput?: CalculatorProposalTests): CalculatorRepairRequest {
       try {
