@@ -1,4 +1,7 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
+import { prepareCalculatorRoleChanges, validateCalculatorAssessment } from "../commander/calculatorTeam.js";
+import { createHistoricalT03ExecutionCallback } from "./calculatorT02Admission.js";
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -147,7 +150,7 @@ test("real in-process verified handoff writes exactly one non-authorizing sideca
 
 const SAVED_PLAN = JSON.parse(readFileSync(new URL("./fixtures/calculatorStep7SavedPlan.json", import.meta.url),"utf8"));
 const T02_PARENT = "5c4bc71b3119a50d2ca7ce1dbdf12bcaa000ce75";
-function preselectionFixture(root: string) {
+function preselectionFixture(root: string, executable=false) {
   const state = join(root,"plan"), sidecarDir = join(root,"sidecar");
   mkdirSync(state,{mode:0o700});mkdirSync(sidecarDir,{mode:0o700});
   const store=new CalculatorPlanStore(state,SAVED_PLAN.request);
@@ -164,7 +167,18 @@ function preselectionFixture(root: string) {
   first.finish("needs-review","task_candidate_verified_not_whole_app");first.close();
   const t02path=join(state,"calc-"+plan.tasks[1]!.id+".json");
   writeFileSync(t02path,ORIGINAL_RECEIPT,{mode:0o600,flag:"wx"});
-  const entry=(path:string,hash:string):CalculatorTreeEntry=>({path,sha:hash,type:"blob",mode:"100644"});
+  const sources=new Map<string,string>([
+    ["src/calculator.mjs","export const calculate = (a,b) => a + b;\\n"],
+    ["test/calculator.test.mjs","import test from 'node:test';\\n"],
+    ["index.html","<!doctype html><html><body><main><output>0</output></main></body></html>"],
+    ["src/app.mjs","export const keyboardReady = false;\\n"],
+    ["styles.css","body { font-family: sans-serif; }\\n"],
+  ]);
+  const gitBlob=(content:string)=>createHash("sha1").update(
+    Buffer.concat([Buffer.from("blob "+Buffer.byteLength(content)+"\\0"),Buffer.from(content)])).digest("hex");
+  const sourceBySha=new Map([...sources.values()].map(content=>[gitBlob(content),content]));
+  const entry=(path:string,hash:string):CalculatorTreeEntry=>({path,sha:
+    executable && sources.has(path)?gitBlob(sources.get(path)!):hash,type:"blob",mode:"100644"});
   const core=[
     {path:"src",sha:"b".repeat(40),type:"tree",mode:"040000"},
     {path:"test",sha:"c".repeat(40),type:"tree",mode:"040000"},
@@ -177,14 +191,23 @@ function preselectionFixture(root: string) {
   const workflow=entry(".github/workflows/calculator-task-ci.yml","7".repeat(40));
   const before=[...core,workflow], after=[...core,workflow,...ui];
   let head:string=PIN.candidateSha, checks=0, verifyBad=false, alterTree=false, alterMode=false;
+  const successorSha="c".repeat(40);
+  let successorTree:CalculatorTreeEntry[]|undefined;
   const reader: CalculatorSnapshotReader={
     getHead:async()=>head,
-    readCommit:async sha=>({sha,treeSha:sha===PIN.candidateSha?"d".repeat(40):"e".repeat(40),
-      parents:sha===PIN.candidateSha?[T02_PARENT]:sha===T02_PARENT?[SAVED_PLAN.request.baseSha]:[]}),
-    readTree:async sha=>({sha,truncated:false,tree:sha==="d".repeat(40)?
+    readCommit:async sha=>({sha,treeSha:sha===successorSha?"f".repeat(40):
+      sha===PIN.candidateSha?"d".repeat(40):"e".repeat(40),
+      parents:sha===successorSha?[PIN.candidateSha]:sha===PIN.candidateSha?[T02_PARENT]:
+        sha===T02_PARENT?[SAVED_PLAN.request.baseSha]:[]}),
+    readTree:async sha=>({sha,truncated:false,tree:sha==="f".repeat(40)&&successorTree?successorTree:
+      sha==="d".repeat(40)?
       (alterTree?[...after,entry("src/calculator.mjs","6".repeat(40))]:
         alterMode?after.map(e=>e.path===workflow.path?{...e,mode:"100755"}:e):after):before}),
-    readBlob:async()=>{throw Error("preview must never download executable source");}
+    readBlob:async sha=>{
+      if(!executable)throw Error("preview must never download executable source");
+      const content=sourceBySha.get(sha);if(content===undefined)throw Error("unknown blob");
+      return {sha,encoding:"base64",content:Buffer.from(content).toString("base64")};
+    }
   };
   const verify:CalculatorCheckRunner=async input=>{
     checks++;
@@ -202,7 +225,20 @@ function preselectionFixture(root: string) {
     setWorkflowModeChanged(value:boolean){alterMode=value;},
     receiptBytes:()=>new Uint8Array(readFileSync(t02path)),
     t03ReceiptPath:()=>join(state,"calc-"+plan.tasks[2]!.id+".json"),
-    t03LockPath:()=>join(state,"calc-"+plan.tasks[2]!.id+".lock")
+    t03LockPath:()=>join(state,"calc-"+plan.tasks[2]!.id+".lock"),
+    publishSuccessor(files:readonly {path:string;content:string}[]){
+      if(!executable)throw Error("not enabled");
+      successorTree=[...after];
+      for(const file of files){
+        const sha=gitBlob(file.content);
+        sourceBySha.set(sha,file.content);
+        const at=successorTree.findIndex(value=>value.path===file.path);
+        const item:CalculatorTreeEntry={path:file.path,sha,type:"blob",mode:"100644"};
+        if(at>=0)successorTree[at]=item;else successorTree.push(item);
+      }
+      head=successorSha;
+      return successorSha;
+    }
   };
 }
 test("host-checked historical t02 yields exactly a non-authorizing t03 preview; no model, claim or receipt rewrite",async()=>{
