@@ -120,7 +120,7 @@ try{
  const proposals=[core.payload.proposal,capsule.payload.proposal];
  for(const proposal of proposals)for(const f of proposal.files)assert.equal(sources.get(f.path),f.content);
  phase='node_sandbox_preflight';
- const checks=createCalculatorSandbox({image:NODE,baseSha:PIN.candidateSha,baseSources:sources});assert.equal((await checks.preflight()).ready,true);
+ const checks=createCalculatorSandbox({image:NODE,baseSha:PIN.candidateSha,baseSources:sources,includeFailureDetails:true});assert.equal((await checks.preflight()).ready,true);
  phase='browser_sandbox_preflight';
  const browser=createCalculatorBrowserSandbox({image:BROWSER});await browser.preflight();
  const rebased=proposals.map(p=>({...p,baseSha:PIN.candidateSha}));
@@ -194,7 +194,7 @@ try{
  active={attempt:1,stage:'admission',status:'running',assessments:[],modelState:high,httpInFlight:false,publicationStarted:false};
  let exported=false;
  team=Object.freeze({
-  generate:async(_plan,id,snapshot)=>{assert.equal(exported,false);assert.equal(id,TASK);assert.equal(snapshot.baseSha,PIN.candidateSha);exported=true;adopted=await coreTeam.repair(_plan,id,taskSnapshot,repairRequest);save({...active,proposal:adopted,httpInFlight:false});const verified=await testProposal({task:plan.tasks[2],changes:adopted,proposalDigest:calculatorProposalDigest(adopted)});report.repairedProposalChecks={status:verified.status,testsExecuted:verified.testsExecuted,failures:verified.failures};assert.equal(verified.status,'passed');assert.ok(hostEvidence.get(adopted));report.authorRepairVerified=true;return adopted;},
+  generate:async(_plan,id,snapshot)=>{assert.equal(exported,false);assert.equal(id,TASK);assert.equal(snapshot.baseSha,PIN.candidateSha);exported=true;adopted=await coreTeam.repair(_plan,id,taskSnapshot,repairRequest);put('private-agent-repaired-proposal.json',adopted);save({...active,proposal:adopted,httpInFlight:false});const verified=await testProposal({task:plan.tasks[2],changes:adopted,proposalDigest:calculatorProposalDigest(adopted)});report.repairedProposalChecks={status:verified.status,testsExecuted:verified.testsExecuted,failures:verified.failures};assert.equal(verified.status,'passed');assert.ok(hostEvidence.get(adopted));report.authorRepairVerified=true;return adopted;},
   assess:async(role,_plan,id,changes)=>{assert.equal(exported,true);assert.equal(changes,adopted);return coreTeam.assess(role,_plan,id,changes);},
   repair:async()=>{throw Error('No author replay or additional correction permitted');},
   checkpointCharge:()=>addPrior(coreTeam.checkpointCharge()),diagnostic:coreTeam.diagnostic,
