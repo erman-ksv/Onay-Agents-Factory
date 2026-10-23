@@ -86,7 +86,7 @@ export function buildCalculatorRoleInstructions(value: unknown): string {
     role === "coder" || role === "frontend"
       ? 'Return only {"summary":string,"changes":[{"operation":"create","path":string,"content":string,"message":string} OR {"operation":"patch","path":string,"sourceSha256":string,"edits":[{"before":string,"after":string}],"message":string}]}. If evidence is insufficient, return changes:[] and a blocked summary; the host will stop rather than authorize an empty-success proposal.'
       : role === "commander" || role === "explorer" ? "Return the bounded planning/evidence schema requested by the host; never invent tool results."
-      : 'For assessments return only {"ready":boolean,"summary":string,"findings":[{"severity":"blocker"|"high"|"medium"|"low","message":string,"evidenceRefs":[string]}],"unverifiedAreas":[string]}. Cite only host-supplied evidence IDs; never return execution or publication authority.',
+      : buildCalculatorAssessmentResponseInstructions(),
   ].filter(Boolean).join("\n\n");
 }
 
@@ -120,42 +120,97 @@ function plain(value: unknown): value is Record<string, unknown> {
 function keys(value: Record<string, unknown>, names: string[]): boolean {
   return Object.keys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
 }
+export const CALCULATOR_ASSESSMENT_LIMITS = Object.freeze({ jsonBytes: 12000, summaryCharacters: 600,
+  findings: 12, findingMessageCharacters: 400, evidenceRefs: 16, evidenceRefCharacters: 200,
+  unverifiedAreas: 8, unverifiedAreaCharacters: 240 });
+const validationCodes = ["role_invalid", "supplied_refs_invalid", "schema_invalid", "ready_invalid", "summary_invalid",
+  "summary_character_limit", "findings_invalid", "findings_limit", "unverified_areas_invalid", "unverified_areas_limit",
+  "unverified_area_invalid", "unverified_area_character_limit", "json_invalid", "json_byte_limit", "finding_schema_invalid",
+  "finding_severity_invalid", "finding_message_invalid", "finding_message_character_limit", "finding_refs_invalid",
+  "finding_refs_limit", "finding_ref_character_limit", "finding_ref_not_supplied", "assessment_unreadable"] as const;
+export type CalculatorAssessmentValidationCode = typeof validationCodes[number];
+export function isCalculatorAssessmentValidationCode(value: unknown): value is CalculatorAssessmentValidationCode {
+  return typeof value === "string" && validationCodes.includes(value as CalculatorAssessmentValidationCode);
+}
+/** Owned codes only. The rejected result and upstream errors are never retained. */
+export class CalculatorAssessmentValidationError extends Error {
+  readonly code: CalculatorAssessmentValidationCode;
+  constructor(code: CalculatorAssessmentValidationCode) {
+    super(CALCULATOR_TEAM_ERROR);
+    if (!isCalculatorAssessmentValidationCode(code)) throw new Error(CALCULATOR_TEAM_ERROR);
+    this.name = "CalculatorAssessmentValidationError"; this.code = code; Object.freeze(this);
+  }
+}
+function invalid(code: CalculatorAssessmentValidationCode): never { throw new CalculatorAssessmentValidationError(code); }
 function text(value: unknown, max: number): value is string {
   return typeof value === "string" && value === value.trim() && value.length > 0 && value.length <= max &&
     !/[\u0000-\u001f\u007f]/.test(value) && !scanForSecrets(value).length;
 }
 function refs(value: unknown): value is string[] {
-  return Array.isArray(value) && value.length <= 16 && new Set(value).size === value.length &&
-    value.every(ref => text(ref, 200) && /^[A-Za-z0-9_./:@#()+-]+$/.test(ref));
+  return Array.isArray(value) && value.length <= CALCULATOR_ASSESSMENT_LIMITS.evidenceRefs && new Set(value).size === value.length &&
+    value.every(ref => text(ref, CALCULATOR_ASSESSMENT_LIMITS.evidenceRefCharacters) && /^[A-Za-z0-9_./:@#()+-]+$/.test(ref));
 }
-function boundedJson(value: unknown): boolean {
-  try { return Buffer.byteLength(JSON.stringify(value)) <= 12_000; } catch { return false; }
+export function buildCalculatorAssessmentResponseInstructions(): string {
+  const limits = CALCULATOR_ASSESSMENT_LIMITS;
+  return 'For assessments return only {"ready":boolean,"summary":string,"findings":[{"severity":"blocker"|"high"|"medium"|"low","message":string,"evidenceRefs":[string]}],"unverifiedAreas":[string]}. ' +
+    "Exactly these four top-level fields and three fields per finding; no extra fields. Summary: at most " + limits.summaryCharacters +
+    " characters. Findings: at most " + limits.findings + "; each message: at most " + limits.findingMessageCharacters +
+    " characters; each evidenceRefs: at most " + limits.evidenceRefs + " unique IDs of at most " + limits.evidenceRefCharacters +
+    " characters, selected ONLY from packet.allowedEvidenceRefs. Empty findings/evidenceRefs are allowed; unknown paths or IDs are not evidence references. UnverifiedAreas: at most " +
+    limits.unverifiedAreas + " strings, each at most " + limits.unverifiedAreaCharacters + " characters. Total JSON: at most " +
+    limits.jsonBytes + " UTF-8 bytes. All text must be nonempty, trimmed, secret-free and contain no control characters or newlines. Never return execution or publication authority.";
 }
 /** AI findings are assessments, never proof that a tool executed. Evidence IDs
  * originate in a host packet; unknown IDs reject, missing IDs remain visible. */
 export function validateCalculatorAssessment(roleValue: unknown, input: unknown, suppliedEvidenceRefs: readonly string[]): CalculatorAssessment {
-  const role = calculatorRole(roleValue);
-  if (["commander", "explorer", "coder", "frontend"].includes(role) || !refs(suppliedEvidenceRefs) ||
-      !plain(input) || !keys(input, ["ready", "summary", "findings", "unverifiedAreas"]) || typeof input.ready !== "boolean" ||
-      !text(input.summary, 600) || !Array.isArray(input.findings) || input.findings.length > 12 ||
-      !Array.isArray(input.unverifiedAreas) || input.unverifiedAreas.length > 8 ||
-      !input.unverifiedAreas.every(value => text(value, 240)) || !boundedJson(input)) return refuse();
-  const supplied = new Set(suppliedEvidenceRefs);
-  const findings: Array<CalculatorAssessment["findings"][number]> = [];
-  for (const finding of input.findings) {
-    if (!plain(finding) || !keys(finding, ["severity", "message", "evidenceRefs"]) ||
-        typeof finding.severity !== "string" || !["blocker", "high", "medium", "low"].includes(finding.severity) || !text(finding.message, 400) ||
-        !refs(finding.evidenceRefs) || finding.evidenceRefs.some(ref => !supplied.has(ref))) return refuse();
-    findings.push(Object.freeze({ severity: finding.severity as Severity, message: finding.message,
-      evidenceRefs: Object.freeze([...finding.evidenceRefs]), evidenceStatus: finding.evidenceRefs.length ? "supplied" : "missing" }));
+  try {
+    let role: CalculatorRole;
+    try { role = calculatorRole(roleValue); } catch { return invalid("role_invalid"); }
+    const limits = CALCULATOR_ASSESSMENT_LIMITS;
+    if (["commander", "explorer", "coder", "frontend"].includes(role)) return invalid("role_invalid");
+    if (!refs(suppliedEvidenceRefs)) return invalid("supplied_refs_invalid");
+    if (!plain(input) || !keys(input, ["ready", "summary", "findings", "unverifiedAreas"])) return invalid("schema_invalid");
+    if (typeof input.ready !== "boolean") return invalid("ready_invalid");
+    if (typeof input.summary === "string" && input.summary.length > limits.summaryCharacters) return invalid("summary_character_limit");
+    if (!text(input.summary, limits.summaryCharacters)) return invalid("summary_invalid");
+    if (!Array.isArray(input.findings)) return invalid("findings_invalid");
+    if (input.findings.length > limits.findings) return invalid("findings_limit");
+    if (!Array.isArray(input.unverifiedAreas)) return invalid("unverified_areas_invalid");
+    if (input.unverifiedAreas.length > limits.unverifiedAreas) return invalid("unverified_areas_limit");
+    for (const area of input.unverifiedAreas) {
+      if (typeof area === "string" && area.length > limits.unverifiedAreaCharacters) return invalid("unverified_area_character_limit");
+      if (!text(area, limits.unverifiedAreaCharacters)) return invalid("unverified_area_invalid");
+    }
+    let encoded: string | undefined;
+    try { encoded = JSON.stringify(input); } catch { return invalid("json_invalid"); }
+    if (encoded === undefined) return invalid("json_invalid");
+    if (Buffer.byteLength(encoded) > limits.jsonBytes) return invalid("json_byte_limit");
+    const supplied = new Set(suppliedEvidenceRefs);
+    const findings: Array<CalculatorAssessment["findings"][number]> = [];
+    for (const finding of input.findings) {
+      if (!plain(finding) || !keys(finding, ["severity", "message", "evidenceRefs"])) return invalid("finding_schema_invalid");
+      if (typeof finding.severity !== "string" || !["blocker", "high", "medium", "low"].includes(finding.severity)) return invalid("finding_severity_invalid");
+      if (typeof finding.message === "string" && finding.message.length > limits.findingMessageCharacters) return invalid("finding_message_character_limit");
+      if (!text(finding.message, limits.findingMessageCharacters)) return invalid("finding_message_invalid");
+      if (!Array.isArray(finding.evidenceRefs)) return invalid("finding_refs_invalid");
+      if (finding.evidenceRefs.length > limits.evidenceRefs) return invalid("finding_refs_limit");
+      if (finding.evidenceRefs.some(ref => typeof ref === "string" && ref.length > limits.evidenceRefCharacters)) return invalid("finding_ref_character_limit");
+      if (!refs(finding.evidenceRefs)) return invalid("finding_refs_invalid");
+      if (finding.evidenceRefs.some(ref => !supplied.has(ref))) return invalid("finding_ref_not_supplied");
+      findings.push(Object.freeze({ severity: finding.severity as Severity, message: finding.message,
+        evidenceRefs: Object.freeze([...finding.evidenceRefs]), evidenceStatus: finding.evidenceRefs.length ? "supplied" : "missing" }));
+    }
+    const unverifiedAreas = [...input.unverifiedAreas] as string[];
+    const missing = findings.filter(finding => finding.evidenceStatus === "missing").length;
+    if (missing) unverifiedAreas.push(String(missing) + " findings lack supplied evidence references; their asserted behavior remains unverified.");
+    if (!supplied.size) unverifiedAreas.push("No scoped evidence was supplied; approval requires evidence.");
+    unverifiedAreas.push("A model assessment does not prove test execution, publication or overall task completion.");
+    return Object.freeze({ role, ready: input.ready && supplied.size > 0 &&
+      !findings.some(finding => finding.severity === "blocker" || finding.severity === "high"),
+      summary: input.summary, findings: Object.freeze(findings), unverifiedAreas: Object.freeze(unverifiedAreas),
+      testsExecuted: false, overallTaskCompletionVerified: false, publicationAuthorized: false });
+  } catch (error) {
+    if (error instanceof CalculatorAssessmentValidationError) throw error;
+    return invalid("assessment_unreadable");
   }
-  const unverifiedAreas = [...input.unverifiedAreas] as string[];
-  const missing = findings.filter(finding => finding.evidenceStatus === "missing").length;
-  if (missing) unverifiedAreas.push(String(missing) + " findings lack supplied evidence references; their asserted behavior remains unverified.");
-  if (!supplied.size) unverifiedAreas.push("No scoped evidence was supplied; approval requires evidence.");
-  unverifiedAreas.push("A model assessment does not prove test execution, publication or overall task completion.");
-  return Object.freeze({ role, ready: input.ready && supplied.size > 0 &&
-    !findings.some(finding => finding.severity === "blocker" || finding.severity === "high"),
-    summary: input.summary, findings: Object.freeze(findings), unverifiedAreas: Object.freeze(unverifiedAreas),
-    testsExecuted: false, overallTaskCompletionVerified: false, publicationAuthorized: false });
 }

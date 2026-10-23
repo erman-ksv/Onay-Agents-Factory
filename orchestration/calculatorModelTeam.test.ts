@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import { CALCULATOR_ACCEPTANCE, calculatorPlanTaskId, createCalculatorPlan } from "./calculatorPlan.js";
-import { CALCULATOR_MODEL_ERROR, createCalculatorModelTeam, type CalculatorPriorModelCharge } from "./calculatorModelTeam.js";
+import { CALCULATOR_MODEL_ERROR, createCalculatorModelTeam, type CalculatorPriorModelCharge,
+  type CalculatorRejectedAssessment, CALCULATOR_REJECTED_ASSESSMENT_MAX_BYTES } from "./calculatorModelTeam.js";
 
 const A = "a".repeat(40), B = "b".repeat(40);
 const owner = { version: 1, id: "model-pilot", goal: "Create the agreed complete calculator website with arithmetic and browser acceptance tests.",
@@ -70,6 +71,7 @@ test("Coder prepares validated new files and independent specialists receive com
     assert.equal(packet.task.dependsOn, undefined);
     assert.ok(packet.completeChangedText.changes[0].contentSha256);
     assert.equal(packet.baseSha, A);
+    assert.deepEqual(packet.allowedEvidenceRefs, ["changes@" + A]);
     assert.ok(packet.unverifiedAreas.includes("No runtime tests or browser checks have executed"));
     for (const area of ["Unshown unchanged source", "Independent review", "Exact-candidate runtime CI", "Browser acceptance"])
       assert.ok(packet.unverifiedAreas.includes(area));
@@ -405,4 +407,143 @@ test("a provider without provable Groq accounting cannot execute a checkpointed 
   await assert.rejects(async () => team.generate(plan, task.id, await snapshot()), refusal);
   assert.equal(calls, 0); assert.equal(saves, 0);
   assert.equal(team.diagnostic().reasonCode, "model_checkpoint_persistence_failed");
+});
+
+test("invalid returned assessments retain exact field codes and private JSON without authority or another HTTP call", async t => {
+  const pass = { ready: true, summary: "The shown changes are scoped.", findings: [], unverifiedAreas: [] };
+  const cases = [
+    ["schema_invalid", { ...pass, extra: "PRIVATE_ASSESSMENT" }],
+    ["summary_invalid", { ...pass, summary: "PRIVATE_ASSESSMENT\nnot one line" }],
+    ["summary_character_limit", { ...pass, summary: "x".repeat(601) }],
+    ["unverified_areas_limit", { ...pass, unverifiedAreas: Array.from({ length: 9 }, () => "PRIVATE_ASSESSMENT") }],
+    ["finding_ref_not_supplied", { ...pass, findings: [{ severity: "low", message: "A scoped concern.", evidenceRefs: ["src/calculator.mjs"] }] }],
+  ] as const;
+  for (const [code, output] of cases) await t.test(code, async () => {
+    let calls = 0;
+    const captured: CalculatorRejectedAssessment[] = [];
+    const team = createCalculatorModelTeam(owner, environment, async () => response(++calls === 1 ? generated : output), {}, undefined, {
+      afterAssessmentRejected: rejection => { captured.push(rejection); },
+    });
+    const changes = await team.generate(plan, task.id, await snapshot());
+    await assert.rejects(() => team.assess("security", plan, task.id, changes), refusal);
+    const diagnostic = team.diagnostic();
+    assert.equal(diagnostic.reasonCode, "assessment_validation_failed");
+    assert.equal(diagnostic.assessmentRole, "security"); assert.equal(diagnostic.validationCode, code);
+    assert.equal(diagnostic.httpStatus, 200); assert.equal(diagnostic.finishReason, "stop");
+    assert.equal(diagnostic.httpRequestsSent, 2); assert.equal(team.snapshot().stopped, true);
+    assert.equal(captured.length, 1); assert.equal(captured[0].role, "security"); assert.equal(captured[0].validationCode, code);
+    assert.deepEqual(captured[0].result, output); assert.notEqual(captured[0].result, output);
+    assert.ok(Object.isFrozen(captured[0])); assert.ok(Object.isFrozen(captured[0].result));
+    assert.ok(Object.isFrozen((captured[0].result as typeof pass).findings));
+    assert.ok(!JSON.stringify(diagnostic).includes("PRIVATE_ASSESSMENT"));
+    assert.ok(!JSON.stringify(diagnostic).includes("src/calculator.mjs"));
+    assert.ok(!JSON.stringify(diagnostic).includes("fixture-key"));
+    await assert.rejects(() => team.assess("reviewer", plan, task.id, changes), refusal);
+    assert.equal(calls, 2); assert.equal(captured.length, 1); assert.deepEqual(team.diagnostic(), diagnostic);
+  });
+});
+
+test("rejection persistence starts after the terminal latch and cannot return an assessment approval", async () => {
+  let calls = 0, hooks = 0;
+  let reenter: () => Promise<unknown> = async () => undefined;
+  const output = { ready: true, summary: "Unexpected schema.", findings: [], unverifiedAreas: [], publicationAuthorized: true };
+  const team = createCalculatorModelTeam(owner, environment, async () => response(++calls === 1 ? generated : output), {}, undefined, {
+    afterAssessmentRejected: async rejection => {
+      hooks++; assert.equal(team.snapshot().stopped, true); assert.equal(team.diagnostic().reasonCode, "assessment_validation_failed");
+      await assert.rejects(reenter, refusal);
+      assert.throws(() => { (rejection.result as { ready: boolean }).ready = false; }, TypeError);
+      return { ready: true } as never; // Callback output is untrusted data, never authority.
+    },
+  });
+  const changes = await team.generate(plan, task.id, await snapshot());
+  reenter = () => team.assess("reviewer", plan, task.id, changes);
+  await assert.rejects(() => team.assess("security", plan, task.id, changes), refusal);
+  assert.equal(calls, 2); assert.equal(hooks, 1); assert.equal(team.diagnostic().reasonCode, "assessment_validation_failed");
+});
+
+test("a private rejection hook failure has a fixed terminal code with no upstream error text or replay", async () => {
+  let calls = 0, hooks = 0;
+  const team = createCalculatorModelTeam(owner, environment, async () => response(++calls === 1 ? generated : { invalid: true }), {}, undefined, {
+    afterAssessmentRejected: () => { hooks++; throw Error("PRIVATE_HOOK_SOURCE_AND_KEY"); },
+  });
+  const changes = await team.generate(plan, task.id, await snapshot());
+  await assert.rejects(() => team.assess("tester", plan, task.id, changes), refusal);
+  assert.equal(team.diagnostic().reasonCode, "assessment_rejection_persistence_failed");
+  assert.equal(team.diagnostic().assessmentRole, "tester"); assert.equal(team.diagnostic().validationCode, "schema_invalid");
+  assert.ok(!JSON.stringify(team.diagnostic()).includes("PRIVATE_HOOK_SOURCE_AND_KEY"));
+  await assert.rejects(() => team.assess("tester", plan, task.id, changes), refusal);
+  assert.equal(calls, 2); assert.equal(hooks, 1);
+});
+
+test("transport/JSON failures and valid declined findings do not invoke the rejection-data hook", async t => {
+  for (const kind of ["http", "json", "secret", "declined"] as const) await t.test(kind, async () => {
+    let calls = 0, hooks = 0;
+    const team = createCalculatorModelTeam(owner, environment, async () => {
+      if (++calls === 1) return response(generated);
+      if (kind === "http") return new Response("PRIVATE_UPSTREAM_BODY", { status: 429 });
+      if (kind === "json") return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: "not-json" } }] });
+      if (kind === "secret") return response({ ready: true, summary: "ghp_" + "A".repeat(32), findings: [], unverifiedAreas: [] });
+      return response({ ready: false, summary: "A real blocker remains.", findings: [{ severity: "high", message: "Shown requirement is missing.",
+        evidenceRefs: ["changes@" + A] }], unverifiedAreas: [] });
+    }, {}, undefined, { afterAssessmentRejected: () => { hooks++; } });
+    const changes = await team.generate(plan, task.id, await snapshot());
+    if (kind === "declined") assert.equal((await team.assess("reviewer", plan, task.id, changes)).ready, false);
+    else await assert.rejects(() => team.assess("reviewer", plan, task.id, changes), refusal);
+    assert.equal(hooks, 0); assert.equal(calls, 2);
+    assert.equal(team.diagnostic().validationCode, undefined);
+  });
+});
+
+test("private rejection data preserves oversized-validator JSON and bounded numeric canonical expansion", async () => {
+  let calls = 0;
+  let captured: CalculatorRejectedAssessment | undefined;
+  // 1e20 is legal four-byte JSON but its parsed number expands to 21 bytes when
+  // serialized. The transport content still fits its unchanged 16000-byte cap.
+  const raw = '{"unexpected":[' + Array.from({ length: 2500 }, () => "1e20").join(",") + "]}";
+  assert.ok(Buffer.byteLength(raw) < 16000);
+  const team = createCalculatorModelTeam(owner, environment, async () => {
+    if (++calls === 1) return response(generated);
+    return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: raw } }] });
+  }, {}, undefined, { afterAssessmentRejected: rejection => { captured = rejection; } });
+  const changes = await team.generate(plan, task.id, await snapshot());
+  await assert.rejects(() => team.assess("security", plan, task.id, changes), refusal);
+  assert.ok(captured); assert.ok(Buffer.byteLength(JSON.stringify(captured.result)) > 16000);
+  assert.ok(Buffer.byteLength(JSON.stringify(captured.result)) <= CALCULATOR_REJECTED_ASSESSMENT_MAX_BYTES);
+  assert.ok(Buffer.byteLength(JSON.stringify(captured)) <= 100000);
+  assert.equal(team.diagnostic().reasonCode, "assessment_validation_failed"); assert.equal(calls, 2);
+});
+
+test("a response above the assessment JSON ceiling remains available as private rejected data", async () => {
+  const refs = Array.from({ length: 16 }, (_, i) => "source:" + "x".repeat(175) + i);
+  const output = { ready: true, summary: "A bounded response with excess total JSON.", findings: Array.from({ length: 4 }, () => ({
+    severity: "low", message: "x".repeat(400), evidenceRefs: refs })), unverifiedAreas: [] };
+  const bytes = Buffer.byteLength(JSON.stringify(output)); assert.ok(bytes > 12000 && bytes < 16000);
+  let calls = 0, captured: CalculatorRejectedAssessment | undefined;
+  const team = createCalculatorModelTeam(owner, environment, async () => response(++calls === 1 ? generated : output), {}, undefined, {
+    afterAssessmentRejected: value => { captured = value; },
+  });
+  const changes = await team.generate(plan, task.id, await snapshot());
+  await assert.rejects(() => team.assess("reviewer", plan, task.id, changes), refusal);
+  assert.ok(captured); assert.equal(captured.validationCode, "json_byte_limit"); assert.deepEqual(captured.result, output);
+  assert.equal(team.diagnostic().validationCode, "json_byte_limit"); assert.equal(calls, 2);
+});
+
+test("private capture refuses raw or escaped provider/Actions credentials without exposing them in diagnostics", async t => {
+  for (const prefix of ["gsk_", "ghs_", "ghp_", "fixture-key"]) for (const escaped of [false, true]) await t.test(prefix + (escaped ? " escaped" : " raw"), async () => {
+    const secret = prefix === "fixture-key" ? prefix : prefix + "A".repeat(32);
+    let calls = 0, captures = 0;
+    const raw = JSON.stringify({ ready: true, summary: "Unexpected field.", findings: [], unverifiedAreas: [], extra: secret });
+    const content = escaped ? raw.replace(secret, [...secret].map(character => "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0")).join("")) : raw;
+    const team = createCalculatorModelTeam(owner, environment, async () => {
+      if (++calls === 1) return response(generated);
+      return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content } }] });
+    }, {}, undefined, { afterAssessmentRejected: () => { captures++; } });
+    const changes = await team.generate(plan, task.id, await snapshot());
+    await assert.rejects(() => team.assess("security", plan, task.id, changes), refusal);
+    assert.equal(captures, 0); assert.equal(calls, 2); assert.equal(team.snapshot().stopped, true);
+    const diagnostic = team.diagnostic();
+    assert.ok(!JSON.stringify(diagnostic).includes(secret)); assert.ok(!JSON.stringify(diagnostic).includes(content));
+    if (prefix !== "ghp_" || escaped) assert.equal(diagnostic.reasonCode, "assessment_rejection_persistence_failed");
+    await assert.rejects(() => team.assess("reviewer", plan, task.id, changes), refusal); assert.equal(calls, 2);
+  });
 });

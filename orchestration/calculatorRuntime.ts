@@ -6,7 +6,9 @@ import { createCalculatorSnapshotReader, loadCalculatorSnapshot, calculatorSourc
 import { createCalculatorPublisher } from "../github/calculatorPublisher.js";
 import { createCalculatorCiReader, type CalculatorWorkflowPin } from "../github/calculatorCi.js";
 import { createCalculatorSandbox } from "./calculatorSandbox.js";
-import { createCalculatorModelTeam, type CalculatorPriorModelCharge } from "./calculatorModelTeam.js";
+import { createCalculatorModelTeam, type CalculatorPriorModelCharge, type CalculatorRejectedAssessment } from "./calculatorModelTeam.js";
+import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
+import { writeCalculatorAssessmentRejection } from "./calculatorAssessmentRejection.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import { prepareCalculatorGoal, type CalculatorPlan } from "./calculatorPlan.js";
 import { openCalculatorWorkspace } from "./calculatorWorkspace.js";
@@ -51,6 +53,38 @@ export function createCalculatorRuntimeRequestCheckpoint(limitsInput: Calculator
       await persist(charge, admitted);
       if (!admitted) return refuse();
     } catch { stopped = true; return refuse(); }
+  };
+}
+export type CalculatorRuntimeAssessmentContext = Readonly<{
+  identity: CalculatorExecutionCheckpointIdentity; proposal: PreparedCalculatorChanges;
+  expectedRole: CalculatorRejectedAssessment["role"]; kind: "task" | "dependency";
+  stage: string; attempt: 1 | 2; status: CalculatorExecutionCheckpointPayload["status"]; httpInFlight: boolean;
+}>;
+/** A rejection hook proves that a parsed provider response returned. Preserve
+ * that result privately before clearing uncertainty in the execution checkpoint.
+ * This terminal host hook never appends an accepted specialist assessment. */
+export function createCalculatorRuntimeAssessmentRejection(input: Readonly<{
+  directory: string; context: () => CalculatorRuntimeAssessmentContext | undefined;
+  charge: () => CalculatorPriorModelCharge;
+  persistReturned: (charge: CalculatorPriorModelCharge) => void | Promise<void>;
+}>) {
+  if (!input || typeof input.context !== "function" || typeof input.charge !== "function" || typeof input.persistReturned !== "function") return refuse();
+  let stopped = false;
+  return async (rejection: CalculatorRejectedAssessment): Promise<void> => {
+    if (stopped) return refuse(); stopped = true;
+    try {
+      const context = input.context();
+      if (!context || !rejection || context.expectedRole !== rejection.role || context.status !== "running" || !context.httpInFlight ||
+          context.proposal.repository !== context.identity.repository ||
+          (context.kind !== "task" && context.kind !== "dependency") ||
+          context.stage !== (context.kind === "task" ? rejection.role + "_" + context.attempt : "dependency_" + rejection.role) ||
+          (context.kind === "task" && (context.proposal.baseRef !== context.identity.branch || context.proposal.baseSha !== context.identity.baseSha)) ||
+          (context.kind === "dependency" && context.proposal.baseSha !== context.identity.bootstrapSha)) return refuse();
+      writeCalculatorAssessmentRejection(input.directory, { ...context.identity,
+        proposalDigest: calculatorProposalDigest(context.proposal), role: rejection.role },
+      { result: rejection.result, validationCode: rejection.validationCode });
+      await input.persistReturned(input.charge());
+    } catch { return refuse(); }
   };
 }
 function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
@@ -212,9 +246,10 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       ...(limits ? { hostLimits: limits } : {}),
       version: config.version, sandboxImage: config.sandboxImage,
       trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
-    const writers = createCalculatorRuntimeCheckpointWriters(privateDirectory, { repository: owner.repository,
+    const checkpointIdentity = { repository: owner.repository,
       goalId: owner.id, ownerFingerprint: owner.ownerFingerprint, planFingerprint: saved.fingerprint,
-      branch: saved.branch, baseSha: currentSha, bootstrapSha: owner.baseSha, runtimeConfigDigest });
+      branch: saved.branch, baseSha: currentSha, bootstrapSha: owner.baseSha, runtimeConfigDigest };
+    const writers = createCalculatorRuntimeCheckpointWriters(privateDirectory, checkpointIdentity);
     const runtimeId = "runtime-" + digest({ goalId: owner.id, currentSha }).slice(0, 48);
     let checkpointUnavailable = false, activeId = runtimeId, active: CalculatorExecutionCheckpointPayload = {
       attempt: 1, stage: "runtime_budget", status: "running", assessments: [],
@@ -232,7 +267,25 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     }
     const beforeRequest = createCalculatorRuntimeRequestCheckpoint(limits, (charge, admitted) =>
       save({ ...active, status: admitted ? "running" : "blocked", httpInFlight: admitted }, charge));
-    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest });
+    let dependencyAssessment: Readonly<{ taskId: string; proposal: PreparedCalculatorChanges; expectedRole: CalculatorRejectedAssessment["role"] }> | undefined;
+    const afterAssessmentRejected = createCalculatorRuntimeAssessmentRejection({ directory: privateDirectory,
+      context: () => {
+        if (dependencyAssessment) {
+          if (activeId !== runtimeId || active.stage !== "dependency_" + dependencyAssessment.expectedRole ||
+              !saved.tasks.some(task => task.id === dependencyAssessment!.taskId)) return undefined;
+          return { identity: { ...checkpointIdentity, taskId: dependencyAssessment.taskId }, proposal: dependencyAssessment.proposal,
+            expectedRole: dependencyAssessment.expectedRole, kind: "dependency", stage: active.stage, attempt: active.attempt,
+            status: active.status, httpInFlight: active.httpInFlight };
+        }
+        const match = /^(security|reviewer|tester)_([12])$/.exec(active.stage);
+        if (!match || activeId === runtimeId || !active.proposal || !saved.tasks.some(task => task.id === activeId) ||
+            Number(match[2]) !== active.attempt) return undefined;
+        return { identity: { ...checkpointIdentity, taskId: activeId }, proposal: active.proposal,
+          expectedRole: match[1] as CalculatorRejectedAssessment["role"], kind: "task", stage: active.stage, attempt: active.attempt,
+          status: active.status, httpInFlight: active.httpInFlight };
+      }, charge: () => charge(), persistReturned: returnedCharge => save({ ...active, status: "blocked", httpInFlight: false }, returnedCharge),
+    });
+    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected });
     function charge(): CalculatorPriorModelCharge {
       const result = team.checkpointCharge(); if (!result) return refuse(); return result;
     }
@@ -264,7 +317,10 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
           // ledger in a source-free runtime capsule, never a fictitious task run.
           if (activeId !== runtimeId || active.httpInFlight) return refuse();
           save({ ...active, stage: "dependency_" + role, status: "running" }, charge());
-          const assessment = await team.assess(role, saved, task.id, observed);
+          dependencyAssessment = { taskId: task.id, proposal: observed, expectedRole: role };
+          let assessment;
+          try { assessment = await team.assess(role, saved, task.id, observed); }
+          finally { dependencyAssessment = undefined; }
           save({ ...active, status: "passed", httpInFlight: false }, charge());
           if (!assessment.ready) return undefined;
         }
