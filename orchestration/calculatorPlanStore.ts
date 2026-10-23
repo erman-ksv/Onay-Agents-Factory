@@ -6,6 +6,7 @@ import { CALCULATOR_PLAN_ERROR, createCalculatorPlan, prepareCalculatorGoal, cal
   type CalculatorPlan, type CalculatorPlanTask, type PreparedCalculatorGoal, type CalculatorGoalRequest } from "./calculatorPlan.js";
 import { scanForSecrets } from "../github/secretScanner.js";
 import { CALCULATOR_T02_CHARGE_PIN } from "./calculatorT02ChargeReconciliation.js";
+import { inspectCalculatorT02AfterCiEvent } from "./calculatorT02AfterCiEventPreflight.js";
 import { assertCalculatorT02InspectedSuccessorPreview,
   type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
 
@@ -20,6 +21,8 @@ export type CalculatorSelectionOptions = {
   verifyTask?: (task: CalculatorPlanTask, receipt: TeamTaskSnapshot, currentBaseSha: string) => Promise<CalculatorDependencyEvidence | undefined>;
   /** Read-only historical inspection: NEVER a task-claim or executor permit. */
   inspectedT02?: CalculatorT02ReadOnlyPreselection;
+  /** Existing host-owned private barrier directory; read-only inspection only. */
+  eventDirectory?: string;
 };
 export type CalculatorSelection = {
   status: "ready" | "blocked" | "needs-review" | "all-candidates-verified";
@@ -139,8 +142,12 @@ export class CalculatorPlanStore {
     if (plan.status === "blocked") return answer("blocked", "plan_has_unresolved_blockers");
     const historical = options.inspectedT02;
     if (historical) {
-      try { assertCalculatorT02InspectedSuccessorPreview(historical); }
-      catch { return answer("needs-review", "historical_publication_unverified"); }
+      try {
+        assertCalculatorT02InspectedSuccessorPreview(historical);
+        if (typeof options.eventDirectory !== "string" ||
+            inspectCalculatorT02AfterCiEvent(options.eventDirectory, historical).status !== "not-consumed-read-only")
+          return answer("needs-review", "historical_after_ci_event_unverified");
+      } catch { return answer("needs-review", "historical_after_ci_event_unverified"); }
       if (historical.status !== "candidate-preview-only" || historical.readOnly !== true ||
           historical.executionAuthorized !== false || historical.publicationAuthorized !== false ||
           historical.resumeAuthorized !== false || historical.budgetResetAuthorized !== false ||
@@ -211,6 +218,14 @@ export class CalculatorPlanStore {
             return answer("needs-review", "historical_state_changed_during_verification");
         } finally { receipt.close(); }
       }
+    }
+    if (historical) {
+      // Reinspect the canonical after-CI barrier after asynchronous host checks.
+      // An event claimed by a concurrent worker must not appear as "ready".
+      try {
+        if (inspectCalculatorT02AfterCiEvent(options.eventDirectory!, historical).status !== "not-consumed-read-only")
+          return answer("needs-review", "historical_after_ci_event_changed");
+      } catch { return answer("needs-review", "historical_after_ci_event_changed"); }
     }
     const next = plan.tasks.find(task => !saved.has(task.id) && task.dependsOn.every(dep => verified.includes(dep)));
     if (next) return answer("ready", "next_task_selected_not_executed", next);
