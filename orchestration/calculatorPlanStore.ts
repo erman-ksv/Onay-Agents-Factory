@@ -1,10 +1,11 @@
 import { constants, closeSync, fstatSync, fsyncSync, linkSync, lstatSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
 import { CALCULATOR_PLAN_ERROR, createCalculatorPlan, prepareCalculatorGoal, calculatorPlanDigest, planObject, planKeys, refuseCalculatorPlan,
   type CalculatorPlan, type CalculatorPlanTask, type PreparedCalculatorGoal, type CalculatorGoalRequest } from "./calculatorPlan.js";
 import { scanForSecrets } from "../github/secretScanner.js";
+import { CALCULATOR_T02_CHARGE_PIN } from "./calculatorT02ChargeReconciliation.js";
 import { assertCalculatorT02InspectedSuccessorPreview,
   type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
 
@@ -151,9 +152,25 @@ export class CalculatorPlanStore {
         return answer("needs-review", "historical_publication_unverified");
     }
     const saved = new Map<string, TeamTaskSnapshot>();
+    const originalState = new Map<string, string | undefined>();
     for (const task of plan.tasks) {
       const store = this.taskReceipt(plan, task);
-      try { const receipt = store.inspectExisting(); if (receipt) saved.set(task.id, receipt); } finally { store.close(); }
+      try {
+        const receipt = store.inspectExisting();
+        // Historical recovery never trusts a receipt while a writer may still
+        // own it, including a crash lock without any receipt.
+        if (historical && store.inspectExistingLock()) return answer("needs-review", "historical_task_lock_present");
+        if (receipt) saved.set(task.id, receipt);
+        if (historical) originalState.set(task.id, receipt ? JSON.stringify(receipt) : undefined);
+      } finally { store.close(); }
+    }
+    if (historical) {
+      const original = saved.get(historical.previousTaskId);
+      // The exact historical file is canonical JSON plus a final newline.
+      // Require the authenticated archive digest, not merely stage labels.
+      if (!original || createHash("sha256").update(JSON.stringify(original) + "\\n").digest("hex") !==
+          CALCULATOR_T02_CHARGE_PIN.originalReceiptSha256)
+        return answer("needs-review", "historical_receipt_digest_changed");
     }
     // No recorded/started task is ever selected again, regardless of a status label.
     if ([...saved.values()].some(item => item.status === "running")) return answer("needs-review", "interrupted_or_running_task_no_replay");
@@ -181,6 +198,19 @@ export class CalculatorPlanStore {
           evidence.securityReady !== true || evidence.independentReviewReady !== true || evidence.taskChecksPassed !== true || evidence.testsExecuted !== true)
         return answer("needs-review", "dependency_or_candidate_unverified");
       verified.push(task.id);
+    }
+    if (historical) {
+      // A host verification callback is asynchronous: re-check EVERY task,
+      // including unclaimed successors, immediately before displaying ready.
+      for (const task of plan.tasks) {
+        const receipt = this.taskReceipt(plan, task);
+        try {
+          const present = receipt.inspectExisting();
+          if (receipt.inspectExistingLock() ||
+              (present ? JSON.stringify(present) : undefined) !== originalState.get(task.id))
+            return answer("needs-review", "historical_state_changed_during_verification");
+        } finally { receipt.close(); }
+      }
     }
     const next = plan.tasks.find(task => !saved.has(task.id) && task.dependsOn.every(dep => verified.includes(dep)));
     if (next) return answer("ready", "next_task_selected_not_executed", next);
