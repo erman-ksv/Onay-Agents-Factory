@@ -9,7 +9,8 @@ import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
 import type { CalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import type { CalculatorCheckRunner, CalculatorWorkspace } from "./calculatorWorkspace.js";
 import { calculatorWorkspacePlan, claimCalculatorWorkspaceTask, loadCalculatorWorkspaceTask,
-  assertCalculatorWorkspaceCurrent, assertCalculatorPublishedCandidate } from "./calculatorWorkspace.js";
+  assertCalculatorWorkspaceCurrent, assertCalculatorPublishedCandidate, claimHistoricalCalculatorT03 } from "./calculatorWorkspace.js";
+import type { CalculatorT02ExecutionPermit } from "./calculatorT02Admission.js";
 import { calculatorProposalDigest, validateCalculatorProposalTests, refuseCalculatorExecution,
   type CalculatorProposalTests, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
 import type { TeamTaskPublication, TeamTaskStore } from "./teamTaskStore.js";
@@ -52,6 +53,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   restoreProposal?: (plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot) => PreparedCalculatorChanges | Promise<PreparedCalculatorChanges>;
   /** Only canonical assessments revalidated by the host team are eligible. */
   restoreAssessments?: (plan: CalculatorPlan, id: string, changes: PreparedCalculatorChanges) => readonly CalculatorAssessment[] | Promise<readonly CalculatorAssessment[]>;
+  historicalT03Permit?: CalculatorT02ExecutionPermit;
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
@@ -97,7 +99,9 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     if (!options.team || !options.tools || [options.tools.checkProposal, options.tools.publish, options.tools.ci,
         options.team.generate, options.team.repair, options.team.assess].some(value => typeof value !== "function")) return refuseCalculatorExecution();
     const plan = await calculatorWorkspacePlan(workspace);
-    const claimed = await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies);
+    const claimed = options.historicalT03Permit ?
+      await claimHistoricalCalculatorT03(workspace,options.historicalT03Permit,options.verifyDependencies) :
+      await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies);
     receipt = claimed.store; task = claimed.selection.task;
     if (!receipt || !task) return answer(claimed.selection.status === "blocked" ? "blocked" : "needs-review", claimed.selection.reasonCode);
     const snapshot = await stage("load_current_source", () => loadCalculatorWorkspaceTask(workspace, task!.id));
