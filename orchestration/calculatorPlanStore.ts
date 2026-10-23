@@ -142,8 +142,9 @@ export class CalculatorPlanStore {
     if (plan.status === "blocked") return answer("blocked", "plan_has_unresolved_blockers");
     const historical = options.inspectedT02;
     if (historical) {
+      try { assertCalculatorT02InspectedSuccessorPreview(historical); }
+      catch { return answer("needs-review", "historical_publication_unverified"); }
       try {
-        assertCalculatorT02InspectedSuccessorPreview(historical);
         if (typeof options.eventDirectory !== "string" ||
             inspectCalculatorT02AfterCiEvent(options.eventDirectory, historical).status !== "not-consumed-read-only")
           return answer("needs-review", "historical_after_ci_event_unverified");
