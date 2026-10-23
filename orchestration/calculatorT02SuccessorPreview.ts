@@ -162,7 +162,7 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
     }
     if (inspectCalculatorT02ReconciliationSidecar(sidecarDirectory)?.status !== "already-recorded" ||
         await reader.getHead(plan.branch)!==PIN.candidateSha) return refuse();
-    const checked = Object.freeze({
+    const previewResult = Object.freeze({
       status:"candidate-preview-only" as const, previousTaskId:T02, nextTaskId:T03,
       planFingerprint:PLAN, candidateSha:PIN.candidateSha,
       conservativePriorCharges:PIN.conservative, readOnly:true as const,
@@ -170,8 +170,8 @@ export async function previewCalculatorT02Successor(store: CalculatorPlanStore,
       resumeAuthorized:false as const, budgetResetAuthorized:false as const,
       wholeStep8Closed:false as const,
     });
-    inspectedPreviews.add(checked);
-    return checked;
+    inspectedPreviews.add(previewResult);
+    return previewResult;
   } catch { return refuse(); }
 }
 
