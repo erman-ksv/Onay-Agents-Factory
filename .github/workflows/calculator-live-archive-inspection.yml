@@ -17,6 +17,7 @@ jobs:
           run-id: '39929869297'
           github-token: ${{ github.token }}
           path: evidence
+          merge-multiple: true
       - name: Inspect only authenticated ZIP digests and structural counts
         run: |
           python3 - <<'PY'
