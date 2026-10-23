@@ -16,6 +16,9 @@ import { calculatorProposalDigest, validateCalculatorProposalTests, refuseCalcul
 import type { TeamTaskPublication, TeamTaskStore } from "./teamTaskStore.js";
 
 export type CalculatorExecutionTeam = {
+  /** Host-owned failure capability; carries complete feedback separately from bounded issue labels. */
+  prepareRepairFeedback?(plan: CalculatorPlan, id: string, previous: PreparedCalculatorChanges,
+    tests?: CalculatorProposalTests): CalculatorRepairRequest;
   generate(plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot): Promise<PreparedCalculatorChanges>;
   repair(plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest): Promise<PreparedCalculatorChanges>;
   assess(role: "security" | "reviewer" | "tester", plan: CalculatorPlan, id: string, changes: PreparedCalculatorChanges): Promise<CalculatorAssessment>;
@@ -164,9 +167,11 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         activeAttempt = 2; attempts++; repairs++;
         changes = await stage("repair_2", async () => {
           await assertCalculatorWorkspaceCurrent(workspace);
-          const result = await options.team.repair(plan, task!.id, snapshot, {
-            previous: changes, proposalDigest: calculatorProposalDigest(changes), issues: Object.freeze([...issues]),
-          });
+          const request = options.team.prepareRepairFeedback ?
+            options.team.prepareRepairFeedback(plan, task!.id, changes, checks) : {
+              previous: changes, proposalDigest: calculatorProposalDigest(changes), issues: Object.freeze([...issues]),
+            };
+          const result = await options.team.repair(plan, task!.id, snapshot, request);
           await assertCalculatorWorkspaceCurrent(workspace);
           checkpointProposal = validateChanges(result); assessments = []; return checkpointProposal;
         });
