@@ -4,7 +4,7 @@
  * before the callback can be invoked. */
 import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
 import type { CalculatorExecutionReport } from "./calculatorExecution.js";
-import { CalculatorPlanStore } from "./calculatorPlanStore.js";
+import type { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import type { CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import type { CalculatorCiEvidence } from "../github/calculatorCi.js";
 import type { CalculatorCheckRunner } from "./calculatorWorkspace.js";
@@ -44,6 +44,27 @@ export function consumeCalculatorT02ExecutionPermit(workspace:CalculatorWorkspac
 }
 export function calculatorT02ExecutionPermitConsumed(permit:CalculatorT02ExecutionPermit):boolean {
   return executionPermits.get(permit)?.consumed===true;
+}
+/** Only the in-flight admitted executor can recheck a consumed historical
+ * event. The durable event must still be running and exclusively locked. */
+export function inspectAdmittedCalculatorT02Event(permit:CalculatorT02ExecutionPermit,
+  preview:CalculatorT02ReadOnlyPreselection, eventDirectory:string, currentSha:string):boolean {
+  const state=executionPermits.get(permit);
+  if(!state || !state.consumed || state.preview!==preview ||
+     state.eventDirectory!==eventDirectory || state.workspace.sha!==currentSha ||
+     state.workspace.planFingerprint!==preview.planFingerprint || state.taskId!==preview.nextTaskId)
+    return false;
+  let event:TeamTaskStore|undefined;
+  try {
+    const identity=calculatorAfterCiEventIdentity({version:1,planFingerprint:preview.planFingerprint,
+      previousTaskId:preview.previousTaskId,candidateSha:preview.candidateSha,
+      expectedNextTaskId:preview.nextTaskId});
+    event=new TeamTaskStore(eventDirectory,identity);
+    const receipt=event.inspectExisting();
+    return !!receipt && receipt.status==="running" &&
+      receipt.stages.some(stage=>stage.stage==="execute_next_task"&&stage.status==="running") &&
+      event.inspectExistingLock();
+  }catch{return false;}finally{event?.close();}
 }
 
 type Report = Readonly<{status:"blocked"|"consumed";reason:string;callbackInvoked:boolean;wholeStep8Closed:false}>;
