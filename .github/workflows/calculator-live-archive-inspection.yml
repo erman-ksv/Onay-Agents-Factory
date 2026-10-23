@@ -1,0 +1,42 @@
+name: Inspect blocked live archive metadata
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-live-archive-inspection.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12490838146'
+          run-id: '39929869297'
+          github-token: ${{ github.token }}
+          path: evidence
+      - name: Inspect only authenticated ZIP digests and structural counts
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,hashlib,zipfile
+          root=pathlib.Path('evidence')
+          result={'modelsRun':False,'writesPerformed':False,'originalRun':39929869297}
+          files={p.relative_to(root).as_posix():p for p in root.rglob('*') if p.is_file()}
+          result['topFiles']=[p for p in files if p.count('/')<=2]
+          for key in ['historical','audit']:
+            p=files.get('source/'+key+'.zip')
+            result[key+'ZipPresent']=p is not None
+            if p:result[key+'ZipSha256']=hashlib.sha256(p.read_bytes()).hexdigest()
+          hist=root/'source/historical'
+          manifest=hist/'qualified-manifest.json'
+          if manifest.exists():
+            b=manifest.read_bytes();m=json.loads(b)
+            assert hashlib.sha256(b).hexdigest()=='68f3854c9df47e48219e206df977dc0f68d2cfe4cdcfeaaa0b5380fc013ce71c'
+            assert all(hashlib.sha256((hist/f['path']).read_bytes()).hexdigest()==f['sha256'] for f in m['files'])
+            result['all255FilesVerified']=len(m['files'])==255
+            result['statePaths']=[f['path'] for f in m['files'] if f['path'].startswith('state/')]
+            result['t01ArchiveCopies']=[f['path'] for f in m['files'] if f['path'].endswith('manifest.json') and f['sha256']=='24e711c299bfd62ddf24418f6c92d878257c1d9e9ecc815aed45af711f7b30d4']
+          print(json.dumps(result))
+          PY
