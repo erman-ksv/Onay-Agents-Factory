@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "runtimeSha": "54b6c3847cfc3a2f568a6a317fcf86dc77102003",
-  "sourceCiRunId": 39949264440,
+  "runtimeSha": "7e4a08719fb5aa27b9b47e293326cb378248b4c6",
+  "sourceCiRunId": 39950690154,
   "taskId": "calculator-pilot-step7-v1-34ee03-t03",
   "sourceRunId": 39942417242,
   "sourceArtifactId": 12497425333,
@@ -9,5 +9,7 @@
   "maxNewRequests": 4,
   "maxAdditionalRepairs": 0,
   "automaticReplay": false,
-  "legalEnabled": false
+  "legalEnabled": false,
+  "zeroHttpStopRunId": 39949567538,
+  "zeroHttpReportSha256": "9eb221b644b46fedb0376395cb35abfdfedec9e526120fcc5e61e66cb79155ae"
 }

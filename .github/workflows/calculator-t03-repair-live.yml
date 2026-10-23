@@ -28,12 +28,12 @@ jobs:
           node --input-type=module - <<'JS'
           import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
           const value=JSON.parse(readFileSync('request/.factory/calculator-t03-repair-request.json','utf8'));
-          assert.deepEqual(value,{"version":1,"runtimeSha":"54b6c3847cfc3a2f568a6a317fcf86dc77102003","sourceCiRunId":39949264440,"taskId":"calculator-pilot-step7-v1-34ee03-t03","sourceRunId":39942417242,"sourceArtifactId":12497425333,"sourceCapsuleSha256":"0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7","maxNewRequests":4,"maxAdditionalRepairs":0,"automaticReplay":false,"legalEnabled":false});
+          assert.deepEqual(value,{"version":1,"runtimeSha":"7e4a08719fb5aa27b9b47e293326cb378248b4c6","sourceCiRunId":39950690154,"taskId":"calculator-pilot-step7-v1-34ee03-t03","sourceRunId":39942417242,"sourceArtifactId":12497425333,"sourceCapsuleSha256":"0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7","maxNewRequests":4,"maxAdditionalRepairs":0,"automaticReplay":false,"legalEnabled":false,"zeroHttpStopRunId":39949567538,"zeroHttpReportSha256":"9eb221b644b46fedb0376395cb35abfdfedec9e526120fcc5e61e66cb79155ae"});
           JS
       - name: Checkout immutable live runtime
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 54b6c3847cfc3a2f568a6a317fcf86dc77102003
+          ref: 7e4a08719fb5aa27b9b47e293326cb378248b4c6
           path: runtime
           persist-credentials: false
       - name: Download exact stopped t03 evidence without execution
@@ -43,6 +43,14 @@ jobs:
           run-id: '39942417242'
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/calculator-t03-prior
+          merge-multiple: true
+      - name: Download exact zero-HTTP context-stop proof
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12499003755'
+          run-id: '39949567538'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-context-stop
           merge-multiple: true
       - uses: pnpm/action-setup@v4
         with:
@@ -60,10 +68,11 @@ jobs:
       - name: Continue the original stopped t03 repair once
         working-directory: runtime
         env:
-          CALCULATOR_T03_REPAIR_APPROVED: CONTINUE_ONLY_ORIGINAL_T03_REPAIR
+          CALCULATOR_T03_REPAIR_APPROVED: CONTINUE_ORIGINAL_T03_AFTER_PROVEN_ZERO_HTTP
           CALCULATOR_T03_EVIDENCE_DIRECTORY: ${{ runner.temp }}/calculator-t03-prior
-          FACTORY_RUNTIME_SHA: 54b6c3847cfc3a2f568a6a317fcf86dc77102003
-          FACTORY_SOURCE_CI_RUN: '39949264440'
+          CALCULATOR_T03_CONTEXT_STOP_DIRECTORY: ${{ runner.temp }}/calculator-t03-context-stop
+          FACTORY_RUNTIME_SHA: 7e4a08719fb5aa27b9b47e293326cb378248b4c6
+          FACTORY_SOURCE_CI_RUN: '39950690154'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -81,8 +90,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: calculator-t03-repair-${{ github.run_id }}
-          path: ${{ runner.temp }}/calculator-t03-repair/
+          name: calculator-t03-repair-context-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-t03-repair-context/
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 14
