@@ -2,7 +2,8 @@
  * import an AI provider or execute a task; a trusted host must supply a callback.
  * The historical receipt is never edited, and the durable event is consumed
  * before the callback can be invoked. */
-import { TeamTaskStore } from "./teamTaskStore.js";
+import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
+import type { CalculatorExecutionReport } from "./calculatorExecution.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
 import type { CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
 import type { CalculatorCiEvidence } from "../github/calculatorCi.js";
@@ -23,9 +24,37 @@ export type HistoricalT02AdmissionTools = Readonly<{
   /** Must persist the claimed event to external durable state before any callback. */
   persistBarrier:(identity:Readonly<{id:string;fingerprint:string}>)=>Promise<void>;
   /** Host-owned callback; this adapter neither provides nor invokes a model itself. */
-  executeOne:(taskId:string)=>Promise<void>;
+  executeOne:(taskId:string)=>Promise<CalculatorExecutionReport>;
 }>;
 const blocked=(reason:string):Report=>Object.freeze({status:"blocked",reason,callbackInvoked:false,wholeStep8Closed:false});
+/** Executor success must be supported by its independently persisted task
+ * receipt. A callback returning successfully is not a task completion proof. */
+function persistedT03Candidate(receipt:TeamTaskSnapshot|undefined, result:CalculatorExecutionReport,
+  taskId:string, branch:string, repository:string):boolean {
+  if (!receipt || receipt.status!=="needs-review" ||
+      receipt.reasonCode!=="task_candidate_verified_not_whole_app" ||
+      result.status!=="candidate-verified" || result.taskId!==taskId ||
+      result.attempts<1 || result.attempts>2 ||
+      result.repairs<0 || result.repairs>1 ||
+      result.proposalTestsExecuted!==true || result.candidateTestsExecuted!==true ||
+      result.wholeAppCompleted!==false || result.finalCalculatorCiVerified!==false ||
+      result.legalEnabled!==false || !result.publication) return false;
+  const expected="https://github.com/"+repository+"/pull/"+result.publication.number;
+  if (result.publication.branch!==branch ||
+      !/^[a-f0-9]{40}$/.test(result.publication.headSha) ||
+      result.publication.url!==expected ||
+      JSON.stringify(receipt.publication)!==JSON.stringify(result.publication)) return false;
+  const passed=(stage:string)=>receipt.stages.some(s=>s.stage===stage&&s.status==="passed");
+  const attempt=result.repairs===1?2:1;
+  return passed("load_current_source") &&
+    (passed("generate_1")||passed("restore_proposal_1")) &&
+    ["security","reviewer","tester"].every(role=>passed(role+"_"+attempt)) &&
+    passed("host_tests_"+attempt) && passed("publish_candidate") &&
+    passed("verify_candidate_ci") &&
+    (result.repairs!==1 || (passed("repair_2") &&
+      receipt.stages.some(s=>s.stage==="checks_failed_1"&&s.status==="blocked")));
+}
+
 /** The execution callback is deliberately not a factory agent connector.
  * This is an ordering/replay barrier tested offline; live approval remains separate. */
 export async function admitHistoricalT02OneSuccessor(store:CalculatorPlanStore,
@@ -70,7 +99,17 @@ export async function admitHistoricalT02OneSuccessor(store:CalculatorPlanStore,
     await assertCalculatorWorkspaceCurrent(workspace);
     // NOTE: caller is responsible for a second pre-model barrier in its own executor.
     invoked=true;
-    await tools.executeOne(preview.nextTaskId);
+    const outcome=await tools.executeOne(preview.nextTaskId);
+    const target=plan.tasks.find(task=>task.id===preview.nextTaskId);
+    if (!target) throw Error("Expected successor missing");
+    const saved=store.taskReceipt(plan,target);
+    let persisted:TeamTaskSnapshot|undefined;
+    try {
+      persisted=saved.inspectExisting();
+      if(saved.inspectExistingLock())throw Error("Executor left a live or interrupted task lock");
+    }finally{saved.close();}
+    if(!persistedT03Candidate(persisted,outcome,preview.nextTaskId,plan.branch,plan.owner.repository))
+      throw Error("Executor callback lacks a verified persisted t03 candidate");
     barrier.recordStage("execute_next_task","passed");
     barrier.finish("needs-review","after_ci_one_task_consumed_no_replay");
     return Object.freeze({status:"consumed",reason:"one_host_callback_completed",callbackInvoked:true,wholeStep8Closed:false});
