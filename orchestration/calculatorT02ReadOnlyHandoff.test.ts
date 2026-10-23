@@ -239,6 +239,18 @@ test("host-checked historical t02 yields exactly a non-authorizing t03 preview; 
       }});
     assert.equal(racing.status,"needs-review");
     assert.equal(racing.reasonCode,"historical_state_changed_during_verification");
+    const eventRace=await x.store.select({currentBaseSha:PIN.candidateSha,
+      inspectedT02:selected,eventDirectory:eventDir,
+      verifyTask:async(task,receipt,currentBaseSha)=>{
+        if(task.id===x.plan.tasks[1]!.id)
+          writeFileSync(join(eventDir,event.eventId+".lock"),"",{mode:0o600,flag:"wx"});
+        return {repository:x.plan.owner.repository,taskId:task.id,
+          candidateSha:receipt.publication!.headSha,integratedAtSha:currentBaseSha,
+          securityReady:true,independentReviewReady:true,taskChecksPassed:true,testsExecuted:true};
+      }});
+    assert.equal(eventRace.status,"needs-review");
+    assert.equal(eventRace.reasonCode,"historical_after_ci_event_changed");
+    unlinkSync(join(eventDir,event.eventId+".lock"));
     unlinkSync(x.t03LockPath());
     assert.equal(selected.previousTaskId,x.plan.tasks[1]!.id);
     assert.equal(selected.nextTaskId,x.plan.tasks[2]!.id);
