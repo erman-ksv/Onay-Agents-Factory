@@ -11,6 +11,10 @@ export const CALCULATOR_UI_BROWSER_SCENARIOS = Object.freeze([
   "Clear permits a new calculation after input",
   "Clear permits a new calculation after a result",
 ]);
+export const CALCULATOR_KEYBOARD_BROWSER_SCENARIOS = Object.freeze([
+  ...CALCULATOR_UI_BROWSER_SCENARIOS,
+  "Keyboard and button calculations give the same result",
+]);
 /** Returned by an independently configured trusted browser runner, never a model
  * or owner JSON. It must bind its execution to the exact proposal and core hash. */
 export type CalculatorBrowserChecks = Readonly<{
@@ -43,11 +47,14 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
       dependencySha256: string }): Promise<CalculatorBrowserChecks>;
   }): Promise<CalculatorAssessmentEvidence> {
   try {
-    if (task.role !== "frontend" || task.acceptanceIds.length !== 2 ||
-        !["clear", "backspace"].every(id => task.acceptanceIds.includes(id)) || task.paths.length !== 3 ||
-        !["index.html", "styles.css", "src/app.mjs"].every(path => task.paths.includes(path)) ||
-        changes.files.length !== 3 || changes.files.some(file => !task.paths.includes(file.path)) ||
-        new Set(changes.files.map(file => file.path)).size !== 3 ||
+    const keyboard = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "keyboard";
+    const paths = keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : ["index.html", "styles.css", "src/app.mjs"];
+    const scenarios = keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS;
+    if (task.role !== "frontend" || (!keyboard && (task.acceptanceIds.length !== 2 ||
+        !["clear", "backspace"].every(id => task.acceptanceIds.includes(id)))) || task.paths.length !== paths.length ||
+        !paths.every(path => task.paths.includes(path)) ||
+        !changes.files.length || changes.files.some(file => !task.paths.includes(file.path)) ||
+        new Set(changes.files.map(file => file.path)).size !== changes.files.length ||
         dependencies.repository !== changes.repository || dependencies.baseRef !== changes.baseRef || dependencies.baseSha !== changes.baseSha ||
         typeof runners?.checkProposal !== "function" || typeof runners.checkBrowser !== "function") return refuse();
     const sources = calculatorSources(dependencies), path = "src/calculator.mjs", source = sources.get(path);
@@ -65,7 +72,7 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
         browser.proposalDigest !== digest || browser.dependencySha256 !== metadata.sourceSha256 || browser.status !== "passed" ||
         browser.testsExecuted !== true || browser.sandboxDisabled !== false || browser.pageErrors !== 0 || browser.blockedRequests !== 0 ||
         typeof browser.browser !== "string" || !/^Chrome\/[0-9.]{1,40}$/.test(browser.browser) ||
-        !Array.isArray(browser.scenarios) || JSON.stringify(browser.scenarios) !== JSON.stringify(CALCULATOR_UI_BROWSER_SCENARIOS) ||
+        !Array.isArray(browser.scenarios) || JSON.stringify(browser.scenarios) !== JSON.stringify(scenarios) ||
         calculatorProposalDigest(changes) !== digest) return refuse();
     const packet = Object.freeze({ evidenceId: "host-checks@" + digest, proposalDigest: digest, baseSha: changes.baseSha,
       dependencyContract: Object.freeze({ path, blobSha: metadata.blobSha, sourceSha256: metadata.sourceSha256,
@@ -77,7 +84,7 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
         sandboxDisabled: browser.sandboxDisabled, pageErrors: browser.pageErrors, blockedRequests: browser.blockedRequests,
         scenarios: Object.freeze([...browser.scenarios]) }),
       unverifiedAreas: Object.freeze(["Unshown unchanged source beyond the verified arithmetic export signature",
-        "Keyboard, narrow-screen layout, chained expressions, other browsers and phones",
+        keyboard ? "Narrow-screen layout, other browsers and phones" : "Keyboard, narrow-screen layout, chained expressions, other browsers and phones",
         "Independent model verdicts, publication, exact-candidate CI and overall completion"]), publicationAuthorized: false as const });
     const text = JSON.stringify(packet);
     if (Buffer.byteLength(text) > 3000 || scanForSecrets(text).length) return refuse();
