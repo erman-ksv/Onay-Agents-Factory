@@ -5,6 +5,8 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { CALCULATOR_T02_CHARGE_PIN as PIN, type CalculatorT02ChargeObservation } from "./calculatorT02ChargeReconciliation.js";
 import { CalculatorPlanStore } from "./calculatorPlanStore.js";
+import { admitHistoricalT02OneSuccessor, type HistoricalT02AdmissionTools } from "./calculatorT02Admission.js";
+import type { CalculatorCiEvidence } from "../github/calculatorCi.js";
 import { openCalculatorWorkspace, selectCalculatorWorkspaceTask } from "./calculatorWorkspace.js";
 import { TeamTaskStore } from "./teamTaskStore.js";
 import type { CalculatorSnapshotReader, CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
@@ -325,4 +327,124 @@ test("stale head, changed approved blobs, missing role proof and crash-lock refu
       if(bad!=="receipt")assert.equal(readdirSync(x.state).includes("calc-"+x.plan.tasks[2]!.id+".json"),false);
     }finally{rmSync(root,{recursive:true,force:true});}
   }
+});
+
+function successfulT02Ci(candidateSha:string):CalculatorCiEvidence {
+  const run=39791054276,repository="erman-ksv/Onay-Factory-Calculator",
+    branch="feat/calculator-agent/calculator-pilot-step7-v1";
+  return {
+    repository,branch,candidateSha,
+    runs:[{id:run,name:"Calculator task CI",status:"completed",conclusion:"success",head_sha:candidateSha,
+      run_attempt:1,html_url:"https://github.com/"+repository+"/actions/runs/"+run}],
+    jobs:[{name:"Calculator task CI",status:"completed",conclusion:"success",head_sha:candidateSha,
+      run_id:run,run_attempt:1,steps:["Syntax","Task tests"].map(name=>({name,status:"completed",conclusion:"success"}))}],
+    provenance:{candidateSha,workflowPins:[{id:9,path:".github/workflows/calculator-task-ci.yml",
+      blobSha:"a".repeat(40)}],verifiedRunIds:[run]},
+  };
+}
+async function admissionFixture(root:string) {
+  const x=preselectionFixture(root),source=fixture();
+  const checked=await inspectCalculatorT02ReadOnlyHandoff(source.data,source.host);
+  recordCalculatorT02ReconciliationSidecar(x.sidecarDir,checked);
+  const preview=await previewCalculatorT02Successor(x.store,x.reader,x.sidecarDir,checked,x.verify);
+  const events=join(root,"events");mkdirSync(events,{mode:0o700});
+  let ciCalls=0,modelCalls=0,persistCalls=0,changeAfterPersist=false;
+  let failPersistence=false,failExecution=false;
+  const original=x.receiptBytes();
+  const options:HistoricalT02AdmissionTools={
+    eventDirectory:events,
+    ci:async()=>{
+      ciCalls++;
+      return changeAfterPersist&&persistCalls>0?{
+        ...successfulT02Ci(PIN.candidateSha),
+        runs:successfulT02Ci(PIN.candidateSha).runs.map(run=>({...run,conclusion:"failure"})),
+      }:successfulT02Ci(PIN.candidateSha);
+    },
+    verifyDependencies:x.verify,
+    persistBarrier:async identity=>{
+      persistCalls++;
+      const event=new TeamTaskStore(events,identity);
+      try {
+        const receipt=event.inspectExisting();
+        assert.equal(receipt?.status,"running");
+        assert.equal(receipt?.stages[0]?.stage,"execute_next_task");
+        assert.equal(receipt?.stages[0]?.status,"running");
+      } finally {event.close();}
+      if(failPersistence)throw Error("Simulated external save rejection");
+    },
+    executeOne:async id=>{
+      assert.equal(id,x.plan.tasks[2]!.id);
+      const ev=calculatorAfterCiEventIdentity({version:1,planFingerprint:x.plan.fingerprint,
+        previousTaskId:x.plan.tasks[1]!.id,candidateSha:PIN.candidateSha,
+        expectedNextTaskId:x.plan.tasks[2]!.id});
+      assert.ok(readdirSync(events).includes(ev.id+".json"));
+      assert.deepEqual(x.receiptBytes(),original);
+      assert.deepEqual(readdirSync(x.state).filter(name=>name.includes("-t03")),[]);
+      modelCalls++;
+      if(failExecution)throw Error("Simulated executor crash");
+    },
+  };
+  return {x,preview,events,options,original,
+    get counters(){return {ciCalls,modelCalls,persistCalls};},
+    failPersistence(){failPersistence=true;},
+    failExecution(){failExecution=true;},
+    changeAfterPersist(){changeAfterPersist=true;},
+  };
+}
+test("historical t02 admission requires durable one-use event before one host callback",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-admission-success-"));
+  try{
+    const f=await admissionFixture(root);
+    const result=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(result.status,"consumed",result.reason);
+    assert.equal(result.callbackInvoked,true);
+    assert.deepEqual(f.counters,{ciCalls:3,modelCalls:1,persistCalls:1});
+    const stored=readdirSync(f.events).filter(name=>name.endsWith(".json"));
+    assert.equal(stored.length,1);
+    const duplicate=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(duplicate.status,"blocked");
+    assert.equal(duplicate.reason,"event_already_consumed");
+    assert.deepEqual(f.counters,{ciCalls:3,modelCalls:1,persistCalls:1});
+    assert.deepEqual(f.x.receiptBytes(),f.original);
+    assert.deepEqual(readdirSync(f.x.state).filter(name=>name.includes("-t03")),[]);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+test("failed external persistence consumes event without invoking host executor",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-admission-persist-failure-"));
+  try{
+    const f=await admissionFixture(root);f.failPersistence();
+    const first=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(first.status,"blocked");assert.equal(first.callbackInvoked,false);
+    assert.deepEqual(f.counters,{ciCalls:2,modelCalls:0,persistCalls:1});
+    const retry=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(retry.reason,"event_already_consumed");
+    assert.deepEqual(f.counters,{ciCalls:2,modelCalls:0,persistCalls:1});
+    assert.deepEqual(f.x.receiptBytes(),f.original);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+test("changed CI after barrier persistence cannot invoke executor or reset admission",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-admission-ci-race-"));
+  try{
+    const f=await admissionFixture(root);f.changeAfterPersist();
+    const first=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(first.status,"blocked");assert.equal(first.callbackInvoked,false);
+    assert.deepEqual(f.counters,{ciCalls:3,modelCalls:0,persistCalls:1});
+    const retry=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(retry.reason,"event_already_consumed");
+    assert.deepEqual(f.counters,{ciCalls:3,modelCalls:0,persistCalls:1});
+    assert.deepEqual(f.x.receiptBytes(),f.original);
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
+test("host executor interruption consumes barrier; no second callback or t02 replay",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"t02-admission-executor-interruption-"));
+  try{
+    const f=await admissionFixture(root);f.failExecution();
+    const result=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(result.status,"blocked");assert.equal(result.callbackInvoked,true);
+    assert.deepEqual(f.counters,{ciCalls:3,modelCalls:1,persistCalls:1});
+    const retry=await admitHistoricalT02OneSuccessor(f.x.store,f.x.reader,f.preview,f.options);
+    assert.equal(retry.reason,"event_already_consumed");
+    assert.deepEqual(f.counters,{ciCalls:3,modelCalls:1,persistCalls:1});
+    assert.deepEqual(f.x.receiptBytes(),f.original);
+  }finally{rmSync(root,{recursive:true,force:true});}
 });
