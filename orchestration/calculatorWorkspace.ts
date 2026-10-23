@@ -4,6 +4,7 @@ import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader, type CalculatorSnapshot, type CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
 import { assertCalculatorT02InspectedSuccessorPreview, type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
+import { consumeCalculatorT02ExecutionPermit, type CalculatorT02ExecutionPermit } from "./calculatorT02Admission.js";
 import { CalculatorPlanStore, type CalculatorDependencyEvidence, type CalculatorSelection } from "./calculatorPlanStore.js";
 import type { TeamTaskSnapshot, TeamTaskStore } from "./teamTaskStore.js";
 
@@ -151,6 +152,30 @@ export async function claimCalculatorWorkspaceTask(workspace: CalculatorWorkspac
     if (claimed) {
       try { claimed.finish("blocked", "working_base_changed_after_claim"); } finally { claimed.close(); }
     }
+    return refuse();
+  }
+}
+/** Special historical claim: no generic caller can supply a preview to claimNext.
+ * Only a workspace-bound, one-use permit issued after the external event barrier
+ * can cause this atomic receipt claim. Recheck all dependencies before claiming. */
+export async function claimHistoricalCalculatorT03(workspace:CalculatorWorkspace,
+  permit:CalculatorT02ExecutionPermit,runner?:CalculatorCheckRunner):
+  Promise<{selection:CalculatorSelection;store?:TeamTaskStore}> {
+  let claimed:TeamTaskStore|undefined;
+  try {
+    const context=consumeCalculatorT02ExecutionPermit(workspace,permit);
+    const host=await fresh(workspace);
+    if(workspace.ref!==host.plan.branch || !runner) return refuse();
+    const selection=await selectCalculatorWorkspaceTask(workspace,runner,context);
+    if(selection.status!=="ready" || selection.task?.id!==context.taskId ||
+       !selection.verifiedTaskIds.includes(context.inspectedT02.previousTaskId))return {selection};
+    const receipt=host.store.taskReceipt(host.plan,selection.task);
+    if(receipt.claim()!=="claimed"){receipt.close();return refuse();}
+    claimed=receipt;
+    await fresh(workspace);
+    return {selection,store:claimed};
+  }catch{
+    if(claimed){try{claimed.finish("blocked","historical_claim_interrupted_no_replay");}finally{claimed.close();}}
     return refuse();
   }
 }
