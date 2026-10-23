@@ -1,0 +1,106 @@
+name: Calculator owner-approved t03 correction cycle 2
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-t03-owner-correction-request.json']
+# Explicit host-only scope: Factory writes only metadata objects and an atomic state reference.
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: calculator-protected-live-plan-step7
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-t03-owner-correction-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate the fixed host request
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          const value=JSON.parse(readFileSync('request/.factory/calculator-t03-owner-correction-request.json','utf8'));
+          assert.deepEqual(value,{"version":1,"allowanceId":"owner-approved-t03-correction-2-20261023","runtimeSha":"9651ece213c43cd0c6bdf14af522e2fdadaf1a75","sourceCiRunId":39973442659,"taskId":"calculator-pilot-step7-v1-34ee03-t03","sourceCapsuleSha256":"0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7","priorFailedRunId":39966515860,"priorFailedReportSha256":"63b2c524dc65074a455e061db1e614081e2eec8f8b2f6a61fb5ecb05b39e25df","priorRequests":5,"maxNewRequests":4,"maxTotalT03Requests":9,"maxTotalT03ReservedTokens":34000,"maxFurtherRepairs":0,"automaticReplay":false,"legalEnabled":false});
+          JS
+      - name: Checkout immutable live runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 9651ece213c43cd0c6bdf14af522e2fdadaf1a75
+          path: runtime
+          persist-credentials: false
+      - name: Download exact stopped t03 evidence without execution
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12497425333'
+          run-id: '39942417242'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-prior
+          merge-multiple: true
+      - name: Download exact zero-HTTP context-stop proof
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12499003755'
+          run-id: '39949567538'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-context-stop
+          merge-multiple: true
+      - name: Download prior rejected correction report without replay
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12507835270'
+          run-id: '39966515860'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-last-repair
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install trusted runtime dependencies
+        working-directory: runtime
+        run: pnpm install --frozen-lockfile
+      - name: Prepare exact isolated runtime images
+        run: |
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Execute one owner-approved correction and fresh independent checks
+        working-directory: runtime
+        env:
+          CALCULATOR_T03_REPAIR_APPROVED: OWNER_APPROVED_T03_CORRECTION_2_MAX_FOUR_REQUESTS
+          CALCULATOR_T03_EVIDENCE_DIRECTORY: ${{ runner.temp }}/calculator-t03-prior
+          CALCULATOR_T03_CONTEXT_STOP_DIRECTORY: ${{ runner.temp }}/calculator-t03-context-stop
+          CALCULATOR_T03_LAST_REPAIR_DIRECTORY: ${{ runner.temp }}/calculator-t03-last-repair
+          FACTORY_RUNTIME_SHA: 9651ece213c43cd0c6bdf14af522e2fdadaf1a75
+          FACTORY_SOURCE_CI_RUN: '39973442659'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CALCULATOR_EXECUTION_LIVE_APPROVED: RUN_ONE_FREE_CALCULATOR_TASK
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: groq
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
+        run: pnpm exec tsx scripts/calculator-t03-owner-correction.mjs
+      - name: Preserve immutable evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-t03-owner-correction-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-t03-owner-correction/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
