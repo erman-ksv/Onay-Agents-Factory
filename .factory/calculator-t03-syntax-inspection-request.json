@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "phase": "read-only-syntax-rejection-diagnostic",
+  "runId": 40102210646,
+  "artifactId": 12562824077,
+  "sourceRunId": 39993060116,
+  "sourceArtifactId": 12518816662,
+  "providerCallsAllowed": 0,
+  "publicationEnabled": false,
+  "legalEnabled": false
+}
