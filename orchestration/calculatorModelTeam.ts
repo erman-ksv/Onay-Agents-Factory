@@ -160,6 +160,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   } : {}) }, guardedTransport);
   const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: hostBudget?.maxOutputTokens ?? 1200, now,
     ...(hostPreset === "calculator-keyboard-eight-roles" ? { maxRunTokens: 32000 } : {}),
+    ...(hostPreset === "calculator-restored-repair-four-roles" ? { maxRunTokens: 24000 } : {}),
     ...(prior ? { maxRunTokens: 16000 - prior.reservedRunTokens } : {}) }) : undefined;
   const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs, hostPreset) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
