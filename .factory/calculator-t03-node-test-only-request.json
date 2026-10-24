@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "allowanceId": "owner-six-additional-free-calls-20261024",
+  "phase": "one-node-test-only-author-and-three-fresh-reviews-app-bytes-locked",
+  "runtimeSha": "e28f5f5edbc6f8101d3124deb8df6ad7eed3f28d",
+  "sourceCiRunId": 40109046020,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceReplyRunId": 40106311123,
+  "sourceReplyArtifactId": 12565240405,
+  "browserVerifiedProposal": "f64fe4c271e0476dc77d109b9bf35161a221fcbb03d44ebf7e89516305df34dc",
+  "priorRequests": 13,
+  "priorReservedTokens": 55286,
+  "maxNewRequests": 4,
+  "maxNewAuthorRequests": 1,
+  "maxNewReservedTokens": 22000,
+  "maxTotalT03Requests": 17,
+  "maxTotalT03ReservedTokens": 80698,
+  "maxFurtherRepairs": 0,
+  "appBytesLocked": true,
+  "publicationOnlyAfterAllFreshGates": true,
+  "automaticReplay": false,
+  "legalEnabled": false
+}
