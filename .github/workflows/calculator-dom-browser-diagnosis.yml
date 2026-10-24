@@ -1,0 +1,48 @@
+name: Calculator read-only real browser diagnosis
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-dom-browser-diagnosis.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 62a99eb21932b7ca26c3d2a4f3cae16810f48da2
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12565196841'
+          run-id: '40107014952'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/dom-browser-source
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Pull pinned isolated browser
+        run: docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Diagnose browser independently without authorizations or model calls
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/dom-browser-source
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/calculator-dom-browser-diagnostic.mjs <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';import {createCalculatorSnapshotReader,loadCalculatorSnapshot,calculatorSources} from '../github/calculatorSnapshot.js';import {prepareCalculatorRoleChanges} from '../commander/calculatorTeam.js';import {calculatorProposalDigest} from '../orchestration/calculatorExecutionEvidence.js';import {createCalculatorBrowserSandbox} from '../orchestration/calculatorBrowserSandbox.js';
+          const BASE='949a0bf874722fd8cbd886c2cb0af8f2b502ac05',REPO='erman-ksv/Onay-Factory-Calculator';assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');const a=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12565196841',{headers:{Authorization:'Bearer '+process.env.GITHUB_TOKEN},redirect:'error'});assert.equal(a.status,200);const artifact=await a.json();assert.equal(artifact.workflow_run.id,40107014952);assert.equal(artifact.digest,'sha256:98d003fae5df4f016036c83eeda0e8312e4dc9785be0cd83c94175c557b996fa');assert.equal(artifact.expired,false);
+          const proposal=JSON.parse(readFileSync(process.env.SOURCE_ROOT+'/private-saved-dom-proposal.json'));assert.equal(proposal.baseSha,BASE);assert.equal(calculatorProposalDigest(proposal),'f64fe4c271e0476dc77d109b9bf35161a221fcbb03d44ebf7e89516305df34dc');const reader=createCalculatorSnapshotReader(),scope={repository:REPO,baseRef:proposal.baseRef,baseSha:BASE};const snapshot=await loadCalculatorSnapshot({...scope,changePaths:['src/app.mjs','test/ui.test.mjs']},reader),core=await loadCalculatorSnapshot({...scope,changePaths:['src/calculator.mjs','test/calculator.test.mjs']},reader),ui=await loadCalculatorSnapshot({...scope,changePaths:['index.html','styles.css','src/app.mjs']},reader);
+          const ev=JSON.parse(proposal.reviewEvidence);const rebuilt=prepareCalculatorRoleChanges('frontend',{summary:proposal.summary,changes:ev.changes.map(c=>c.operation==='create'?{operation:c.operation,path:c.path,content:c.content,message:proposal.files.find(f=>f.path===c.path).message}:{operation:c.operation,path:c.path,sourceSha256:c.sourceSha256,edits:c.edits,message:proposal.files.find(f=>f.path===c.path).message})},snapshot);assert.equal(calculatorProposalDigest(rebuilt),calculatorProposalDigest(proposal));
+          const fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal);assert.equal(plan.fingerprint,'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2');const task=plan.tasks[2],sources=new Map([...calculatorSources(core),...calculatorSources(ui)]),browser=createCalculatorBrowserSandbox({image:'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'});await browser.preflight();let result;try{const proof=await browser.check({task,changes:rebuilt,proposalDigest:calculatorProposalDigest(rebuilt),dependencySha256:createHash('sha256').update(sources.get('src/calculator.mjs')).digest('hex'),baseSources:sources});result={version:1,status:'browser_passed_node_still_failed',browserChecks:proof,providerCalls:0,publicationAuthorized:false,wholeStep8Closed:false};}catch(error){result={version:1,status:'browser_failed_or_unverified',code:error?.code==='browser_checks_failed'?'browser_checks_failed':'unverified',providerCalls:0,publicationAuthorized:false,wholeStep8Closed:false};process.exitCode=10;}assert.equal(await reader.getHead(plan.branch),BASE);console.log(JSON.stringify(result));
+          JS
+          pnpm exec tsx scripts/calculator-dom-browser-diagnostic.mjs
