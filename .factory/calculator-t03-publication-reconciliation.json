@@ -4,5 +4,8 @@
   "sourceArtifactId": 12579916054,
   "candidateSha": "10b4dddb9fd8881030155336a07a12b2cf739993",
   "ciRunId": 40142997703,
-  "mode": "read-only-no-replay-no-model-no-publication"
+  "mode": "read-only-no-replay-no-model-no-publication",
+  "deliveryMode": "automatic-needs-job-to-durable-inbox-zero-model-budget",
+  "deliveryRuntimeSha": "6e746c06ad46c18f6353dec1df8041b919827f77",
+  "sourceCiRunId": 40144077823
 }

@@ -1,4 +1,4 @@
-name: Calculator T03 read-only publication reconciliation
+name: Calculator T03 reconciliation and automatic CI inbox delivery
 on:
   push:
     branches: ['feat/calculator-t02-charge-reconcile-20261022']
@@ -10,6 +10,9 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    outputs:
+      evidence_id: ${{ steps.reconciled.outputs.artifact-id }}
+      evidence_digest: ${{ steps.reconciled.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -72,9 +75,54 @@ jobs:
           JS
           pnpm exec tsx scripts/calculator-t03-publication-audit.mjs
       - uses: actions/upload-artifact@v4
+        id: reconciled
         if: always()
         with:
           name: t03-publication-reconciled-${{ github.run_id }}
           path: ${{ runner.temp }}/t03-publication-reconciled.json
+          if-no-files-found: ignore
+          retention-days: 14
+  deliver:
+    needs: inspect
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout tested immutable delivery runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 6e746c06ad46c18f6353dec1df8041b919827f77
+          persist-credentials: false
+      - name: Download exact authenticated output of predecessor job
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.inspect.outputs.evidence_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ci-delivery-source
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Verify current CI and record exactly one budget-waiting successor; check restart
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/ci-delivery-source
+          DELIVERY_ARTIFACT_ID: ${{ needs.inspect.outputs.evidence_id }}
+          DELIVERY_ARTIFACT_DIGEST: ${{ needs.inspect.outputs.evidence_digest }}
+          FACTORY_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: pnpm exec tsx scripts/calculator-ci-deliver-verified.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: calculator-ci-delivery-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-delivery-result.json
           if-no-files-found: ignore
           retention-days: 14
