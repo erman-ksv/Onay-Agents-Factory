@@ -1,0 +1,28 @@
+name: Calculator Node test runtime contract diagnosis
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-node-test-diagnostic.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12565318949'
+          run-id: '40109667410'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/node-test-diagnostic
+          merge-multiple: true
+      - name: Inspect bounded code and missing runtime contract without execution or model calls
+        env:
+          ROOT: ${{ runner.temp }}/node-test-diagnostic
+          READ_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');const r=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12565318949',{headers:{Authorization:'Bearer '+process.env.READ_TOKEN},redirect:'error'});assert.equal(r.status,200);const a=await r.json();assert.equal(a.workflow_run.id,40109667410);assert.equal(a.digest,'sha256:d5ee25c1b614a015c1d76f4835576449fb314a8b7521911ebf69a50acd1b27ee');const p=JSON.parse(readFileSync(process.env.ROOT+'/private-agent-repaired-proposal.json'));assert.equal(p.baseSha,'949a0bf874722fd8cbd886c2cb0af8f2b502ac05');const app=p.files.find(f=>f.path==='src/app.mjs').content,test=p.files.find(f=>f.path==='test/ui.test.mjs').content;assert.ok(app.length<16000&&test.length<12000);const pos=test.indexOf('window');console.log(JSON.stringify({version:1,providerCalls:0,inspection:'node-runtime-contract',appErrorLines:app.split('\n').slice(35,38),requiredWindowMethods:[...new Set([...app.matchAll(/window\.([A-Za-z_][A-Za-z_0-9]*)\s*\(/g)].map(m=>m[1]))],requiredDocumentMethods:[...new Set([...app.matchAll(/document\.([A-Za-z_][A-Za-z_0-9]*)\s*\(/g)].map(m=>m[1]))],testHead:test.slice(0,550),testWindowExcerpt:pos>=0?test.slice(Math.max(0,pos-40),pos+230):null,testFailureLines:test.split('\n').slice(19,22)}));
+          JS
