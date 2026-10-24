@@ -1,0 +1,80 @@
+name: Calculator T03 read-only publication reconciliation
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-t03-publication-reconciliation.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 90bb7fbd740b44aa9b4cdf45ef2be01e643a0cb9
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12579916054'
+          run-id: '40142876107'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t03-published-source
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Authenticate published bytes, three ready roles, exact CI; no models or writes
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/t03-published-source
+          FACTORY_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/calculator-t03-publication-audit.mjs <<'JS'
+          import assert from 'node:assert/strict';
+          import {readFileSync,writeFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';
+          import {parseCalculatorExecutionCheckpointBytes} from '../orchestration/calculatorExecutionCheckpoint.js';
+          import {calculatorProposalDigest} from '../orchestration/calculatorExecutionEvidence.js';
+          import {createCalculatorSnapshotReader,loadCalculatorSnapshot,calculatorSources} from '../github/calculatorSnapshot.js';
+          import {createCalculatorCiReader} from '../github/calculatorCi.js';
+          import {verifyCalculatorAfterCiCandidateCi} from '../orchestration/calculatorAfterCi.js';
+          const FACTORY='erman-ksv/Onay-Agents-Factory',REPO='erman-ksv/Onay-Factory-Calculator',TASK='calculator-pilot-step7-v1-34ee03-t03',BASE='949a0bf874722fd8cbd886c2cb0af8f2b502ac05',CANDIDATE='10b4dddb9fd8881030155336a07a12b2cf739993',SOURCE='90bb7fbd740b44aa9b4cdf45ef2be01e643a0cb9',ORIGIN='0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7';
+          const sha=b=>createHash('sha256').update(b).digest('hex');
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.equal(process.env.GROQ_API_KEY,undefined);
+          async function get(repo,path){const token=repo===FACTORY?process.env.FACTORY_TOKEN:process.env.GITHUB_TOKEN;const r=await fetch('https://api.github.com/repos/'+repo+path,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'},redirect:'error',signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);const body=await r.text();assert.ok(Buffer.byteLength(body)<=1048576);return JSON.parse(body);}
+          const artifact=await get(FACTORY,'/actions/artifacts/12579916054');assert.equal(artifact.workflow_run.id,40142876107);assert.equal(artifact.digest,'sha256:ed15c2793dc23bc9040d08d035917d11f9b62215a01d56c832ebc5afc40de01b');assert.equal(artifact.expired,false);
+          const run=await get(FACTORY,'/actions/runs/40142876107');assert.equal(run.head_sha,'e0542cd93f8d0008e64f1909a513b78339e58880');assert.equal(run.path,'.github/workflows/calculator-t03-tester-only.yml');assert.equal(run.run_attempt,1);assert.equal(run.conclusion,'failure');
+          const root=process.env.SOURCE_ROOT,report=JSON.parse(readFileSync(root+'/report.json'));assert.equal(report.execution.reasonCode,'publication_or_ci_uncertain_inspect_no_replay');assert.equal(report.newProviderCalls,1);assert.equal(report.modelCalls,18);assert.equal(report.execution.proposalTestsExecuted,true);assert.equal(report.repairedProposalChecks.status,'passed');assert.equal(report.remoteBarrierClaimed,true);assert.equal(report.originalT03ReceiptUnchanged,true);assert.equal(report.historicalReceiptUnchanged,true);assert.deepEqual(report.currentCharge,{attemptedRequests:18,totalRequestBytes:142611,reservedRunTokens:74531,elapsedMs:535306});
+          const fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal);
+          const bytes=readFileSync(root+'/execution-private/'+TASK+'.execution.json'),identity={repository:REPO,goalId:plan.owner.id,ownerFingerprint:plan.owner.ownerFingerprint,planFingerprint:plan.fingerprint,taskId:TASK,branch:plan.branch,baseSha:BASE,bootstrapSha:plan.owner.baseSha,runtimeConfigDigest:sha(JSON.stringify({runtimeSha:SOURCE,runId:'40142876107',preset:'calculator-frontend-2048-four-roles',ownerApprovedCorrectionCycle:9,sourceCapsule:ORIGIN}))};
+          const record=parseCalculatorExecutionCheckpointBytes(bytes,identity,sha(bytes)).data,p=record.payload;
+          assert.equal(p.stage,'publish_candidate');assert.equal(p.status,'blocked');assert.equal(p.httpInFlight,false);assert.equal(p.publicationStarted,true);assert.equal(record.proposalDigest,'6e84fd6a29e8759a5337f946872b0dc73feb553cf1b91b8aabd387f32842b754');assert.equal(calculatorProposalDigest(p.proposal),record.proposalDigest);assert.deepEqual(p.assessments,report.freshAssessments);assert.equal(p.assessments.length,3);assert.ok(p.assessments.every((a,i)=>a.role===['security','reviewer','tester'][i]&&a.ready&&a.findings.length===0&&a.testsExecuted===false&&a.publicationAuthorized===false));
+          const reader=createCalculatorSnapshotReader();assert.equal(await reader.getHead(plan.branch),CANDIDATE);assert.equal(await reader.getHead(plan.owner.baseRef),plan.owner.baseSha);
+          const commit=await get(REPO,'/git/commits/'+CANDIDATE);assert.deepEqual(commit.parents.map(p=>p.sha),[BASE]);
+          const parent=await reader.readCommit(BASE),before=await reader.readTree(parent.treeSha),after=await reader.readTree(commit.tree.sha);assert.equal(before.truncated,false);assert.equal(after.truncated,false);
+          const beforeBlobs=new Map(before.tree.filter(x=>x.type!=='tree').map(x=>[x.path,x.sha])),afterBlobs=new Map(after.tree.filter(x=>x.type!=='tree').map(x=>[x.path,x.sha]));
+          const changed=[...new Set([...beforeBlobs.keys(),...afterBlobs.keys()])].filter(p=>beforeBlobs.get(p)!==afterBlobs.get(p)).sort();assert.deepEqual(changed,p.proposal.files.map(f=>f.path).sort());assert.deepEqual(changed,['src/app.mjs','test/ui.test.mjs']);
+          const snap=await loadCalculatorSnapshot({repository:REPO,baseRef:plan.branch,baseSha:CANDIDATE,changePaths:changed},reader),sources=calculatorSources(snap);for(const f of p.proposal.files)assert.equal(sources.get(f.path),f.content);
+          const pr=await get(REPO,'/pulls/1');assert.equal(pr.draft,true);assert.equal(pr.state,'open');assert.equal(pr.head.sha,CANDIDATE);assert.equal(pr.head.ref,plan.branch);assert.equal(pr.head.repo.full_name,REPO);assert.equal(pr.base.repo.full_name,REPO);assert.equal(pr.base.sha,plan.owner.baseSha);assert.equal(pr.base.ref,plan.owner.baseRef);
+          const workflowPath='.github/workflows/calculator-task-ci.yml',initial=await get(REPO,'/contents/'+workflowPath+'?ref='+plan.owner.baseSha);assert.equal(afterBlobs.get(workflowPath),initial.sha);assert.equal(beforeBlobs.get(workflowPath),initial.sha);
+          const ci=createCalculatorCiReader({trustedWorkflows:[{id:390241255,path:workflowPath,blobSha:initial.sha}]});const proof=await ci({repository:REPO,branch:plan.branch,candidateSha:CANDIDATE});assert.ok(verifyCalculatorAfterCiCandidateCi(proof,REPO,plan.branch,CANDIDATE));assert.ok(proof.provenance.verifiedRunIds.includes(40142997703));assert.equal(await reader.getHead(plan.branch),CANDIDATE);
+          const outcome={version:1,status:'candidate-verified-after-readonly-reconciliation',taskId:TASK,planFingerprint:plan.fingerprint,candidateSha:CANDIDATE,parentSha:BASE,proposalDigest:record.proposalDigest,sourceCapsuleSha256:sha(bytes),sourceArtifactId:12579916054,sourceRunId:40142876107,verifiedCiRunId:40142997703,roles:p.assessments.map(a=>({role:a.role,ready:a.ready,findings:a.findings.length,unverifiedAreas:a.unverifiedAreas})),changedPaths:changed,exactPublishedBytesVerified:true,workflowUnchangedSinceOwnerBootstrap:true,originalT03ReceiptUnchanged:true,historicalReceiptUnchanged:true,sourceReceiptStatusPreserved:'needs-review',sidecarOnly:true,newModelCalls:0,publicationWrites:0,charge:report.currentCharge,step8Closed:false,automaticSuccessorProven:false,legalEnabled:false};
+          writeFileSync(process.env.RUNNER_TEMP+'/t03-publication-reconciled.json',JSON.stringify(outcome,null,2)+'\n');console.log(JSON.stringify(outcome));
+          JS
+          pnpm exec tsx scripts/calculator-t03-publication-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t03-publication-reconciled-${{ github.run_id }}
+          path: ${{ runner.temp }}/t03-publication-reconciled.json
+          if-no-files-found: ignore
+          retention-days: 14

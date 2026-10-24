@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "sourceRunId": 40142876107,
+  "sourceArtifactId": 12579916054,
+  "candidateSha": "10b4dddb9fd8881030155336a07a12b2cf739993",
+  "ciRunId": 40142997703,
+  "mode": "read-only-no-replay-no-model-no-publication"
+}
