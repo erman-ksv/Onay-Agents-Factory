@@ -6,3 +6,5 @@ test('diagnostic cannot grant success, widen paths, inject source/messages or pr
  for(const changed of [{...row,path:'other.mjs'},{...row,exitCode:0},{...row,codes:['SUCCESS']},{...row,rawSource:'private'},{...row,missingModules:['module\nsecret']},{...row,missingModules:['gsk_'+'a'.repeat(30)]},{...row,locations:['/etc/passwd:1:1']}])assert.deepEqual(parse(encode(changed),[path]),[]);
  assert.deepEqual(parse('not JSON',[path]),[]);assert.deepEqual(parse('a'.repeat(32769),[path]),[]);
 });
+
+test('syntax categories and line-only source references are bounded diagnostics, not raw parser output',()=>{const result=parse(encode({...row,codes:['SyntaxError','syntax_invalid_regex_flags'],missingModules:[],locations:['/app/test/ui.test.mjs:4']}),[path]);assert.equal(result.length,1);assert.match(result[0]!,/syntax_invalid_regex_flags/);assert.match(result[0]!,/ui.test.mjs:4/);});

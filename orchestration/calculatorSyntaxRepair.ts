@@ -1,0 +1,18 @@
+import {createHash} from 'node:crypto';import {scanForSecrets} from '../github/secretScanner.js';import {applyBoundedPatches} from '../commander/boundedPatch.js';import type {PreparedCalculatorChanges} from '../commander/calculatorChanges.js';import type {CalculatorSnapshot} from '../github/calculatorSnapshot.js';import {prepareUnpublishedCalculatorCorrection} from './calculatorUnpublishedCorrection.js';
+const refuse=():never=>{throw Error('Bounded syntax repair refused; preserve source, approvals and budget.');};
+export function buildCalculatorSyntaxRequest(input:Readonly<{model:string;sourceSha256:string;baseSha:string;fragment:string;line:number;column:number;codes:readonly string[];remainingTokens:number}>){
+ if(!/^[a-zA-Z0-9_./-]{1,80}$/.test(input.model)||!/^[a-f0-9]{64}$/.test(input.sourceSha256)||!/^[a-f0-9]{40}$/.test(input.baseSha)||!input.fragment||input.fragment.length>320||scanForSecrets(input.fragment).length||!Number.isSafeInteger(input.line)||input.line<1||!Number.isSafeInteger(input.column)||input.column<1||!Number.isSafeInteger(input.remainingTokens)||input.remainingTokens<1||input.codes.length>4||input.codes.some(c=>!/^SyntaxError$|^syntax_[a-z_]+$/.test(c)))return refuse();
+ const body=JSON.stringify({model:input.model,stream:false,n:1,max_completion_tokens:512,messages:[{role:'system',content:'Frontend: fix ONLY syntax in this unpublished test. Preserve assertions, values, imports and behavior. No dependencies, skips, eval or tools. Return JSON {"sourceSha256":string,"edits":[{"before":string,"after":string}]}. One unique exact before, no unchanged edit. Outside fragment unverified.'},{role:'user',content:JSON.stringify({path:'test/ui.test.mjs',baseSha:input.baseSha,sourceSha256:input.sourceSha256,line:input.line,column:input.column,codes:input.codes,fragment:input.fragment})}],...(input.model==='openai/gpt-oss-120b'?{reasoning_effort:'low',response_format:{type:'json_object'}}:{})});
+ const requestBytes=Buffer.byteLength(body),estimatedInputTokens=Math.ceil(requestBytes/3)+256,requestedTokens=estimatedInputTokens+512;
+ if(requestedTokens>input.remainingTokens||requestedTokens>6000)return refuse();
+ return Object.freeze({body,requestBytes,estimatedInputTokens,reservedOutputTokens:512,requestedTokens});
+}
+export function prepareUnpublishedSyntaxRepair(raw:unknown,previous:PreparedCalculatorChanges,snapshot:CalculatorSnapshot):PreparedCalculatorChanges{
+ const file=previous.files.find(f=>f.path==='test/ui.test.mjs');if(!file||!snapshot.files.some(f=>f.path===file.path&&!f.exists)||!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).sort().join(',')!=='edits,sourceSha256')return refuse();
+ const r=raw as {sourceSha256:unknown;edits:unknown};if(r.sourceSha256!==createHash('sha256').update(file.content).digest('hex')||!Array.isArray(r.edits)||r.edits.length!==1)return refuse();
+ const e=r.edits[0];if(!e||typeof e!=='object'||Object.keys(e).sort().join(',')!=='after,before'||typeof e.before!=='string'||typeof e.after!=='string')return refuse();
+ const words=(s:string)=>s.match(/[\p{L}_$][\p{L}\p{N}_$]*|\d+(?:\.\d+)?|[+*%=\-]/gu)??[];
+ if(JSON.stringify(words(e.before))!==JSON.stringify(words(e.after)))return refuse();
+ const [updated]=applyBoundedPatches([{path:file.path,sourceSha256:r.sourceSha256 as string,edits:[e],message:'Agent syntax correction'}],new Map([[file.path,file.content]]),[file.path]);
+ return prepareUnpublishedCalculatorCorrection({summary:'Apply exact bounded agent syntax correction',changes:[{operation:'patch',path:file.path,sourceSha256:r.sourceSha256,edits:[{before:file.content,after:updated!.content}],message:'Agent syntax correction'}]},previous,snapshot);
+}
