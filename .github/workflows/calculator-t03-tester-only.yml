@@ -28,12 +28,12 @@ jobs:
           node --input-type=module - <<'JS'
           import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
           const value=JSON.parse(readFileSync('request/.factory/calculator-t03-tester-only-request.json','utf8'));
-          assert.deepEqual(value,{"version":1,"allowanceId":"owner-one-additional-tester-same-36000-20261024","phase":"tester-only-same-proposal-two-restored-ready-reviews","runtimeSha":"09188e96e2c0ef845f6ec8f706747f8b2eb5b9f3","sourceCiRunId":40117533361,"taskId":"calculator-pilot-step7-v1-34ee03-t03","sourceRunId":40110787654,"sourceArtifactId":12566129197,"proposalDigest":"6e84fd6a29e8759a5337f946872b0dc73feb553cf1b91b8aabd387f32842b754","priorRequests":17,"priorReservedTokens":69863,"maxNewRequests":1,"maxNewReservedTokens":6000,"maxTotalT03Requests":18,"maxTotalT03ReservedTokens":80698,"maxFurtherRepairs":0,"sourceBytesLocked":true,"reuseSecurityAndReviewer":true,"publicationOnlyAfterAllGates":true,"automaticReplay":false,"legalEnabled":false});
+          assert.deepEqual(value,{"version":1,"allowanceId":"owner-one-additional-tester-same-36000-20261024","phase":"tester-only-same-proposal-two-restored-ready-reviews","runtimeSha":"90bb7fbd740b44aa9b4cdf45ef2be01e643a0cb9","sourceCiRunId":40142763641,"taskId":"calculator-pilot-step7-v1-34ee03-t03","sourceRunId":40110787654,"sourceArtifactId":12566129197,"proposalDigest":"6e84fd6a29e8759a5337f946872b0dc73feb553cf1b91b8aabd387f32842b754","priorRequests":17,"priorReservedTokens":69863,"maxNewRequests":1,"maxNewReservedTokens":6000,"maxTotalT03Requests":18,"maxTotalT03ReservedTokens":80698,"maxFurtherRepairs":0,"sourceBytesLocked":true,"reuseSecurityAndReviewer":true,"publicationOnlyAfterAllGates":true,"automaticReplay":false,"legalEnabled":false});
           JS
       - name: Checkout immutable live runtime
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 09188e96e2c0ef845f6ec8f706747f8b2eb5b9f3
+          ref: 90bb7fbd740b44aa9b4cdf45ef2be01e643a0cb9
           path: runtime
           persist-credentials: false
       - name: Download exact stopped t03 evidence without execution
@@ -170,8 +170,8 @@ jobs:
           CALCULATOR_PRECISE_FAILURE_DIRECTORY: ${{ runner.temp }}/calculator-precise-failure
           CALCULATOR_EXPLICIT_DECLINE_DIRECTORY: ${{ runner.temp }}/calculator-explicit-decline
           CALCULATOR_VALIDATION_FAILURE_DIRECTORY: ${{ runner.temp }}/calculator-validation-failure
-          FACTORY_RUNTIME_SHA: 09188e96e2c0ef845f6ec8f706747f8b2eb5b9f3
-          FACTORY_SOURCE_CI_RUN: '40117533361'
+          FACTORY_RUNTIME_SHA: 90bb7fbd740b44aa9b4cdf45ef2be01e643a0cb9
+          FACTORY_SOURCE_CI_RUN: '40142763641'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
