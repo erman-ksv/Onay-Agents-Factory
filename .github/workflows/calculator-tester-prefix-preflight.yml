@@ -1,0 +1,49 @@
+name: Calculator two-review restoration preflight without model
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-tester-prefix-preflight.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 36aea35a2eb89bc6590cd7e77d17dbf4a9873d80
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12566129197'
+          run-id: '40110787654'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/tester-prefix-source
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Authenticate and restore prefix without model or target writes
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/tester-prefix-source
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/calculator-tester-prefix-preflight.mjs <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';import {calculatorProposalDigest} from '../orchestration/calculatorExecutionEvidence.js';import {parseCalculatorExecutionCheckpointBytes} from '../orchestration/calculatorExecutionCheckpoint.js';import {createCalculatorSnapshotReader,loadCalculatorSnapshot} from '../github/calculatorSnapshot.js';import {createCalculatorModelTeam} from '../orchestration/calculatorModelTeam.js';
+          const TASK='calculator-pilot-step7-v1-34ee03-t03',BASE='949a0bf874722fd8cbd886c2cb0af8f2b502ac05',hash=b=>createHash('sha256').update(b).digest('hex');assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');const a=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12566129197',{headers:{Authorization:'Bearer '+process.env.GITHUB_TOKEN},redirect:'error'});assert.equal(a.status,200);const artifact=await a.json();assert.equal(artifact.workflow_run.id,40110787654);assert.equal(artifact.digest,'sha256:08cbc1dffbd2cf8afeba8bc763dcaf3186f7ef53f1f70991cd6cdfd8353f4f98');assert.equal(artifact.expired,false);
+          const root=process.env.SOURCE_ROOT,report=JSON.parse(readFileSync(root+'/report.json')),proposalBytes=readFileSync(root+'/private-agent-repaired-proposal.json'),prefixBytes=readFileSync(root+'/fresh-assessment-prefix.json'),capsuleBytes=readFileSync(root+'/execution-private/'+TASK+'.execution.json'),proposal=JSON.parse(proposalBytes),prefix=JSON.parse(prefixBytes);assert.equal(report.status,'awaiting_fresh_tester_no_publication');assert.equal(report.pendingRole,'tester');assert.equal(report.lastCheckpoint.httpInFlight,false);assert.equal(report.lastCheckpoint.publicationStarted,false);assert.equal(report.repairedProposalChecks.status,'passed');assert.equal(report.authorRepairVerified,true);assert.equal(report.currentCharge.attemptedRequests,17);assert.deepEqual(prefix,report.freshAssessments);
+          const fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal);assert.equal(plan.fingerprint,'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2');
+          const identity={repository:plan.owner.repository,goalId:plan.owner.id,ownerFingerprint:plan.owner.ownerFingerprint,planFingerprint:plan.fingerprint,taskId:TASK,branch:plan.branch,baseSha:BASE,bootstrapSha:plan.owner.baseSha,runtimeConfigDigest:hash(JSON.stringify({runtimeSha:'36aea35a2eb89bc6590cd7e77d17dbf4a9873d80',runId:'40110787654',preset:'calculator-frontend-2048-four-roles',ownerApprovedCorrectionCycle:8,sourceCapsule:'0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7'}))};
+          const record=parseCalculatorExecutionCheckpointBytes(capsuleBytes,identity,hash(capsuleBytes)).data;assert.equal(record.proposalDigest,calculatorProposalDigest(proposal));assert.deepEqual(record.payload.assessments,prefix);assert.deepEqual(record.payload.modelState,report.currentCharge);
+          const reader=createCalculatorSnapshotReader(),snapshot=await loadCalculatorSnapshot({repository:plan.owner.repository,baseRef:plan.branch,baseSha:BASE,changePaths:plan.tasks[2].paths},reader);let calls=0;const team=createCalculatorModelTeam(fixture.request,{AGENT_FACTORY_TARGET_PROFILE:'calculator',AGENT_FACTORY_PROVIDER:'groq',GROQ_API_KEY:'readonly-no-model-key',CALCULATOR_MODEL_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_LEGAL_ENABLED:'false'},async()=>{calls++;throw Error('No model calls permitted');},{},undefined,undefined,'calculator-frontend-2048-four-roles');const restored=team.restoreProposal(plan,TASK,snapshot,proposal,calculatorProposalDigest(proposal),prefix),ready=team.restoredAssessmentPrefix(plan,TASK,restored);assert.equal(ready.length,2);assert.ok(ready.every(a=>a.ready&&a.findings.length===0));assert.equal(calls,0);assert.equal(team.diagnostic().httpRequestsSent,0);
+          console.log(JSON.stringify({version:1,status:'two_fresh_assessments_restore_verified',proposalDigest:calculatorProposalDigest(restored),proposalFileSha256:hash(proposalBytes),prefixFileSha256:hash(prefixBytes),capsuleFileSha256:hash(capsuleBytes),roles:ready.map(a=>a.role),providerCalls:0,publicationAuthorized:false,testerStillRequired:true,charge:report.currentCharge}));
+          JS
+          pnpm exec tsx scripts/calculator-tester-prefix-preflight.mjs
