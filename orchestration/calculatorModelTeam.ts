@@ -161,6 +161,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   } : {}) }, guardedTransport);
   const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: hostBudget?.maxOutputTokens ?? 1200, now,
     ...(hostPreset === "calculator-keyboard-eight-roles" ? { maxRunTokens: 32000 } : {}),
+    ...(hostPreset === "calculator-successor-eight-roles" ? { maxRunTokens: 48000 } : {}),
     ...(hostPreset === "calculator-renewed-repair-four-roles" ? { maxRunTokens: 24000 } : {}),
     ...(prior ? { maxRunTokens: 16000 - prior.reservedRunTokens } : {}) }) : undefined;
   const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs, hostPreset) : undefined;
@@ -305,15 +306,15 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
         // Never serialize a complete private original, even when a file is tiny.
         const end = source === undefined ? 0 : Math.min(1000, Math.floor(source.length / 2));
         const excerpt = source?.slice(0, end) ?? ""; excerptBytes += Buffer.byteLength(excerpt);
-        const tailStart = source === undefined ? 0 : Math.max(end + 1, source.length - 750);
-        const tail = task.acceptanceIds.includes("keyboard") && file.path === "src/app.mjs" && source && tailStart < source.length ?
+        const tailStart = source === undefined ? 0 : Math.max(end + 1, task.acceptanceIds.includes("narrow-screen") ? Math.floor(source.length * 0.75) : source.length - 750);
+        const tail = ((task.acceptanceIds.includes("keyboard") && file.path === "src/app.mjs") || (task.acceptanceIds.includes("narrow-screen") && ["styles.css","index.html"].includes(file.path))) && source && tailStart < source.length ?
           { startCharacter: tailStart, endCharacter: source.length, text: source.slice(tailStart) } : undefined;
         if (tail) excerptBytes += Buffer.byteLength(tail.text);
         return { ...file, ...(tail ? { relatedExcerpt: tail } : {}), ...(excerpt ? { excerpt: { startCharacter: 0, endCharacter: end, text: excerpt } } : {}),
           unverified: file.exists ? "Remaining original source is omitted; use exact anchored patches only." : "Runtime behavior is unverified." };
       });
       if (excerptBytes > 6_000) return refuse();
-      const outputTokens = task.role === "frontend" && (((hostPreset === "calculator-frontend-2048-four-roles" && !repair) || hostPreset === "calculator-keyboard-eight-roles") ||
+      const outputTokens = task.role === "frontend" && (((hostPreset === "calculator-frontend-2048-four-roles" && !repair) || (hostPreset === "calculator-keyboard-eight-roles" || hostPreset === "calculator-successor-eight-roles")) ||
         (repairOnly && repair)) ? 2048 : 1200;
       const instructions=repairOnly && repair && task.acceptanceIds.includes('keyboard')?calculatorKeyboardRepairInstructions():buildCalculatorRoleInstructions(task.role,outputTokens);
       const output = await call(instructions, { repository: owner.repository,

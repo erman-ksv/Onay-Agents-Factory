@@ -15,6 +15,10 @@ export const CALCULATOR_KEYBOARD_BROWSER_SCENARIOS = Object.freeze([
   ...CALCULATOR_UI_BROWSER_SCENARIOS,
   "Keyboard and button calculations give the same result",
 ]);
+export const CALCULATOR_NARROW_BROWSER_SCENARIOS = Object.freeze([
+  ...CALCULATOR_KEYBOARD_BROWSER_SCENARIOS,
+  "At 360px controls and result work without horizontal scrolling",
+]);
 /** Returned by an independently configured trusted browser runner, never a model
  * or owner JSON. It must bind its execution to the exact proposal and core hash. */
 export type CalculatorBrowserChecks = Readonly<{
@@ -47,10 +51,11 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
       dependencySha256: string }): Promise<CalculatorBrowserChecks>;
   }): Promise<CalculatorAssessmentEvidence> {
   try {
+    const narrow = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "narrow-screen";
     const keyboard = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "keyboard";
-    const paths = keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : ["index.html", "styles.css", "src/app.mjs"];
-    const scenarios = keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS;
-    if (task.role !== "frontend" || (!keyboard && (task.acceptanceIds.length !== 2 ||
+    const paths = narrow ? ["index.html","styles.css"] : keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : ["index.html", "styles.css", "src/app.mjs"];
+    const scenarios = narrow ? CALCULATOR_NARROW_BROWSER_SCENARIOS : keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS;
+    if (task.role !== "frontend" || (!keyboard && !narrow && (task.acceptanceIds.length !== 2 ||
         !["clear", "backspace"].every(id => task.acceptanceIds.includes(id)))) || task.paths.length !== paths.length ||
         !paths.every(path => task.paths.includes(path)) ||
         !changes.files.length || changes.files.some(file => !task.paths.includes(file.path)) ||
@@ -84,7 +89,7 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
         sandboxDisabled: browser.sandboxDisabled, pageErrors: browser.pageErrors, blockedRequests: browser.blockedRequests,
         scenarios: Object.freeze([...browser.scenarios]) }),
       unverifiedAreas: Object.freeze(["Unshown unchanged source beyond the verified arithmetic export signature",
-        keyboard ? "Narrow-screen layout, other browsers and phones" : "Keyboard, narrow-screen layout, chained expressions, other browsers and phones",
+        narrow ? "Other viewport widths, browsers, physical phones and accessibility beyond the supplied scenarios" : keyboard ? "Narrow-screen layout, other browsers and phones" : "Keyboard, narrow-screen layout, chained expressions, other browsers and phones",
         "Independent model verdicts, publication, exact-candidate CI and overall completion"]), publicationAuthorized: false as const });
     const text = JSON.stringify(packet);
     if (Buffer.byteLength(text) > 3000 || scanForSecrets(text).length) return refuse();

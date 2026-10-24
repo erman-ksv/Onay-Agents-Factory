@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { createCalculatorBrowserSandbox } from "./calculatorBrowserSandbox.js";
 import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
-import { CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS } from "./calculatorAssessmentEvidence.js";
+import { CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS, CALCULATOR_NARROW_BROWSER_SCENARIOS } from "./calculatorAssessmentEvidence.js";
 import { createCalculatorPlan } from "./calculatorPlan.js";
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import type { CalculatorSandboxProcess } from "./calculatorSandbox.js";
@@ -36,7 +36,7 @@ function fixture(mode = "ready") {
     const proof = manifest.mode === "preflight" ? { version: 1, mode: "preflight", browser: "Chrome/155.0.0.0", ready: true,
       sandboxDisabled: mode === "unsafe-sandbox", networkIsolated: true, credentialsExcluded: true } :
       { version: 1, mode: "check", browser: "Chrome/155.0.0.0", sandboxDisabled: false, status: "passed", testsExecuted: true,
-        pageErrors: 0, blockedRequests: mode === "external-request" ? 1 : 0, scenarios: manifest.suite === "keyboard" ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS };
+        pageErrors: 0, blockedRequests: mode === "external-request" ? 1 : 0, scenarios: manifest.suite === "narrow-screen" ? CALCULATOR_NARROW_BROWSER_SCENARIOS : manifest.suite === "keyboard" ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS };
     return { code: mode === "runtime-failed" ? 1 : 0, stdout: mode === "malformed" ? "not JSON" : JSON.stringify(proof), stderr: "" };
   };
   return { run, runs: () => runs, cleanups: () => cleanups };
@@ -74,4 +74,12 @@ test("keyboard task requires its own real-runner scenario set and cannot pass wi
     baseSources: new Map([["src/calculator.mjs",core],["index.html","fixture"],["styles.css","fixture"]]) });
   assert.deepEqual(proof.scenarios, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS);
   assert.equal(proof.scenarios.length, 4);
+});
+
+test("narrow-screen proof binds the 360px scenario and cannot accept keyboard-only scope",async()=>{
+ const task=plan.tasks[3]!,changes={...input.changes,files:task.paths.map(path=>({path,content:"fixture",message:"fixture"}))};
+ const proposed={...input,task,changes,proposalDigest:calculatorProposalDigest(changes)};
+ const f=fixture(),runner=createCalculatorBrowserSandbox({image},{},f.run);await runner.preflight();
+ const proof=await runner.check(proposed);assert.deepEqual(proof.scenarios,CALCULATOR_NARROW_BROWSER_SCENARIOS);assert.equal(proof.scenarios.at(-1),"At 360px controls and result work without horizontal scrolling");
+ const bad=createCalculatorBrowserSandbox({image},{},fixture().run);await bad.preflight();await assert.rejects(()=>bad.check({...proposed,task:{...task,paths:["src/app.mjs","test/ui.test.mjs"]}}));
 });

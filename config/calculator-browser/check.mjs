@@ -32,7 +32,7 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function evaluate(expression){const r=await rpc('Runtime.evaluate',{expression,contextId:world,returnByValue:true,awaitPromise:true});assert.equal(r.exceptionDetails,undefined);return r.result.value;}
 async function isolatedWorld(){const f=await rpc('Page.getFrameTree');const r=await rpc('Page.createIsolatedWorld',{frameId:f.frameTree.frame.id,worldName:'factory-verifier'});world=r.executionContextId;}
 async function run(){
- assert.ok(process.getuid()>0);assert.equal(input.version,1);assert.ok(['preflight','check'].includes(input.mode));assert.ok(['keyboard','clear-backspace'].includes(input.suite));
+ assert.ok(process.getuid()>0);assert.equal(input.version,1);assert.ok(['preflight','check'].includes(input.mode));assert.ok(['keyboard','clear-backspace','narrow-screen'].includes(input.suite));
  for(const key of ['GROQ_API_KEY','GEMINI_API_KEY','GITHUB_TOKEN','CALCULATOR_GITHUB_TOKEN','FACTORY_READ_TOKEN'])assert.equal(process.env[key],undefined);
  const dirs=readdirSync('/ms-playwright').filter(n=>/^chromium-[0-9]+$/.test(n));assert.equal(dirs.length,1);
  const binary=['chrome-linux64/chrome','chrome-linux/chrome'].map(p=>join('/ms-playwright',dirs[0],p)).find(existsSync);assert.ok(binary);
@@ -59,6 +59,7 @@ async function run(){
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));origin='http://127.0.0.1:'+server.address().port;
  errors=0;await rpc('Network.enable');await rpc('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
+ if(input.suite==='narrow-screen')await rpc('Emulation.setDeviceMetricsOverride',{width:360,height:740,deviceScaleFactor:1,mobile:false});
  await rpc('Page.navigate',{url:origin+'/index.html'});
  let ready=false;for(let i=0;i<50;i++){try{await isolatedWorld();ready=await evaluate('document.readyState==="complete"&&document.querySelectorAll("button").length>0');}catch{}if(ready)break;await pause(100);}assert.equal(ready,true);
  const display=()=>evaluate('(()=>{const e=document.querySelector("output")||document.getElementById("display")||document.getElementById("result")||document.querySelector("input[readonly]")||document.querySelector("[role=status]");return e?String("value" in e?e.value:e.textContent).trim():null})()');
@@ -69,7 +70,7 @@ async function run(){
  await click('1');await click('2');await click('3');assert.equal(await display(),'123');await click('backspace');assert.equal(await display(),'12');
  await click('clear');await click('2');assert.equal(await display(),'2');await click('+');await click('3');await click('=');assert.equal(Number(await display()),5);
  await click('clear');await click('2');assert.equal(await display(),'2');await click('+');await click('3');await click('=');assert.equal(Number(await display()),5);
- if(input.suite==='keyboard'){
+ if(input.suite==='keyboard'||input.suite==='narrow-screen'){
   const key=async(k,code,keyCode)=>{await rpc('Input.dispatchKeyEvent',{type:'keyDown',key:k,code,windowsVirtualKeyCode:keyCode,nativeVirtualKeyCode:keyCode,...(/^[0-9.+*/-]$/.test(k)?{text:k}: {})});await rpc('Input.dispatchKeyEvent',{type:'keyUp',key:k,code,windowsVirtualKeyCode:keyCode,nativeVirtualKeyCode:keyCode});await pause(25);};
   await click('clear');
   for(const [k,c,n] of [['2','Digit2',50],['+','Equal',187],['3','Digit3',51],['Enter','Enter',13]])await key(k,c,n);
@@ -77,6 +78,13 @@ async function run(){
   await key('Escape','Escape',27);await key('1','Digit1',49);await key('2','Digit2',50);await key('3','Digit3',51);await key('Backspace','Backspace',8);assert.equal(await display(),'12');
   await click('clear');await key('2','Digit2',50);await click('+');await key('3','Digit3',51);await click('=');assert.equal(Number(await display()),5);
   SCENARIOS.push('Keyboard and button calculations give the same result');
+ }
+ if(input.suite==='narrow-screen'){
+  assert.equal(await evaluate('window.innerWidth'),360);
+  assert.equal(await evaluate('document.documentElement.scrollWidth<=window.innerWidth+1'),true);
+  assert.equal(await evaluate('Array.from(document.querySelectorAll("button")).every(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=-1&&r.right<=window.innerWidth+1})'),true);
+  assert.equal(await evaluate('(()=>{const e=document.querySelector("output")||document.getElementById("display")||document.getElementById("result");if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.left>=-1&&r.right<=window.innerWidth+1})()'),true);
+  SCENARIOS.push('At 360px controls and result work without horizontal scrolling');
  }
  assert.equal(errors,0);assert.equal(blocked,0);
  return {version:1,mode:'check',browser:version.product.replace(/^HeadlessChrome\//,'Chrome/'),sandboxDisabled:false,

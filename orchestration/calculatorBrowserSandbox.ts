@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runCalculatorSandboxProcess, type CalculatorSandboxProcess } from "./calculatorSandbox.js";
-import { CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS } from "./calculatorAssessmentEvidence.js";
+import { CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS, CALCULATOR_NARROW_BROWSER_SCENARIOS } from "./calculatorAssessmentEvidence.js";
 import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
 import { validateCalculatorScope, CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { scanForSecrets } from "../github/secretScanner.js";
@@ -33,7 +33,7 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
   const seccomp = JSON.parse(readFileSync(policy, "utf8"));
   if (seccomp.defaultAction !== "SCMP_ACT_ERRNO") return refuse();
   let preflightStarted = false, ready = false, checkStarted = false;
-  async function execute(mode: "preflight" | "check", sources: ReadonlyMap<string, string> = new Map(), keyboard = false) {
+  async function execute(mode: "preflight" | "check", sources: ReadonlyMap<string, string> = new Map(), keyboard = false, narrow = false) {
     let directory: string | undefined, name: string | undefined;
     try {
       const inspected = await run([...PREFIX, "image", "inspect", "--format={{json .RepoDigests}}", image], options);
@@ -51,7 +51,7 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
       }
       const harnessPath = join(directory, "harness.mjs"), manifest = join(directory, "manifest.json");
       writeFileSync(harnessPath, harness, { mode: 0o600, flag: "wx" });
-      writeFileSync(manifest, JSON.stringify({ version: 1, mode, suite: keyboard ? "keyboard" : "clear-backspace" }), { mode: 0o600, flag: "wx" }); owned.push(harnessPath, manifest);
+      writeFileSync(manifest, JSON.stringify({ version: 1, mode, suite: narrow ? "narrow-screen" : keyboard ? "keyboard" : "clear-backspace" }), { mode: 0o600, flag: "wx" }); owned.push(harnessPath, manifest);
       if (uid === 0) for (const path of owned) chownSync(path, user, group);
       name = "factory-browser-" + randomBytes(10).toString("hex");
       const args = [...PREFIX, "run", "--rm", "--name=" + name, "--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
@@ -72,7 +72,7 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
       if (proof.version !== 1 || proof.mode !== mode || proof.sandboxDisabled !== false || !/^Chrome\/[0-9.]+$/.test(proof.browser)) return refuse();
       if (mode === "preflight" && (proof.ready !== true || proof.networkIsolated !== true || proof.credentialsExcluded !== true)) return refuse();
       if (mode === "check" && (proof.status !== "passed" || proof.testsExecuted !== true || proof.pageErrors !== 0 || proof.blockedRequests !== 0 ||
-          JSON.stringify(proof.scenarios) !== JSON.stringify(keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS))) return refuse();
+          JSON.stringify(proof.scenarios) !== JSON.stringify(narrow ? CALCULATOR_NARROW_BROWSER_SCENARIOS : keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS))) return refuse();
       return proof;
     } catch (error) {
       if (error instanceof Error && error.message === CALCULATOR_BROWSER_SANDBOX_ERROR) throw error;
@@ -93,9 +93,10 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
       if (!ready || checkStarted) return refuse(); checkStarted = true;
       const { changes, task } = input;
       validateCalculatorScope({ repository: changes.repository, baseRef: changes.baseRef, baseSha: changes.baseSha, changePaths: task.paths });
+      const narrow = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "narrow-screen";
       const keyboard = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "keyboard";
-      const paths = keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : PATHS.slice(0, 3);
-      if (task.role !== "frontend" || (!keyboard && (task.acceptanceIds.length !== 2 || !["clear", "backspace"].every(id => task.acceptanceIds.includes(id)))) ||
+      const paths = narrow ? ["index.html","styles.css"] : keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : PATHS.slice(0, 3);
+      if (task.role !== "frontend" || (!keyboard && !narrow && (task.acceptanceIds.length !== 2 || !["clear", "backspace"].every(id => task.acceptanceIds.includes(id)))) ||
           task.paths.length !== paths.length || !paths.every(path => task.paths.includes(path)) ||
           !changes.files.length || new Set(changes.files.map(f => f.path)).size !== changes.files.length ||
           changes.files.some(f => !paths.includes(f.path)) || input.proposalDigest !== calculatorProposalDigest(changes) ||
@@ -103,12 +104,12 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
       const sources = new Map(PATHS.map(path => [path, input.baseSources.get(path) ?? ""]));
       for (const file of changes.files) if (PATHS.includes(file.path)) sources.set(file.path, file.content);
       if (!sources.get("src/calculator.mjs") || createHash("sha256").update(sources.get("src/calculator.mjs")!).digest("hex") !== input.dependencySha256) return refuse();
-      const proof = await execute("check", sources, keyboard);
+      const proof = await execute("check", sources, keyboard, narrow);
       if (calculatorProposalDigest(changes) !== input.proposalDigest) return refuse();
       return Object.freeze({ repository: changes.repository, taskId: task.id, baseSha: changes.baseSha,
         proposalDigest: input.proposalDigest, dependencySha256: input.dependencySha256,
         status: "passed" as const, testsExecuted: true as const, browser: proof.browser, sandboxDisabled: false as const,
-        pageErrors: 0 as const, blockedRequests: 0 as const, scenarios: keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS });
+        pageErrors: 0 as const, blockedRequests: 0 as const, scenarios: narrow ? CALCULATOR_NARROW_BROWSER_SCENARIOS : keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS });
     },
   });
 }
