@@ -126,3 +126,53 @@ jobs:
           path: ${{ runner.temp }}/ci-delivery-result.json
           if-no-files-found: ignore
           retention-days: 14
+  redeliver:
+    needs: [inspect, deliver]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout tested immutable delivery runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 6e746c06ad46c18f6353dec1df8041b919827f77
+          persist-credentials: false
+      - name: Download exact authenticated output of predecessor job
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.inspect.outputs.evidence_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ci-delivery-source
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Verify current CI and record exactly one budget-waiting successor; check restart
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/ci-delivery-source
+          DELIVERY_ARTIFACT_ID: ${{ needs.inspect.outputs.evidence_id }}
+          DELIVERY_ARTIFACT_DIGEST: ${{ needs.inspect.outputs.evidence_digest }}
+          FACTORY_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          pnpm exec tsx scripts/calculator-ci-deliver-verified.mjs
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          const result=JSON.parse(readFileSync(process.env.RUNNER_TEMP+'/ci-delivery-result.json'));
+          assert.equal(result.firstDelivery,'duplicate');assert.equal(result.verifications,0);assert.equal(result.newModelCalls,0);assert.equal(result.taskStarted,false);
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: calculator-ci-redelivery-${{ github.run_id }}
+          path: ${{ runner.temp }}/ci-delivery-result.json
+          if-no-files-found: ignore
+          retention-days: 14
