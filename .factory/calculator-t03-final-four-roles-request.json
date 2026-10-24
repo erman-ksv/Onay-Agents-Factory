@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "allowanceId": "owner-four-additional-free-calls-20261024",
+  "phase": "saved-t03-general-repair-and-three-fresh-roles",
+  "runtimeSha": "f378132b7256e60eb33fb50fbac86c8fe705b701",
+  "sourceCiRunId": 40103601832,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceProposalRunId": 39993060116,
+  "sourceChargeRunId": 40102210646,
+  "priorRequests": 11,
+  "priorReservedTokens": 44698,
+  "maxNewRequests": 4,
+  "maxNewAuthorRequests": 1,
+  "maxNewReservedTokens": 24000,
+  "maxTotalT03Requests": 15,
+  "maxTotalT03ReservedTokens": 68698,
+  "maxFurtherRepairs": 0,
+  "publicationOnlyAfterAllFreshGates": true,
+  "automaticReplay": false,
+  "legalEnabled": false
+}
