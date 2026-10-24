@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "date": "2026-10-24",
+  "advisoryOnly": true,
+  "wholeStep8Closed": false,
+  "status": "browser_passed_node_test_environment_failed",
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "proposalDigest": "f64fe4c271e0476dc77d109b9bf35161a221fcbb03d44ebf7e89516305df34dc",
+  "sourceCi": {
+    "sourceSha": "62a99eb21932b7ca26c3d2a4f3cae16810f48da2",
+    "runId": 40106869548,
+    "jobId": 120910270569,
+    "typecheck": "passed",
+    "tests": 2122,
+    "pass": 2122,
+    "fail": 0
+  },
+  "authorAttempt": {
+    "runId": 40106311123,
+    "jobId": 120908611571,
+    "artifactId": 12565240405,
+    "artifactDigest": "sha256:2f591b546b5f13eef140f482200278ebb9be4695c029125a1802c77400a72e20",
+    "newProviderCalls": 1,
+    "httpStatus": 200,
+    "finishReason": "stop",
+    "rejection": "extra contentSha256 field on create"
+  },
+  "advisoryMetadataAudit": {
+    "runId": 40106648010,
+    "result": {
+      "version": 1,
+      "providerCalls": 0,
+      "kind": "repair",
+      "result": {
+        "object": true,
+        "knownKeys": [
+          "summary",
+          "changes"
+        ],
+        "extraKeyCount": 0,
+        "extraKeys": []
+      },
+      "summaryType": "string",
+      "summaryLength": 103,
+      "changesArray": true,
+      "changeCount": 2,
+      "changes": [
+        {
+          "object": true,
+          "knownKeys": [
+            "operation",
+            "path",
+            "sourceSha256",
+            "edits",
+            "message"
+          ],
+          "extraKeyCount": 0,
+          "extraKeys": [],
+          "path": "src/app.mjs",
+          "operation": "patch",
+          "messageType": "string",
+          "contentType": "undefined",
+          "contentLength": null,
+          "shaType": "string",
+          "shaValid": true,
+          "editsArray": true,
+          "edits": [
+            {
+              "object": true,
+              "knownKeys": [
+                "before",
+                "after"
+              ],
+              "extraKeyCount": 0,
+              "extraKeys": [],
+              "beforeType": "string",
+              "afterType": "string",
+              "beforeLength": 58,
+              "afterLength": 460,
+              "unchanged": false
+            }
+          ]
+        },
+        {
+          "object": true,
+          "knownKeys": [
+            "operation",
+            "path",
+            "content",
+            "message"
+          ],
+          "extraKeyCount": 1,
+          "extraKeys": [
+            {
+              "name": "contentSha256",
+              "type": "string"
+            }
+          ],
+          "path": "test/ui.test.mjs",
+          "operation": "create",
+          "messageType": "string",
+          "contentType": "string",
+          "contentLength": 900,
+          "shaType": "undefined",
+          "shaValid": false,
+          "editsArray": false,
+          "edits": []
+        }
+      ]
+    }
+  },
+  "savedProposalTest": {
+    "runId": 40107014952,
+    "jobId": 120910691624,
+    "artifactId": 12565196841,
+    "artifactDigest": "sha256:98d003fae5df4f016036c83eeda0e8312e4dc9785be0cd83c94175c557b996fa",
+    "proposalFile": "private-saved-dom-proposal.json",
+    "newProviderCalls": 0,
+    "transportMetadata": {
+      "modelChecksumClaims": [
+        {
+          "path": "test/ui.test.mjs",
+          "claimIsSha256": true,
+          "matched": false,
+          "authoritative": false
+        }
+      ],
+      "modelClaimsUsedAsEvidence": false,
+      "codeBytesChanged": false,
+      "independentReviewsRequired": true
+    },
+    "nodeResult": {
+      "status": "failed",
+      "testsExecuted": true,
+      "failures": [
+        "Trusted isolated task check failed: project-tests.",
+        "Untrusted project-test diagnostic: test/ui.test.mjs; ReferenceError; /app/src/app.mjs:3:15; /app/src/app.mjs:3"
+      ]
+    }
+  },
+  "realBrowser": {
+    "runId": 40107529564,
+    "jobId": 120912209083,
+    "version": 1,
+    "status": "browser_passed_node_still_failed",
+    "browserChecks": {
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+      "baseSha": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+      "proposalDigest": "f64fe4c271e0476dc77d109b9bf35161a221fcbb03d44ebf7e89516305df34dc",
+      "dependencySha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+      "status": "passed",
+      "testsExecuted": true,
+      "browser": "Chrome/141.0.7390.37",
+      "sandboxDisabled": false,
+      "pageErrors": 0,
+      "blockedRequests": 0,
+      "scenarios": [
+        "Entering 123 then deleting the last digit displays 12",
+        "Clear permits a new calculation after input",
+        "Clear permits a new calculation after a result",
+        "Keyboard and button calculations give the same result"
+      ]
+    },
+    "providerCalls": 0,
+    "publicationAuthorized": false,
+    "wholeStep8Closed": false
+  },
+  "currentCharge": {
+    "attemptedRequests": 13,
+    "totalRequestBytes": 105300,
+    "reservedRunTokens": 55286,
+    "elapsedMs": 348893
+  },
+  "renewedAllowance": {
+    "maxAdditionalRequests": 5,
+    "maxAdditionalReservedTokens": 30000,
+    "baselineRequests": 11,
+    "baselineReservedTokens": 44698,
+    "usedAdditionalRequests": 2,
+    "usedAdditionalReservedTokens": 10588,
+    "remainingAdditionalRequests": 3,
+    "remainingAdditionalReservedTokens": 19412,
+    "overallRequestCeiling": 16,
+    "overallReservedTokenCeiling": 74698
+  },
+  "pending": [
+    "agent correction of Node UI test setup while preserving browser-verified app bytes",
+    "fresh Security Reviewer Tester and actual Node/browser success",
+    "publication and exact-SHA candidate CI",
+    "automatic authenticated CI delivery and actual exactly-once next-task transition"
+  ],
+  "remainingMainCriteria": 3,
+  "completedMainCriteria": 1,
+  "noCiDeliveryImplemented": true,
+  "legalEnabled": false,
+  "publicationStarted": false,
+  "mainUnchanged": true,
+  "calculatorUnchanged": true,
+  "merge": false,
+  "deployment": false,
+  "nextWorkNotes": [
+    "Do not regenerate the app; current app passed four fixed real Chrome scenarios.",
+    "Use proposal f64fe4... from artifact 12565196841 as failed input, not the earlier syntactically broken proposal.",
+    "Do not repeat completed schema inspections or saved-draft searches.",
+    "Model contentSha256 is advisory and did not match content; host computes its own checksum. Never use model checksum claims as evidence.",
+    "Three reviews remain unused. One further author correction plus all three reviews requires four requests; do not exceed current ceiling.",
+    "Increasing renewed allowance to 6 requests / 36000 reserved tokens has not been authorized."
+  ]
+}
