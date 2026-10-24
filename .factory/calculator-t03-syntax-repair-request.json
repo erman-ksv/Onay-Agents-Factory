@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "allowanceId": "owner-precise-jsdom-cycle-20261023",
+  "phase": "last-approved-syntax-only-request-no-publication",
+  "runtimeSha": "32700dcda8f1ece95e13c81cf92dd34d5e12709f",
+  "sourceCiRunId": 40101668916,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceRunId": 39993060116,
+  "sourceArtifactId": 12518816662,
+  "priorRequests": 10,
+  "maxNewRequests": 1,
+  "maxTotalT03Requests": 11,
+  "maxTotalT03ReservedTokens": 45000,
+  "maxOutputTokens": 512,
+  "independentReviewsDeferred": true,
+  "publicationEnabled": false,
+  "maxFurtherRepairs": 0,
+  "automaticReplay": false,
+  "legalEnabled": false
+}
