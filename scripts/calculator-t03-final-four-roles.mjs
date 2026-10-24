@@ -201,7 +201,7 @@ try{
   const body=JSON.parse(options.body);if(providerCalls===0)assert.match(body.messages[0].content,/^You are Frontend continuing ONE failed keyboard proposal/);else assert.match(body.messages[0].content,/^You are the (security|reviewer|tester) in the isolated calculator development team\./);assert.ok(providerCalls<4);
   providerCalls++;report.newProviderCalls=providerCalls;report.modelCalls=11+providerCalls;
   const response=await fetch(url,options);put('provider-'+providerCalls+'.json',{provider:'groq',sequence:providerCalls,model:body.model,status:response.status});return response;
- },{},undefined,{afterProposalRejected:async rejection=>{put('private-rejected-proposal.json',rejection);save({...active,httpInFlight:false});},beforeRequest:async current=>{await barrier.assertClaimed();await assertOriginalMarker();assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);const aggregate=addPrior(current);assertRenewedCharge(aggregate);charge(aggregate);save({...active,httpInFlight:true});},afterAssessmentRejected:async rejection=>{put('private-rejected-assessment.json',rejection);save({...active,httpInFlight:false});}},'calculator-restored-repair-four-roles',()=>hostEvidence.get(adopted));
+ },{},undefined,{afterProposalRejected:async rejection=>{put('private-rejected-proposal.json',rejection);save({...active,httpInFlight:false});},beforeRequest:async current=>{await barrier.assertClaimed();await assertOriginalMarker();assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);const aggregate=addPrior(current);assertRenewedCharge(aggregate);charge(aggregate);save({...active,httpInFlight:true});},afterAssessmentRejected:async rejection=>{put('private-rejected-assessment.json',rejection);save({...active,httpInFlight:false});}},'calculator-renewed-repair-four-roles',()=>hostEvidence.get(adopted));
  phase='reconstruct_saved_failed_candidate';
  const savedCandidate=latestCandidate;
  const rebuilt=coreTeam.restoreProposal(plan,TASK,taskSnapshot,savedCandidate,calculatorProposalDigest(savedCandidate),[]);
@@ -210,7 +210,7 @@ try{
  repairRequest=coreTeam.importFailedHostTestRepair(plan,TASK,rebuilt,failedToken,sourcesSnapshot);
 
  phase='preview_corrective_context_without_http';
- const validator=createCalculatorModelTeam(launch.goal,{...env,GITHUB_TOKEN:undefined,FACTORY_STATE_TOKEN:undefined,CALCULATOR_GITHUB_TOKEN:undefined},async()=>{throw Error('Preview only');},{},undefined,undefined,'calculator-restored-repair-four-roles');
+ const validator=createCalculatorModelTeam(launch.goal,{...env,GITHUB_TOKEN:undefined,FACTORY_STATE_TOKEN:undefined,CALCULATOR_GITHUB_TOKEN:undefined},async()=>{throw Error('Preview only');},{},undefined,undefined,'calculator-renewed-repair-four-roles');
  const vr=validator.restoreProposal(plan,TASK,taskSnapshot,savedCandidate,calculatorProposalDigest(savedCandidate),[]);
  const vt=await collectCalculatorFailedTestEvidence(plan.tasks[2],vr,checks.checkProposal);
  const vq=validator.importFailedHostTestRepair(plan,TASK,vr,vt,sourcesSnapshot);
@@ -223,7 +223,7 @@ try{
  report.sourceCapsuleSha256=T03_REPAIR_CAPSULE_SHA;
  phase='live_host_ready';report.runtimeSha=env.FACTORY_RUNTIME_SHA;report.sourceCiRunId=Number(env.FACTORY_SOURCE_CI_RUN);report.baseSha=PIN.candidateSha;
  const privateDir=join(root,'execution-private');mkdirSync(privateDir,{mode:0o700});
- writer=createCalculatorExecutionCheckpointStore(privateDir,{repository:REPO,goalId:plan.owner.id,ownerFingerprint:plan.owner.ownerFingerprint,planFingerprint:PLAN,taskId:TASK,branch:plan.branch,baseSha:PIN.candidateSha,bootstrapSha:plan.owner.baseSha,runtimeConfigDigest:sha(JSON.stringify({runtimeSha:env.FACTORY_RUNTIME_SHA,runId:env.GITHUB_RUN_ID,preset:'calculator-restored-repair-four-roles',ownerApprovedCorrectionCycle:7,sourceCapsule:T03_REPAIR_CAPSULE_SHA}))});
+ writer=createCalculatorExecutionCheckpointStore(privateDir,{repository:REPO,goalId:plan.owner.id,ownerFingerprint:plan.owner.ownerFingerprint,planFingerprint:PLAN,taskId:TASK,branch:plan.branch,baseSha:PIN.candidateSha,bootstrapSha:plan.owner.baseSha,runtimeConfigDigest:sha(JSON.stringify({runtimeSha:env.FACTORY_RUNTIME_SHA,runId:env.GITHUB_RUN_ID,preset:'calculator-renewed-repair-four-roles',ownerApprovedCorrectionCycle:7,sourceCapsule:T03_REPAIR_CAPSULE_SHA}))});
  active={attempt:1,stage:'admission',status:'running',assessments:[],modelState:high,httpInFlight:false,publicationStarted:false};
  let exported=false;const freshAssessments=[];
  team=Object.freeze({

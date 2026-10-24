@@ -160,7 +160,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   } : {}) }, guardedTransport);
   const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: hostBudget?.maxOutputTokens ?? 1200, now,
     ...(hostPreset === "calculator-keyboard-eight-roles" ? { maxRunTokens: 32000 } : {}),
-    ...(hostPreset === "calculator-restored-repair-four-roles" ? { maxRunTokens: 24000 } : {}),
+    ...(hostPreset === "calculator-renewed-repair-four-roles" ? { maxRunTokens: 24000 } : {}),
     ...(prior ? { maxRunTokens: 16000 - prior.reservedRunTokens } : {}) }) : undefined;
   const admit = contextBudget ? createCalculatorGroqPacer(contextBudget, budget, { ...timing, now }, wallTimeMs, hostPreset) : undefined;
   const request = contextBudget ? createGroqBudgetedFetch(contextBudget, budget.fetch) :
@@ -170,7 +170,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   const assessed = new WeakMap<PreparedCalculatorChanges, Set<string>>();
   const assessmentResults = new WeakMap<PreparedCalculatorChanges, CalculatorAssessment[]>();
   const restoredPrefixes = new WeakMap<PreparedCalculatorChanges, readonly CalculatorAssessment[]>();
-  const repairOnly = hostPreset === "calculator-restored-repair-four-roles";
+  const repairOnly = hostPreset === "calculator-restored-repair-four-roles" || hostPreset === "calculator-renewed-repair-four-roles";
   const repairFeedback = new WeakMap<CalculatorRepairRequest, { taskId: string; previous: PreparedCalculatorChanges;
     assessments: readonly CalculatorAssessment[]; tests?: CalculatorProposalTests;
     rejectedProposal?:unknown;proposalValidation?:readonly CalculatorProposalDiagnostic[];
