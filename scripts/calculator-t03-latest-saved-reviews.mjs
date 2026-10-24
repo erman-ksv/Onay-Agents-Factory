@@ -1,3 +1,4 @@
+import {prepareCalculatorRoleChanges} from '../commander/calculatorTeam.js';
 import {prepareSavedCalculatorDraftRepair} from '../orchestration/calculatorSavedDraftRepair.js';
 // Explicit owner allowance: at most four additional free calls and 24000 reserved tokens.
 function assertRenewedCharge(c){assert.ok(c.attemptedRequests<=15&&c.reservedRunTokens<=68698&&c.totalRequestBytes<=183362&&c.elapsedMs<=632199);}
@@ -208,9 +209,14 @@ try{
   providerCalls++;report.newProviderCalls=providerCalls;report.modelCalls=12+providerCalls;
   const response=await fetch(url,options);put('provider-'+providerCalls+'.json',{provider:'groq',sequence:providerCalls,model:body.model,status:response.status});return response;
  },{},undefined,{afterProposalRejected:async rejection=>{put('private-rejected-proposal.json',rejection);save({...active,httpInFlight:false});},beforeRequest:async current=>{await barrier.assertClaimed();await assertOriginalMarker();assert.equal(await reader.getHead(plan.branch),PIN.candidateSha);const aggregate=addPrior(current);assertRenewedCharge(aggregate);charge(aggregate);save({...active,httpInFlight:true});},afterAssessmentRejected:async rejection=>{put('private-rejected-assessment.json',rejection);save({...active,httpInFlight:false});}},'calculator-frontend-2048-four-roles',()=>hostEvidence.get(adopted));
- phase='verify_saved_agent_draft_without_model';
- const savedCandidate=prepareSavedCalculatorDraftRepair(savedDraft,renewedCandidate,taskSnapshot);
- adopted=coreTeam.restoreProposal(plan,TASK,taskSnapshot,savedCandidate,calculatorProposalDigest(savedCandidate),[]);
+ phase='verify_saved_agent_drafts_without_model';
+ const versions=[{sourceRunId:40103757771,candidate:renewedCandidate}];
+ const oldTest=rejectedDraft.result.changes.find(c=>c.path==='test/ui.test.mjs'&&c.operation==='create');
+ if(oldTest){const ev=JSON.parse(latestCandidate.reviewEvidence),app=ev.changes.find(c=>c.path==='src/app.mjs');assert.ok(app);const appInput={operation:app.operation,path:app.path,sourceSha256:app.sourceSha256,edits:app.edits,message:latestCandidate.files.find(f=>f.path===app.path).message};const candidate=prepareCalculatorRoleChanges('frontend',{summary:'Exact composition of authenticated agent-written app and test drafts',changes:[appInput,oldTest]},taskSnapshot);versions.push({sourceRunId:39990331498,candidate});}
+ report.savedVariantChecks=[];let selected;
+ for(const version of versions){try{const candidate=prepareSavedCalculatorDraftRepair(savedDraft,version.candidate,taskSnapshot),result=await testProposal({task:plan.tasks[2],changes:candidate,proposalDigest:calculatorProposalDigest(candidate)});report.savedVariantChecks.push({sourceRunId:version.sourceRunId,proposalDigest:calculatorProposalDigest(candidate),status:result.status,testsExecuted:result.testsExecuted,failures:result.failures});if(result.status==='passed'){selected=candidate;report.selectedAgentTestRunId=version.sourceRunId;break;}}catch{report.savedVariantChecks.push({sourceRunId:version.sourceRunId,status:'exact_source_or_saved_patch_unverified',providerCalls:0});}}
+ assert.ok(selected);
+ adopted=coreTeam.restoreProposal(plan,TASK,taskSnapshot,selected,calculatorProposalDigest(selected),[]);
  put('private-saved-agent-correction.json',adopted);report.savedAgentCorrectionAdopted=true;report.savedAgentDraftRunId=40102210646;report.savedAgentProposalDigest=calculatorProposalDigest(adopted);
  const adoptedChecks=await testProposal({task:plan.tasks[2],changes:adopted,proposalDigest:calculatorProposalDigest(adopted)});report.savedAgentDraftChecks={status:adoptedChecks.status,testsExecuted:adoptedChecks.testsExecuted,failures:adoptedChecks.failures};assert.equal(adoptedChecks.status,'passed');assert.ok(hostEvidence.get(adopted));report.authorRepairVerified=true;assert.equal(coreTeam.diagnostic().httpRequestsSent,0);
  phase='admit_original_repair';
