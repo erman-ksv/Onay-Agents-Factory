@@ -1,9 +1,9 @@
 {
   "version": 1,
   "allowanceId": "owner-precise-jsdom-cycle-20261023",
-  "phase": "last-approved-syntax-only-request-no-publication",
-  "runtimeSha": "32700dcda8f1ece95e13c81cf92dd34d5e12709f",
-  "sourceCiRunId": 40101668916,
+  "phase": "last-approved-request-exact-app-syntax-line",
+  "runtimeSha": "4ebf082cfe676406454a91a5d672bb7145460a82",
+  "sourceCiRunId": 40102034894,
   "taskId": "calculator-pilot-step7-v1-34ee03-t03",
   "sourceRunId": 39993060116,
   "sourceArtifactId": 12518816662,
@@ -16,5 +16,7 @@
   "publicationEnabled": false,
   "maxFurtherRepairs": 0,
   "automaticReplay": false,
-  "legalEnabled": false
+  "legalEnabled": false,
+  "zeroHttpDiagnosticRunId": 40101817295,
+  "zeroHttpDiagnosticArtifactId": 12562803408
 }
