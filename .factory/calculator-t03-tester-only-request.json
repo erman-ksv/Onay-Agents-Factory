@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "allowanceId": "owner-one-additional-tester-same-36000-20261024",
+  "phase": "tester-only-same-proposal-two-restored-ready-reviews",
+  "runtimeSha": "09188e96e2c0ef845f6ec8f706747f8b2eb5b9f3",
+  "sourceCiRunId": 40117533361,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceRunId": 40110787654,
+  "sourceArtifactId": 12566129197,
+  "proposalDigest": "6e84fd6a29e8759a5337f946872b0dc73feb553cf1b91b8aabd387f32842b754",
+  "priorRequests": 17,
+  "priorReservedTokens": 69863,
+  "maxNewRequests": 1,
+  "maxNewReservedTokens": 6000,
+  "maxTotalT03Requests": 18,
+  "maxTotalT03ReservedTokens": 80698,
+  "maxFurtherRepairs": 0,
+  "sourceBytesLocked": true,
+  "reuseSecurityAndReviewer": true,
+  "publicationOnlyAfterAllGates": true,
+  "automaticReplay": false,
+  "legalEnabled": false
+}
