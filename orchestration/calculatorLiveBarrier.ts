@@ -61,7 +61,18 @@ export function createCalculatorLiveBarrier(config: Readonly<{
         phase = "source_ci_jobs";
         const evidence = await request("/actions/runs/" + c.sourceCiRunId + "/jobs?per_page=100");
         if (evidence.total_count !== 1 || evidence.jobs?.length !== 1) throw Error(ERROR);
-        const job = evidence.jobs[0];
+        let job = evidence.jobs[0];
+        // A list response may omit step details. Fetch that exact job once;
+        // absence of verified successful Typecheck/Test still refuses admission.
+        if (Array.isArray(job.steps) && job.steps.length === 0) {
+          phase = "source_ci_job_details";
+          if (!Number.isSafeInteger(job.id) || job.id < 1 || job.run_id !== c.sourceCiRunId) throw Error(ERROR);
+          const details = await request("/actions/jobs/" + job.id);
+          if (details.id !== job.id || details.run_id !== c.sourceCiRunId || details.run_attempt !== 1 ||
+              details.head_sha !== job.head_sha || details.status !== job.status || details.conclusion !== job.conclusion)
+            throw Error(ERROR);
+          job = details;
+        }
         if (job.head_sha !== c.runtimeSha || job.status !== "completed" || job.conclusion !== "success" ||
             ["Typecheck", "Test"].some(name => job.steps?.filter((s: any) => s.name === name && s.status === "completed" && s.conclusion === "success").length !== 1))
           throw Error(ERROR);

@@ -34,6 +34,8 @@ function fixture(mode="ready") {
    if(mode==="lost-response")throw Error("Lost acknowledgement");
    return Response.json(ref,{status:201});
   }
+  if(String(url).includes("/actions/jobs/456"))return Response.json({id:456,run_id:mode==="details-wrong-run"?124:123,run_attempt:1,head_sha:config.runtimeSha,status:"completed",conclusion:"success",steps:mode==="details-still-empty"?[]:["Typecheck","Test"].map(name=>({name,status:"completed",conclusion:mode==="details-skipped"&&name==="Test"?"skipped":"success"}))});
+  if(String(url).includes("/jobs?")&&mode.startsWith("details-"))return Response.json({total_count:1,jobs:[{id:456,run_id:123,head_sha:config.runtimeSha,status:"completed",conclusion:"success",steps:[]}]});
   if(String(url).includes("/jobs?"))return Response.json({total_count:1,jobs:[{head_sha:config.runtimeSha,status:"completed",conclusion:"success",steps:["Typecheck","Test"].map(name=>({name,status:"completed",conclusion:mode==="missing-tests"&&name==="Test"?"skipped":"success"}))}]});
   if(String(url).includes("/actions/runs/"))return Response.json({head_sha:mode==="stale-source"?"d".repeat(40):config.runtimeSha,path:".github/workflows/ci.yml",run_attempt:1,status:"completed",conclusion:"success",repository:{full_name:env.GITHUB_REPOSITORY}});
   return ref?Response.json(ref):new Response("{}",{status:404});
@@ -73,4 +75,9 @@ test("durable marker has only SHA metadata and an orphan tree; no workflow/sourc
  assert.equal(f.metadata.length,3);assert.deepEqual(f.metadata[2].parents,[]);
  assert.equal(f.metadata[1].tree[0].path,"calculator-live-event.json");
  assert.equal(JSON.stringify(f.metadata).includes("fixture-secret"),false);
+});
+
+test("empty CI list steps require exact-job successful checks, never inferred approval",async()=>{
+ const ready=fixture("details-ready");await createCalculatorLiveBarrier(config,env,ready.transport).claim();assert.equal(ready.posts,1);
+ for(const mode of ["details-wrong-run","details-still-empty","details-skipped"]){const f=fixture(mode);await assert.rejects(()=>createCalculatorLiveBarrier(config,env,f.transport).claim());assert.equal(f.posts,0);}
 });

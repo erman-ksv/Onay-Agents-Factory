@@ -248,7 +248,7 @@ try{
  assert.equal(sha(readFileSync(join(state,'calc-'+report.previousTaskId+'.json'))),PIN.originalReceiptSha256);
  report.historicalReceiptUnchanged=true;report.autonomousDevelopmentProven=result.status==='candidate-verified';
  }
-}catch(error){report.status='blocked';report.reason='live_bridge_'+phase+'_unverified';if(error?.name==='AssertionError'){report.assertion={operator:error.operator,...(typeof error.actual==='number'?{actual:error.actual}:{}),...(typeof error.expected==='number'?{expected:error.expected}:{})};}process.exitCode=10;}
+}catch(error){report.status='blocked';report.reason='live_bridge_'+phase+'_unverified';if(/^live_barrier_[a-z_]+$/.test(error?.code??''))report.barrierDiagnostic={code:error.code,...(Number.isInteger(error.httpStatus)?{httpStatus:error.httpStatus}:{})};if(error?.name==='AssertionError'){report.assertion={operator:error.operator,...(typeof error.actual==='number'?{actual:error.actual}:{}),...(typeof error.expected==='number'?{expected:error.expected}:{})};}process.exitCode=10;}
 finally{
  if(team){charge(team.checkpointCharge()??high);report.modelDiagnostic=team.diagnostic();report.modelCalls=17+providerCalls;report.newProviderCalls=providerCalls;}
  writer?.close();if(active)report.lastCheckpoint={stage:active.stage,status:active.status,attempt:active.attempt,httpInFlight:active.httpInFlight,publicationStarted:active.publicationStarted};report.remoteBarrierClaimed=remoteClaimed;report.currentCharge=high;put('report.json',report);console.log(JSON.stringify(report));
