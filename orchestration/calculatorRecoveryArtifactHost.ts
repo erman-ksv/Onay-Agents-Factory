@@ -15,7 +15,7 @@ export function createCalculatorRecoveryArtifactHost(artifact:CalculatorRecovery
   let taskId='',baseSha='';
   const cap=prepareCalculatorRuntimeRecoveryHost({bytes:artifact.readPrivateFile(checkpoint.path),expectedSha256:checkpoint.sha256,identity:mapping.identity,receipt:artifact.readPrivateFile(receipt.path),receiptSha256:receipt.sha256,
    verifyDependencies:operations.verifyDependencies,claimRecovery:operations.claimRecovery,assertRecovery:operations.assertRecovery,
-   assertSourceRemote:async binding=>{if(binding.checkpointSha256!==checkpoint.sha256||binding.receiptSha256!==receipt.sha256||binding.taskId!==taskId||binding.baseSha!==baseSha)return refuse();await artifact.assertRemote();},
+   assertSourceRemote:async(binding:Parameters<CalculatorRuntimeRecoveryHost['assertSourceRemote']>[0])=>{if(binding.checkpointSha256!==checkpoint.sha256||binding.receiptSha256!==receipt.sha256||binding.taskId!==taskId||binding.baseSha!==baseSha)return refuse();await artifact.assertRemote();},
   });if(!cap)return refuse();taskId=cap.identity.taskId;baseSha=cap.identity.baseSha;return cap;
  }catch{return refuse();}
 }
