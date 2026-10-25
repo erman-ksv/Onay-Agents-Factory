@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {CALCULATOR_PROFILE} from '../config/calculatorProfile.js';
 import {confirmCalculatorDraftPublication} from './calculatorPrConfirmation.js';
 const A='a'.repeat(40),B='b'.repeat(40),C='c'.repeat(40),scope={repository:CALCULATOR_PROFILE.repository,branch:'feat/agent-candidate',baseRef:'feat/owner-bootstrap',baseSha:A};
-const pr=(sha=B)=>({number:1,html_url:'https://github.com/'+scope.repository+'/pull/1',state:'open',draft:true,head:{ref:scope.branch,sha,repo:{full_name:scope.repository}},base:{ref:scope.baseRef,sha:A,repo:{full_name:scope.repository}}});
+const pr=(sha=B)=>({number:1,html_url:'https://github.com/'+scope.repository+'/pull/1',state:'open',draft:true,head:{ref:scope.branch,sha,repo:{full_name:scope.repository as string}},base:{ref:scope.baseRef,sha:A,repo:{full_name:scope.repository as string}}});
 test('stale PR metadata may converge only to exact candidate without publication or model actions',async()=>{
  let reads=0,checks=0;const waits:number[]=[];const result=await confirmCalculatorDraftPublication(scope,B,A,1,{readDetail:async()=>pr(++reads<3?A:B),assertCurrent:async()=>{checks++;},wait:async ms=>{waits.push(ms);}});
  assert.equal(result.headSha,B);assert.equal(reads,3);assert.equal(checks,6);assert.deepEqual(waits,[250,750]);assert.equal('publicationAuthorized' in result,false);
