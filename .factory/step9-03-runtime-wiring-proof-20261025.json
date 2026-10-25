@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "status": "runtime-wired-history-staged-no-new-allowance",
+  "runtimeSha": "e3a92da66ce9468750851f499ae5012fcfb0a74f",
+  "sourceCi": {
+    "runId": 40202374914,
+    "jobId": 121196069888,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2285,
+      "passed": 2285,
+      "failed": 0
+    }
+  },
+  "preflight": {
+    "runId": 40202374889,
+    "jobId": 121196068956,
+    "conclusion": "success",
+    "pinnedRuntimeSha": "7ec862ffa1c6d88fad4d405b19ab62daf0494d90",
+    "sourceCiRunId": 40202191401,
+    "artifactId": 12602421841,
+    "artifactGitHubDigest": "sha256:19a3ad2826398ee57a9f630b4d5132820f1de95bf6cc8e65c84275d3cab1e68f",
+    "githubGetRequests": 5,
+    "repositoryWrites": 0,
+    "providerCalls": 0,
+    "packagesInstalled": false,
+    "remoteLedgerPresent": false
+  },
+  "historicalCharge": {
+    "requests": 59,
+    "requestBytes": 553908,
+    "reservedTokens": 230413
+  },
+  "historyDigest": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+  "targetProjectKey": "30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "additionalRequestsAuthorized": 0,
+  "additionalReservedTokensAuthorized": 0,
+  "newProviderCalls": 0,
+  "previousPilotReplayed": false,
+  "localChecks": {
+    "authorizationTests": 20,
+    "historyStagingTests": 3,
+    "gitDiffCheck": "passed-isolated-index-comparison"
+  },
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "calculatorExistingCiRunId": 40178095158,
+  "mainChanged": false,
+  "applicationSourceChanged": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "activationDeferredUntilNextUsefulTask": true,
+  "remaining": [
+    "Select next useful goal and explicit bounded allowance",
+    "Verify native owner decision for that allowance",
+    "Initialize exact historical ledger explicitly",
+    "Invoke required runtime through immutable workflow; retain all existing barriers"
+  ]
+}
