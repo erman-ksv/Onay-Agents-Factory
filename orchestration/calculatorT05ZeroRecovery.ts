@@ -28,7 +28,7 @@ export function buildCalculatorT05ZeroRecovery(model:string,task:CalculatorPlanT
 }
 export function prepareCalculatorT05ZeroRecovery(task:CalculatorPlanTask,suffix:string,expectedSuffixSha256:string,raw:unknown,snapshot:CalculatorSnapshot){
  const part=split(task,suffix,expectedSuffixSha256),r=raw as any,source=calculatorSources(snapshot).get('test/ui.test.mjs'),metadata=snapshot.files.find(f=>f.path==='test/ui.test.mjs');
- if(!source||!metadata?.sourceSha256||!r||Object.keys(r).sort().join(',')!=='replacementTest,summary'||typeof r.summary!=='string'||typeof r.replacementTest!=='string'||!r.replacementTest.startsWith(marker)||r.replacementTest.length>6000||r.replacementTest.split(/(?:^|\n)test\(/).length!==2)throw Error('Single generated-test replacement refused');
+ if(!source||!metadata?.sourceSha256||!r||Object.keys(r).sort().join(',')!=='replacementTest,summary'||typeof r.summary!=='string'||typeof r.replacementTest!=='string'||!/^\s*test\s*\(\s*(['"])zero division error and recovery\1\s*,/.test(r.replacementTest)||r.replacementTest.length>6000||(r.replacementTest.match(/(?:^|\n)[ \t]*test\s*\(/g)?.length??0)!==1)throw Error('Single generated-test replacement refused');
  const parser=createRequire(import.meta.resolve('tsx'))('esbuild'),code=(s:string)=>parser.transformSync(s,{loader:'js',target:'esnext',legalComments:'none',minifyWhitespace:true,minifySyntax:false,minifyIdentifiers:false}).code;
  if(code(part.target)===code(r.replacementTest))throw Error('No executable correction');
  const revised=part.prefix+r.replacementTest+part.following;if(revised.includes(source)||revised.includes(JSON.stringify(source).slice(1,-1)))throw Error('Full original duplication refused');
