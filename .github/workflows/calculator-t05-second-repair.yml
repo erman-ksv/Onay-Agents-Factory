@@ -28,11 +28,11 @@ jobs:
           node --input-type=module - <<'JS'
           import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
           assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');const r=JSON.parse(readFileSync('request/.factory/calculator-t05-second-repair.json'));
-          assert.deepEqual(r,{version:1,taskId:'calculator-pilot-step7-v1-34ee03-t05',ownerAllowance:{id:'owner-t05-nine-free-calls-48000-second-correction-20261025',maxRequests:9,maxReservedTokens:48000,maxRepairs:2,freeTierConfirmed:true},executionRuntimeSha:'04d13fd4a49bd117bc728dbcecc310ed2526c375',executionSourceCiRunId:40170210128});
+          assert.deepEqual(r,{version:1,taskId:'calculator-pilot-step7-v1-34ee03-t05',ownerAllowance:{id:'owner-t05-nine-free-calls-48000-second-correction-20261025',maxRequests:9,maxReservedTokens:48000,maxRepairs:2,freeTierConfirmed:true},executionRuntimeSha:'6b9f20545a3f06947afe78cbefd1cd5066eeeee6',executionSourceCiRunId:40170515610});
           JS
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '04d13fd4a49bd117bc728dbcecc310ed2526c375'
+          ref: '6b9f20545a3f06947afe78cbefd1cd5066eeeee6'
           path: runtime
           persist-credentials: false
       - name: Download exact verified T04 completion
@@ -95,8 +95,8 @@ jobs:
           T05_REJECTED_DIRECTORY: ${{ runner.temp }}/t05-rejected
           T05_COMPLETION_DIRECTORY: ${{ runner.temp }}/t05-completion
           T05_PREVIOUS_DIRECTORY: ${{ runner.temp }}/t05-previous
-          FACTORY_RUNTIME_SHA: '04d13fd4a49bd117bc728dbcecc310ed2526c375'
-          FACTORY_SOURCE_CI_RUN: '40170210128'
+          FACTORY_RUNTIME_SHA: '6b9f20545a3f06947afe78cbefd1cd5066eeeee6'
+          FACTORY_SOURCE_CI_RUN: '40170515610'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -130,7 +130,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '04d13fd4a49bd117bc728dbcecc310ed2526c375'
+          ref: '6b9f20545a3f06947afe78cbefd1cd5066eeeee6'
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -143,4 +143,4 @@ jobs:
         env:
           FACTORY_STATE_TOKEN: ${{ github.token }}
         run: |
-          pnpm exec tsx --eval "import assert from 'node:assert/strict';import {createCalculatorLiveBarrier} from './orchestration/calculatorLiveBarrier.ts';(async()=>{assert.equal(process.env.GROQ_API_KEY,undefined);const b=createCalculatorLiveBarrier({runtimeSha:'04d13fd4a49bd117bc728dbcecc310ed2526c375',sourceCiRunId:40170210128,planFingerprint:'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2',previousTaskId:'calculator-pilot-step7-v1-34ee03-t04-t05-repair2',candidateSha:'eac625e5830612c64fb8dafbd3d239c72adbeafd'},process.env);assert.equal(await b.inspectAbsent(),false);console.log(JSON.stringify({status:'duplicate-refused-before-model',modelCalls:0,legalEnabled:false}));})();"
+          pnpm exec tsx --eval "import assert from 'node:assert/strict';import {createCalculatorLiveBarrier} from './orchestration/calculatorLiveBarrier.ts';(async()=>{assert.equal(process.env.GROQ_API_KEY,undefined);const b=createCalculatorLiveBarrier({runtimeSha:'6b9f20545a3f06947afe78cbefd1cd5066eeeee6',sourceCiRunId:40170515610,planFingerprint:'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2',previousTaskId:'calculator-pilot-step7-v1-34ee03-t04-t05-repair2',candidateSha:'eac625e5830612c64fb8dafbd3d239c72adbeafd'},process.env);assert.equal(await b.inspectAbsent(),false);console.log(JSON.stringify({status:'duplicate-refused-before-model',modelCalls:0,legalEnabled:false}));})();"
