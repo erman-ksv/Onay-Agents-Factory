@@ -109,9 +109,11 @@ export function createTaskModelBudgetFetch(
   readonly failure: TaskModelBudgetFailure | undefined;
   readonly providerHttpStatus: number | undefined;
 } {
-  const { now = () => performance.now(), hostPreset, projectBudget, ...overrides } = options;
-  if(projectBudget&&(!isProjectModelBudget(projectBudget.ledger)||projectBudget.provider!=='groq'||
-    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(projectBudget.taskId)||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(projectBudget.executionId)))throw Error('Invalid host project budget scope.');
+  const { now = () => performance.now(), hostPreset, projectBudget:projectBudgetInput, ...overrides } = options;
+  if(projectBudgetInput!==undefined&&(!projectBudgetInput||!isProjectModelBudget(projectBudgetInput.ledger)||projectBudgetInput.provider!=='groq'||
+    typeof projectBudgetInput.taskId!=='string'||typeof projectBudgetInput.executionId!=='string'||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(projectBudgetInput.taskId)||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(projectBudgetInput.executionId)))throw Error('Invalid host project budget scope.');
+  const projectBudget=projectBudgetInput===undefined?undefined:Object.freeze({...projectBudgetInput});
   const limits = { ...DEFAULT_TASK_MODEL_BUDGET, ...overrides };
   const preset = hostPreset === undefined ? undefined : calculatorHostModelBudget(hostPreset);
   if (preset && Object.entries(preset).some(([key, value]) => limits[key as keyof typeof limits] !== value))
