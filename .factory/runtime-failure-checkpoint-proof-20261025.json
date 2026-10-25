@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "status": "terminal-failure-diagnostics-persisted-and-verified",
+  "runtimeSha": "8252696a7a7853749e6397d44aa3481389fbf9d2",
+  "sourceCi": {
+    "runId": 40220160733,
+    "jobId": 121249794585,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2315,
+      "passed": 2315,
+      "failed": 0
+    }
+  },
+  "local": {
+    "newTests": 13,
+    "passed": 13,
+    "failed": 0,
+    "dependenciesInstalled": false,
+    "testIsolation": "none",
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "verified": {
+    "freshReaderRetainsFailure": true,
+    "uncertainHttpPreserved": true,
+    "chargesPreserved": true,
+    "terminalFailureCannotResume": true,
+    "oldCheckpointsNotRewritten": true,
+    "oldCheckpointStillReplayBarrier": true,
+    "lostAcknowledgementNotRetried": true,
+    "asyncPersistenceAwaited": true,
+    "artifactIntegrityValidated": true,
+    "privateDiagnosticFieldsExcluded": true
+  },
+  "compatibility": {
+    "failureFieldOptional": true,
+    "oldRecordsReadable": true,
+    "newRecordsRequireUpdatedValidator": true,
+    "historicalWorkflowsReplayed": false
+  },
+  "modelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "applicationSourceChanged": false,
+  "mainChanged": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Next useful goal and owner-approved allowance",
+    "Explicit complete-history initialization",
+    "Useful execution via required runtime and pinned workflow"
+  ]
+}
