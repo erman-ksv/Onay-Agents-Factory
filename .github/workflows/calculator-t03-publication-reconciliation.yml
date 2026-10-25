@@ -198,11 +198,11 @@ jobs:
           import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
           const r=JSON.parse(readFileSync('request/.factory/calculator-t03-publication-reconciliation.json'));
           assert.deepEqual(r.ownerT04Allowance,{id:'owner-t04-eight-free-calls-48000-20261024',taskId:'calculator-pilot-step7-v1-34ee03-t04',maxRequests:8,maxReservedTokens:48000,maxRepairs:1,freeTierConfirmed:true});
-          assert.equal(r.executionRuntimeSha,'5f23cf1a2eb279ba58511f362d8ef94d3a3a753b');assert.equal(r.executionSourceCiRunId,40144926271);
+          assert.equal(r.executionRuntimeSha,'4dc0a28eae7c2950234a8466edb28d4ed8fa74cc');assert.equal(r.executionSourceCiRunId,40145614273);
           JS
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 5f23cf1a2eb279ba58511f362d8ef94d3a3a753b
+          ref: 4dc0a28eae7c2950234a8466edb28d4ed8fa74cc
           path: runtime
           persist-credentials: false
       - name: Download exact current CI reconciliation
@@ -240,8 +240,8 @@ jobs:
           T04_ORIGIN_DIRECTORY: ${{ runner.temp }}/t04-origin
           T04_PARENT_ARTIFACT_ID: ${{ needs.inspect.outputs.evidence_id }}
           T04_PARENT_ARTIFACT_DIGEST: ${{ needs.inspect.outputs.evidence_digest }}
-          FACTORY_RUNTIME_SHA: 5f23cf1a2eb279ba58511f362d8ef94d3a3a753b
-          FACTORY_SOURCE_CI_RUN: '40144926271'
+          FACTORY_RUNTIME_SHA: 4dc0a28eae7c2950234a8466edb28d4ed8fa74cc
+          FACTORY_SOURCE_CI_RUN: '40145614273'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -275,7 +275,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 5f23cf1a2eb279ba58511f362d8ef94d3a3a753b
+          ref: 4dc0a28eae7c2950234a8466edb28d4ed8fa74cc
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -290,7 +290,7 @@ jobs:
         run: |
           cat > scripts/calculator-t04-replay-check.mjs <<'JS'
           import assert from 'node:assert/strict';import {writeFileSync} from 'node:fs';import {createCalculatorLiveBarrier} from '../orchestration/calculatorLiveBarrier.js';
-          assert.equal(process.env.GROQ_API_KEY,undefined);const barrier=createCalculatorLiveBarrier({runtimeSha:'5f23cf1a2eb279ba58511f362d8ef94d3a3a753b',sourceCiRunId:40144926271,planFingerprint:'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2',previousTaskId:'calculator-pilot-step7-v1-34ee03-t03-t04-exec',candidateSha:'10b4dddb9fd8881030155336a07a12b2cf739993'},process.env);
+          assert.equal(process.env.GROQ_API_KEY,undefined);const barrier=createCalculatorLiveBarrier({runtimeSha:'4dc0a28eae7c2950234a8466edb28d4ed8fa74cc',sourceCiRunId:40145614273,planFingerprint:'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2',previousTaskId:'calculator-pilot-step7-v1-34ee03-t03-t04-exec',candidateSha:'10b4dddb9fd8881030155336a07a12b2cf739993'},process.env);
           assert.equal(await barrier.inspectAbsent(),false);const report={version:1,status:'duplicate-execution-refused-on-fresh-worker',executionBarrier:barrier.ref,newModelCalls:0,taskStarted:false,legalEnabled:false};writeFileSync(process.env.RUNNER_TEMP+'/t04-replay-proof.json',JSON.stringify(report)+'\n');console.log(JSON.stringify(report));
           JS
           pnpm exec tsx scripts/calculator-t04-replay-check.mjs

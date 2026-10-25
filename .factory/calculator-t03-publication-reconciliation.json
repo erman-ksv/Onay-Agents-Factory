@@ -17,6 +17,7 @@
     "maxRepairs": 1,
     "freeTierConfirmed": true
   },
-  "executionRuntimeSha": "5f23cf1a2eb279ba58511f362d8ef94d3a3a753b",
-  "executionSourceCiRunId": 40144926271
+  "executionRuntimeSha": "4dc0a28eae7c2950234a8466edb28d4ed8fa74cc",
+  "executionSourceCiRunId": 40145614273,
+  "preflightFix": "bounded-host-source-groups-zero-model-cost"
 }
