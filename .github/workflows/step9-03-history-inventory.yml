@@ -1,0 +1,52 @@
+name: Project budget historical charge inventory without models
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/step9-03-history-inventory.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'a998d54c861f3b8d5a8209c00532cb3c3e227b09'
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Authenticate original archives and inventory only numeric counters
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          INVENTORY_SCRIPT: |
+            import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';
+            import {loadHistoricalArchives} from './scripts/calculator-historical-archives.mjs';
+            const hash=b=>createHash('sha256').update(b).digest('hex'),root=join(process.env.RUNNER_TEMP,'project-history-inventory');
+            try{
+             assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.equal(process.env.GITHUB_REPOSITORY,'erman-ksv/Onay-Agents-Factory');assert.equal(process.env.AGENT_FACTORY_LEGAL_ENABLED,'false');assert.equal(process.env.GROQ_API_KEY,undefined);assert.equal(process.env.GEMINI_API_KEY,undefined);
+             const archived=await loadHistoricalArchives(root,process.env.FACTORY_READ_TOKEN),rows=[];
+             for(const [path,bytes]of archived.files){if(!path.endsWith('.json'))continue;let data;try{data=JSON.parse(bytes.toString('utf8'));}catch{continue;}
+              function walk(value,where='',depth=0){if(!value||typeof value!=='object'||depth>16)return;const keys=['attemptedRequests','totalRequestBytes','reservedRunTokens','elapsedMs'],charge={};for(const k of keys)if(Number.isSafeInteger(value[k])&&value[k]>=0)charge[k]=value[k];
+               if(Object.keys(charge).length>=2&&charge.attemptedRequests!==undefined){rows.push({path,fileSha256:hash(bytes),field:where,charge,...(typeof data.taskId==='string'&&/^calculator-pilot-step7-v1-[A-Za-z0-9-]+$/.test(data.taskId)?{taskId:data.taskId}:{}),...(typeof data.phase==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(data.phase)?{phase:data.phase}:{})});assert.ok(rows.length<=512);}
+               for(const [k,v]of Object.entries(value))if(/^[A-Za-z0-9_.-]{1,120}$/.test(k)&&v&&typeof v==='object')walk(v,where?where+'.'+k:k,depth+1);
+              }walk(data);
+             }
+             const proof={version:1,status:'authenticated-historical-charge-inventory',manifestSha256:'68f3854c9df47e48219e206df977dc0f68d2cfe4cdcfeaaa0b5380fc013ce71c',rows,sourceArchiveFiles:archived.files.size,modelCalls:0,repositoryWrites:0,automaticallySummed:false,unverified:['Inventory observations may overlap; lineage and coverage must be established before migration.']};writeFileSync(join(process.env.RUNNER_TEMP,'history-inventory.json'),JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));
+            }catch{console.log(JSON.stringify({status:'blocked',reason:'historical-inventory-unverified',modelCalls:0,repositoryWrites:0}));process.exitCode=10;}
+        run: |
+          node --input-type=module -e 'import {writeFileSync} from "node:fs";writeFileSync(".history-inventory.mjs",process.env.INVENTORY_SCRIPT)'
+          pnpm exec tsx .history-inventory.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-history-inventory-${{ github.run_id }}
+          path: ${{ runner.temp }}/history-inventory.json
+          if-no-files-found: error
+          retention-days: 14
