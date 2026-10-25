@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "status": "rejected-author-response-private-capture-verified",
+  "runtimeSha": "cddc6b32abe2808242d74b82233001cc60833fe9",
+  "sourceCi": {
+    "runId": 40221400792,
+    "jobId": 121253554646,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2328,
+      "passed": 2328,
+      "failed": 0
+    }
+  },
+  "local": {
+    "privateCaptureTests": 12,
+    "privateCapturePassed": 12,
+    "relatedRegressions": 172,
+    "relatedPassed": 172,
+    "modelTeamTestsIncluded": 159,
+    "runtimeFailureTestsIncluded": 13,
+    "dependenciesInstalled": false,
+    "testIsolation": "none",
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "verified": {
+    "rawAuthorResponsePrivateOnly": true,
+    "metadataContainsClassificationAndDigestOnly": true,
+    "identityAndStageBound": true,
+    "uncertaintyClearedOnlyWithDurableParsedResponse": true,
+    "oldUncertaintyRetainedOnPreWriteFailure": true,
+    "lostAcknowledgementNotRetried": true,
+    "asyncPersistenceAwaited": true,
+    "rejectedBodyCannotBeReplacedOrApproved": true,
+    "genericFailureCallbackPreservesCapture": true,
+    "existingRoleGatesPreserved": true,
+    "existingCodecLimitsPreserved": true
+  },
+  "mockIntegration": {
+    "transportCalls": 1,
+    "rejectedResponseCaptured": true,
+    "requestCharged": true,
+    "authorReplayRefused": true
+  },
+  "automaticCorrectionAdded": false,
+  "modelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "applicationSourceChanged": false,
+  "mainChanged": false,
+  "previousPilotReplayed": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Next useful goal and owner-approved allowance",
+    "Explicit complete-history initialization",
+    "Useful execution via required runtime and pinned workflow"
+  ]
+}
