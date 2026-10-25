@@ -1,0 +1,30 @@
+name: Diagnose exact zero-model T04 state restoration
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/t04-state-diagnosis.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580123252'
+          run-id: '40145096490'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-stopped
+          merge-multiple: true
+      - name: Inspect only state identity metadata; no code or model keys
+        env:
+          ROOT: ${{ runner.temp }}/t04-stopped
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {existsSync,readdirSync,readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';
+          const root=process.env.ROOT,report=JSON.parse(readFileSync(root+'/report.json'));assert.equal(report.newModelCalls,0);assert.equal(report.remoteBarrierClaimed,false);const state=join(root,'state');
+          const files=existsSync(state)?readdirSync(state).map(p=>{const b=readFileSync(join(state,p));let j={};try{j=JSON.parse(b);}catch{}return {path:p,bytes:b.length,sha256:createHash('sha256').update(b).digest('hex'),version:j.version,fingerprint:j.fingerprint,requestKeys:j.request?Object.keys(j.request):[],goalId:j.request?.id,status:j.status};}):[];
+          console.log(JSON.stringify({version:1,stateExists:existsSync(state),sourceExists:existsSync(root+'/source/historical/qualified-manifest.json'),files,reportPhase:report.reason,modelCalls:0}));
+          JS
