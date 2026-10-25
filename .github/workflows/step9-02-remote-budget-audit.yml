@@ -1,0 +1,158 @@
+name: Shared remote budget storage audit without models
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/step9-02-remote-budget-audit.json']
+permissions:
+  contents: read
+  actions: read
+env:
+  AGENT_FACTORY_LEGAL_ENABLED: 'false'
+  AUDIT_SCRIPT: |
+    import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {readFileSync,writeFileSync,appendFileSync} from 'node:fs';
+    import {createProjectModelBudgetGitHubStore} from './github/projectModelBudgetStore.ts';
+    const runtime='79109785f2f167c83faaefa8d68948252c4a3b8b',sourceCi=40192582230,repo='erman-ksv/Onay-Agents-Factory',main='0752de6cf757c833417754bfe7f9a10fd654dbd9',env=process.env,hash=s=>createHash('sha256').update(s).digest('hex'),phase=env.AUDIT_PHASE;
+    const key=hash('step9-storage-only:'+env.GITHUB_RUN_ID+':'+runtime),initial={version:1,grantSha256:hash('storage-fixture-no-model-authority'),reservations:[]},reservation={reservationId:'synthetic-shared-r1',taskId:'storage-audit-only',requestSha256:hash('no-model-request'),requestBytes:1,reservedTokens:1};
+    async function get(path){const r=await fetch('https://api.github.com/repos/'+repo+path,{method:'GET',redirect:'error',headers:{Authorization:'Bearer '+env.BUDGET_STATE_TOKEN,Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);const b=await r.text();assert.ok(Buffer.byteLength(b)<1048576);return JSON.parse(b);}
+    try{
+     assert.equal(env.GITHUB_REPOSITORY,repo);assert.equal(env.GITHUB_REF,'refs/heads/feat/calculator-t02-charge-reconcile-20261022');assert.equal(env.GITHUB_EVENT_NAME,'push');assert.equal(env.GITHUB_RUN_ATTEMPT,'1');assert.equal(env.AGENT_FACTORY_LEGAL_ENABLED,'false');for(const name of ['GROQ_API_KEY','GEMINI_API_KEY','CLOUDFLARE_API_KEY'])assert.equal(env[name],undefined);
+     const store=createProjectModelBudgetGitHubStore({projectKey:key,token:env.BUDGET_STATE_TOKEN});
+     if(phase==='seed'){
+      assert.deepEqual(JSON.parse(readFileSync('../request/.factory/step9-02-remote-budget-audit.json')),{version:1,runtimeSha:runtime,sourceCiRunId:sourceCi,mode:'synthetic-storage-only',modelCalls:0,newLiveOwnerGrant:false});
+      const run=await get('/actions/runs/'+sourceCi);assert.equal(run.head_sha,runtime);assert.equal(run.path,'.github/workflows/ci.yml');assert.equal(run.run_attempt,1);assert.equal(run.status,'completed');assert.equal(run.conclusion,'success');const jobs=(await get('/actions/runs/'+sourceCi+'/jobs')).jobs;assert.ok(jobs.some(j=>j.conclusion==='success'&&['Typecheck','Test'].every(name=>j.steps.some(s=>s.name===name&&s.conclusion==='success'))));
+      assert.equal(await store.read(),undefined);const saved=await store.compareAndSwap(undefined,initial);assert.ok(saved);appendFileSync(env.GITHUB_OUTPUT,'project_key='+key+'\nrevision='+saved.revision+'\n');console.log(JSON.stringify({status:'synthetic-metadata-initialized',projectKey:key,revision:saved.revision,modelCalls:0,newLiveOwnerGrant:false}));
+     }else{
+      assert.equal(env.PROJECT_KEY,key);assert.match(env.EXPECTED_REVISION,/^[a-f0-9]{64}$/);
+      if(phase==='race'){
+       assert.ok(['a','b'].includes(env.WORKER));const result=await store.compareAndSwap(env.EXPECTED_REVISION,{...initial,reservations:[reservation]});const record={worker:env.WORKER,outcome:result?'accepted':'refused',...(result?{revision:result.revision}:{}),modelCalls:0};writeFileSync(env.RUNNER_TEMP+'/race-'+env.WORKER+'.json',JSON.stringify(record)+'\n');console.log(JSON.stringify(record));
+      }else{
+       assert.equal(phase,'verify');const outcomes=['a','b'].map(worker=>JSON.parse(readFileSync(env.RUNNER_TEMP+'/race-results/race-'+worker+'.json')));assert.deepEqual(outcomes.map(x=>x.worker),['a','b']);assert.equal(outcomes.filter(x=>x.outcome==='accepted').length,1);assert.equal(outcomes.filter(x=>x.outcome==='refused').length,1);assert.ok(outcomes.every(x=>x.modelCalls===0));
+       const current=await store.read();assert.ok(current);assert.notEqual(current.revision,env.EXPECTED_REVISION);assert.deepEqual(current.data,{...initial,reservations:[reservation]});const stale=await store.compareAndSwap(env.EXPECTED_REVISION,{...initial,reservations:[reservation,{...reservation,reservationId:'synthetic-stale-r2'}]});assert.equal(stale,undefined);assert.deepEqual(await store.read(),current);
+       const mainRef=await get('/git/ref/heads/main');assert.equal(mainRef.ref,'refs/heads/main');assert.equal(mainRef.object.type,'commit');assert.equal(mainRef.object.sha,main);
+       const proof={version:1,status:'remote-budget-cas-verified-between-independent-actions-jobs',runtimeSha:runtime,sourceCiRunId:sourceCi,projectKey:key,metadataRef:'refs/heads/state/project-model-budget/'+key,initialRevision:env.EXPECTED_REVISION,finalRevision:current.revision,independentWriters:2,outcomes,reservations:1,staleWriteRefusedBeforeObjects:true,verificationWorkerReadOnly:true,syntheticStorageFixture:true,modelCalls:0,newLiveOwnerGrant:false,actualT05LedgerMigrated:false,calculatorWrites:0,mainUnchanged:true,legalEnabled:false};writeFileSync(env.RUNNER_TEMP+'/step9-02-remote-budget-proof.json',JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));
+      }
+     }
+    }catch{console.log(JSON.stringify({status:'blocked',reason:'remote-budget-audit-unverified',phase,modelCalls:0}));process.exitCode=10;}
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      project_key: ${{ steps.seed.outputs.project_key }}
+      revision: ${{ steps.seed.outputs.revision }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: request
+          sparse-checkout: .factory/step9-02-remote-budget-audit.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '79109785f2f167c83faaefa8d68948252c4a3b8b'
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: runtime
+      - name: Create isolated metadata fixture after source CI
+        id: seed
+        working-directory: runtime
+        env:
+          AUDIT_PHASE: seed
+          BUDGET_STATE_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module -e 'import {writeFileSync} from "node:fs";writeFileSync(".step9-02-audit.mjs",process.env.AUDIT_SCRIPT)'
+          pnpm exec tsx .step9-02-audit.mjs
+  race:
+    needs: seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: ['a', 'b']
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '79109785f2f167c83faaefa8d68948252c4a3b8b'
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: runtime
+      - name: Compete once for the same metadata revision
+        working-directory: runtime
+        env:
+          AUDIT_PHASE: race
+          BUDGET_STATE_TOKEN: ${{ github.token }}
+          PROJECT_KEY: ${{ needs.seed.outputs.project_key }}
+          EXPECTED_REVISION: ${{ needs.seed.outputs.revision }}
+          WORKER: ${{ matrix.worker }}
+        run: |
+          node --input-type=module -e 'import {writeFileSync} from "node:fs";writeFileSync(".step9-02-audit.mjs",process.env.AUDIT_SCRIPT)'
+          pnpm exec tsx .step9-02-audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-budget-race-${{ matrix.worker }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/race-${{ matrix.worker }}.json
+          if-no-files-found: error
+          retention-days: 14
+  verify:
+    needs: [seed, race]
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '79109785f2f167c83faaefa8d68948252c4a3b8b'
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: runtime
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: remote-budget-race-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/race-results
+          merge-multiple: true
+      - name: Fresh read-only worker rejects stale replay and verifies single reservation
+        working-directory: runtime
+        env:
+          AUDIT_PHASE: verify
+          BUDGET_STATE_TOKEN: ${{ github.token }}
+          PROJECT_KEY: ${{ needs.seed.outputs.project_key }}
+          EXPECTED_REVISION: ${{ needs.seed.outputs.revision }}
+        run: |
+          node --input-type=module -e 'import {writeFileSync} from "node:fs";writeFileSync(".step9-02-audit.mjs",process.env.AUDIT_SCRIPT)'
+          pnpm exec tsx .step9-02-audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-budget-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/step9-02-remote-budget-proof.json
+          if-no-files-found: error
+          retention-days: 14
