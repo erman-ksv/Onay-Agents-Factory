@@ -87,8 +87,9 @@ async function run(){
   SCENARIOS.push('At 360px controls and result work without horizontal scrolling');
  }
  assert.equal(errors,0);assert.equal(blocked,0);
+ const domSelectors=input.suite==='narrow-screen'?await evaluate('[".calculator",".display",".keys",".key"].map(selector=>({selector,matches:document.querySelectorAll(selector).length}))'):undefined;
  return {version:1,mode:'check',browser:version.product.replace(/^HeadlessChrome\//,'Chrome/'),sandboxDisabled:false,
-  status:'passed',testsExecuted:true,pageErrors:0,blockedRequests:0,scenarios:SCENARIOS};
+  status:'passed',testsExecuted:true,pageErrors:0,blockedRequests:0,scenarios:SCENARIOS,...(domSelectors?{domSelectors}:{})};
 }
 try{console.log(JSON.stringify(await run()));}catch(error){console.log(JSON.stringify({version:1,status:'unverified',reason:error?.message==='browser_sandbox_unavailable'?'browser_sandbox_unavailable':applicationChecksStarted?'browser_checks_failed':'browser_checks_unverified'}));process.exitCode=1;}
 finally{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('closed'));}pending.clear();child?.kill('SIGKILL');server?.close();}

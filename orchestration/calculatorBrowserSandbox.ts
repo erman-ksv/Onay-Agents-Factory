@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runCalculatorSandboxProcess, type CalculatorSandboxProcess } from "./calculatorSandbox.js";
-import { CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS, CALCULATOR_NARROW_BROWSER_SCENARIOS } from "./calculatorAssessmentEvidence.js";
+import { CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS, CALCULATOR_NARROW_BROWSER_SCENARIOS, CALCULATOR_NARROW_DOM_SELECTORS } from "./calculatorAssessmentEvidence.js";
 import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
 import { validateCalculatorScope, CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { scanForSecrets } from "../github/secretScanner.js";
@@ -73,6 +73,7 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
       if (mode === "preflight" && (proof.ready !== true || proof.networkIsolated !== true || proof.credentialsExcluded !== true)) return refuse();
       if (mode === "check" && (proof.status !== "passed" || proof.testsExecuted !== true || proof.pageErrors !== 0 || proof.blockedRequests !== 0 ||
           JSON.stringify(proof.scenarios) !== JSON.stringify(narrow ? CALCULATOR_NARROW_BROWSER_SCENARIOS : keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS))) return refuse();
+      if(mode==="check"&&narrow&&(!Array.isArray(proof.domSelectors)||proof.domSelectors.length!==4||proof.domSelectors.some((f:any,i:number)=>Object.keys(f).sort().join(",")!=="matches,selector"||f.selector!==CALCULATOR_NARROW_DOM_SELECTORS[i]||!Number.isSafeInteger(f.matches)||f.matches<0||f.matches>1000)))return refuse();
       return proof;
     } catch (error) {
       if (error instanceof Error && error.message === CALCULATOR_BROWSER_SANDBOX_ERROR) throw error;
@@ -109,7 +110,7 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
       return Object.freeze({ repository: changes.repository, taskId: task.id, baseSha: changes.baseSha,
         proposalDigest: input.proposalDigest, dependencySha256: input.dependencySha256,
         status: "passed" as const, testsExecuted: true as const, browser: proof.browser, sandboxDisabled: false as const,
-        pageErrors: 0 as const, blockedRequests: 0 as const, scenarios: narrow ? CALCULATOR_NARROW_BROWSER_SCENARIOS : keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS });
+        pageErrors: 0 as const, blockedRequests: 0 as const, scenarios: narrow ? CALCULATOR_NARROW_BROWSER_SCENARIOS : keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS,...(narrow?{domSelectors:Object.freeze(proof.domSelectors.map((f:{selector:string;matches:number})=>Object.freeze({...f})))}:{}) });
     },
   });
 }

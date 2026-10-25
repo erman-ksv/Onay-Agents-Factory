@@ -15,6 +15,7 @@ export const CALCULATOR_KEYBOARD_BROWSER_SCENARIOS = Object.freeze([
   ...CALCULATOR_UI_BROWSER_SCENARIOS,
   "Keyboard and button calculations give the same result",
 ]);
+export const CALCULATOR_NARROW_DOM_SELECTORS = Object.freeze([".calculator",".display",".keys",".key"]);
 export const CALCULATOR_NARROW_BROWSER_SCENARIOS = Object.freeze([
   ...CALCULATOR_KEYBOARD_BROWSER_SCENARIOS,
   "At 360px controls and result work without horizontal scrolling",
@@ -25,6 +26,7 @@ export type CalculatorBrowserChecks = Readonly<{
   repository: string; taskId: string; baseSha: string; proposalDigest: string; dependencySha256: string;
   status: "passed"; testsExecuted: true; browser: string; sandboxDisabled: false;
   pageErrors: 0; blockedRequests: 0; scenarios: readonly string[];
+  domSelectors?: readonly Readonly<{selector:string;matches:number}>[];
 }>;
 declare const brand: unique symbol;
 export type CalculatorAssessmentEvidence = Readonly<{ [brand]: true }>;
@@ -35,7 +37,7 @@ type Record = { taskId: string; changes: PreparedCalculatorChanges; digest: stri
   evidenceId: string; proposalDigest: string; baseSha: string;
   dependencyContract: Readonly<{ path: string; blobSha: string; sourceSha256: string; signature: string }>;
   proposalChecks: Pick<CalculatorProposalTests, "status" | "testsExecuted" | "failures">;
-  browserChecks: Pick<CalculatorBrowserChecks, "status" | "testsExecuted" | "browser" | "sandboxDisabled" | "pageErrors" | "blockedRequests" | "scenarios">;
+  browserChecks: Pick<CalculatorBrowserChecks, "status" | "testsExecuted" | "browser" | "sandboxDisabled" | "pageErrors" | "blockedRequests" | "scenarios" | "domSelectors">;
   unverifiedAreas: readonly string[]; publicationAuthorized: false;
 }> };
 const records = new WeakMap<CalculatorAssessmentEvidence, Record>();
@@ -72,13 +74,14 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
     const proposalChecks = validateCalculatorProposalTests(await runners.checkProposal(input), task.id, changes);
     if (proposalChecks.status !== "passed" || !proposalChecks.testsExecuted) return refuse();
     const browser = await runners.checkBrowser({ ...input, dependencySha256: metadata.sourceSha256 });
-    if (!browser || Object.keys(browser).sort().join(",") !== "baseSha,blockedRequests,browser,dependencySha256,pageErrors,proposalDigest,repository,sandboxDisabled,scenarios,status,taskId,testsExecuted" ||
+    if (!browser || Object.keys(browser).sort().join(",") !== (narrow ? "baseSha,blockedRequests,browser,dependencySha256,domSelectors,pageErrors,proposalDigest,repository,sandboxDisabled,scenarios,status,taskId,testsExecuted" : "baseSha,blockedRequests,browser,dependencySha256,pageErrors,proposalDigest,repository,sandboxDisabled,scenarios,status,taskId,testsExecuted") ||
         browser.repository !== changes.repository || browser.taskId !== task.id || browser.baseSha !== changes.baseSha ||
         browser.proposalDigest !== digest || browser.dependencySha256 !== metadata.sourceSha256 || browser.status !== "passed" ||
         browser.testsExecuted !== true || browser.sandboxDisabled !== false || browser.pageErrors !== 0 || browser.blockedRequests !== 0 ||
         typeof browser.browser !== "string" || !/^Chrome\/[0-9.]{1,40}$/.test(browser.browser) ||
         !Array.isArray(browser.scenarios) || JSON.stringify(browser.scenarios) !== JSON.stringify(scenarios) ||
         calculatorProposalDigest(changes) !== digest) return refuse();
+    if(narrow&&(!Array.isArray(browser.domSelectors)||browser.domSelectors.length!==4||browser.domSelectors.some((f,i)=>Object.keys(f).sort().join(",")!=="matches,selector"||f.selector!==CALCULATOR_NARROW_DOM_SELECTORS[i]||!Number.isSafeInteger(f.matches)||f.matches<0||f.matches>1000)))return refuse();
     const packet = Object.freeze({ evidenceId: "host-checks@" + digest, proposalDigest: digest, baseSha: changes.baseSha,
       dependencyContract: Object.freeze({ path, blobSha: metadata.blobSha, sourceSha256: metadata.sourceSha256,
         signature: "calculate(left, operator, right)" }),
@@ -87,7 +90,7 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
       proposalChecks: Object.freeze({ status: proposalChecks.status, testsExecuted: proposalChecks.testsExecuted, failures: proposalChecks.failures }),
       browserChecks: Object.freeze({ status: browser.status, testsExecuted: browser.testsExecuted, browser: browser.browser,
         sandboxDisabled: browser.sandboxDisabled, pageErrors: browser.pageErrors, blockedRequests: browser.blockedRequests,
-        scenarios: Object.freeze([...browser.scenarios]) }),
+        scenarios: Object.freeze([...browser.scenarios]),...(narrow?{domSelectors:Object.freeze(browser.domSelectors!.map(f=>Object.freeze({...f})))}:{}) }),
       unverifiedAreas: Object.freeze(["Unshown unchanged source beyond the verified arithmetic export signature",
         narrow ? "Other viewport widths, browsers, physical phones and accessibility beyond the supplied scenarios" : keyboard ? "Narrow-screen layout, other browsers and phones" : "Keyboard, narrow-screen layout, chained expressions, other browsers and phones",
         "Independent model verdicts, publication, exact-candidate CI and overall completion"]), publicationAuthorized: false as const });
@@ -95,7 +98,7 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
     if (Buffer.byteLength(text) > 3000 || scanForSecrets(text).length) return refuse();
     const token = Object.freeze({}) as CalculatorAssessmentEvidence;
     records.set(token, { taskId: task.id, changes, digest, proposalChecks,
-      browserChecks: Object.freeze({ ...browser, scenarios: Object.freeze([...browser.scenarios]) }), packet }); return token;
+      browserChecks: Object.freeze({ ...browser, scenarios: Object.freeze([...browser.scenarios]),...(narrow?{domSelectors:Object.freeze(browser.domSelectors!.map(f=>Object.freeze({...f})))}:{}) }), packet }); return token;
   } catch { return refuse(); }
 }
 
