@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "status": "bounded-correction-project-executor-mock-verified",
+  "sourceSha": "7f4ef666cf32942dcc0cf474c7c81938d0ea171e",
+  "sourceCi": {
+    "runId": 40224035087,
+    "conclusion": "success",
+    "jobId": 121261512764,
+    "typecheck": "passed",
+    "tests": {
+      "total": 2343,
+      "passed": 2343,
+      "failed": 0
+    }
+  },
+  "local": {
+    "tests": 205,
+    "passed": 205,
+    "failed": 0,
+    "modelTeamTests": 168,
+    "newRegressionTests": 9,
+    "dependenciesInstalled": false,
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "verified": {
+    "ordinaryProposalValidatorRetained": true,
+    "freshIndependentRolesRequired": true,
+    "sameProjectLedgerUsed": true,
+    "stableScopeBeforeHttp": true,
+    "independentControllersRaceOneSend": true,
+    "freshProcessDoesNotReplay": true,
+    "runtimeMetadataDoesNotCreateNewScope": true,
+    "http429NotReplayedOrRefunded": true,
+    "checkpointFailureBeforeHttpChargedAndNotReplayed": true,
+    "readOnlyAndLegacyCorrectionDenied": true,
+    "invalidCorrectionClassifiedAsRepair": true
+  },
+  "mockFullRolePath": {
+    "correctionRequests": 1,
+    "independentAssessments": 3,
+    "actualToolTestsRun": false,
+    "published": false,
+    "applicationCiRun": false
+  },
+  "projectExecutorApiConnected": true,
+  "mainRuntimeSelectsRecoveryAutomatically": false,
+  "historicalWorkflowChanged": false,
+  "productionHostContinuationConnected": false,
+  "realModelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "mainChanged": false,
+  "applicationSourceChanged": false,
+  "previousPilotReplayed": false,
+  "legalEnabled": false,
+  "merge": false,
+  "deployment": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Production host verifies original remote barrier and selects recovery API",
+    "Persist recovery phase separately from terminal original checkpoint",
+    "Existing real test/publication/CI path remains mandatory",
+    "Owner-approved live allowance and explicit full-history initialization before model transport"
+  ]
+}
