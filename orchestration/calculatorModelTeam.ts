@@ -157,6 +157,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     // Persistence can await I/O. A deadline that expires meanwhile still stops
     // the original request before transport; it never grants a fresh ledger.
     if (stopped || budget.failure) return refuse();
+    if(authorizedProject)try{authorizedProject.assertCurrentTime();}catch{failureCode??='project_owner_approval_unverified';stopped=true;return refuse();}
     httpRequestsSent++;
     return transport(input, init);
   };
