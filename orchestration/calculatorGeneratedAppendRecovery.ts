@@ -14,7 +14,7 @@ export function recoverCalculatorGeneratedAppend(task:CalculatorPlanTask,raw:unk
  const c=r.changes[0],diagnostics=calculatorProposalDiagnostics(raw,snapshot);
  if(!c||Object.keys(c).sort().join(',')!=='edits,message,operation,path,sourceSha256'||c.operation!=='patch'||c.path!=='test/ui.test.mjs'||!Array.isArray(c.edits)||c.edits.length!==1||diagnostics.length!==1||diagnostics[0]?.code!=='missing_anchor'||diagnostics[0].editIndex!==0)return refuse();
  const edit=c.edits[0];if(!edit||Object.keys(edit).sort().join(',')!=='after,before'||typeof edit.before!=='string'||!edit.before||typeof edit.after!=='string'||!edit.after.startsWith(edit.before))return refuse();
- const suffix=edit.after.slice(edit.before.length),source=calculatorSources(snapshot).get(c.path);if(!suffix||source===undefined)return refuse();
+ const suffix=edit.after.slice(edit.before.length),source=calculatorSources(snapshot).get(c.path);if(!suffix||source===undefined||suffix.includes(source)||suffix.includes(JSON.stringify(source).slice(1,-1)))return refuse();
  let anchor:string|undefined;for(const n of [64,96,128,192,256]){if(n>=source.length)break;const candidate=source.slice(-n);if(source.indexOf(candidate)===source.length-n){anchor=candidate;break;}}
  if(!anchor)return refuse();
  const changes=prepareCalculatorRoleChanges('frontend',{summary:r.summary,changes:[{operation:'patch',path:c.path,sourceSha256:c.sourceSha256,edits:[{before:anchor,after:anchor+suffix}],message:c.message}]},snapshot);
