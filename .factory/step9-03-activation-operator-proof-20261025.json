@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "status": "activation-operator-ready-inspect-only-verified",
+  "sourceRuntimeSha": "dc16b71815d002c3bf006266a16c622780d88269",
+  "sourceCi": {
+    "runId": 40207049045,
+    "jobId": 121210121759,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2298,
+      "passed": 2298,
+      "failed": 0
+    }
+  },
+  "operatorRun": {
+    "runId": 40207214337,
+    "workflowSha": "bf6e83bfc91f3a1cae4fd939f9bb4284eaf69dfb",
+    "requestJob": {
+      "id": 121210620460,
+      "conclusion": "success"
+    },
+    "inspectJob": {
+      "id": 121210651210,
+      "conclusion": "success"
+    },
+    "initializeJob": {
+      "id": 121210652737,
+      "conclusion": "skipped"
+    },
+    "operation": "inspect",
+    "status": "not-initialized",
+    "githubReads": 2,
+    "githubWriteRequests": 0,
+    "stateWrites": 0,
+    "modelCalls": 0,
+    "artifactId": 12603819802,
+    "artifactGitHubDigest": "sha256:a5943b0fc3f581b42d5f447d8a73b58c493c9bda3e18f7170fdbf623f18c9f2c"
+  },
+  "local": {
+    "activationTests": 13,
+    "scriptSyntax": "passed",
+    "workflowYaml": "passed",
+    "requestJobSelection": "inspect",
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "historicalCharge": {
+    "requests": 59,
+    "requestBytes": 553908,
+    "reservedTokens": 230413
+  },
+  "historyDigest": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+  "ownerDecision": null,
+  "actualLedgerInitialized": false,
+  "newProviderCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "previousPilotReplayed": false,
+  "mainChanged": false,
+  "applicationSourceChanged": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "remaining": [
+    "Goal and owner-approved bounded allowance for next useful task",
+    "Native owner decision pointer",
+    "Explicit initialize with audited history",
+    "Invoke required runtime through pinned workflow"
+  ],
+  "workflowCommitCi": {
+    "runId": 40207214362,
+    "jobId": 121210620290,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2298,
+      "passed": 2298,
+      "failed": 0
+    }
+  }
+}
