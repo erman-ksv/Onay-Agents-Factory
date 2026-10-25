@@ -1,4 +1,4 @@
-import {createCalculatorPublisher} from '../github/calculatorPublisher.js';
+import {createCalculatorPublisher} from "../github/calculatorPublisher.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

@@ -194,6 +194,7 @@ test("live snapshot adapter requires explicit target access and issues only fixe
   const fake: typeof fetch = async (input, init) => {
     calls++; const url = String(input); assert.ok(url.startsWith("https://api.github.com/repos/" + CALCULATOR_PROFILE.repository + "/"));
     assert.equal(init?.method, "GET");
+    if (url.includes("/git/ref/heads/")) return Response.json({ ref: "refs/heads/" + scope().baseRef, object: { type: "commit", sha: baseSha } });
     if (url.includes("/git/commits/")) return Response.json({ sha: baseSha, tree: { sha: treeSha } });
     if (url.includes("/git/trees/")) return Response.json({ sha: treeSha, truncated: false, tree: [] });
     return Response.json({ sha: baseSha });
