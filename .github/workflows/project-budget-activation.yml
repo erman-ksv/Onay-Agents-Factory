@@ -1,0 +1,138 @@
+name: Project budget operator inspect or authorized initialization
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/project-budget-activation-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: project-budget-activation-calculator-step7
+  cancel-in-progress: false
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      operation: ${{ steps.validate.outputs.operation }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .factory/project-budget-activation-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate metadata and select one fixed operation
+        id: validate
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,appendFileSync} from 'node:fs';
+          const b=readFileSync('.factory/project-budget-activation-request.json');assert.ok(b.length<=4096);const r=JSON.parse(b);
+          assert.deepEqual(Object.keys(r).sort(),['historyDigest','operation','ownerDecision','version']);assert.equal(r.version,1);
+          assert.equal(r.historyDigest,'6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1');assert.ok(['inspect','initialize'].includes(r.operation));
+          if(r.operation==='inspect')assert.equal(r.ownerDecision,null);
+          else{const d=r.ownerDecision;assert.ok(d&&typeof d==='object'&&!Array.isArray(d));assert.deepEqual(Object.keys(d).sort(),['bodySha256','commentId','issueNumber']);assert.equal(d.issueNumber,75);assert.ok(Number.isSafeInteger(d.commentId)&&d.commentId>0);assert.match(d.bodySha256,/^[a-f0-9]{64}$/);}
+          appendFileSync(process.env.GITHUB_OUTPUT,'operation='+r.operation+'\n');
+          JS
+  inspect:
+    needs: request
+    if: needs.request.outputs.operation == 'inspect'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout immutable tested operator
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'dc16b71815d002c3bf006266a16c622780d88269'
+          path: runtime
+          persist-credentials: false
+      - name: Checkout the same reviewed request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/project-budget-activation-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform reviewed TypeScript without package installation
+        working-directory: runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])if(existsSync(dir))compile(dir);
+          JS
+      - name: Inspect without provider credentials
+        working-directory: runtime
+        env:
+          FACTORY_BUDGET_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: 'dc16b71815d002c3bf006266a16c622780d88269'
+          FACTORY_SOURCE_CI_RUN: '40207049045'
+          FACTORY_BUDGET_OPERATION: 'inspect'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/project-budget-activation.mjs
+      - name: Preserve metadata including uncertain failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-budget-inspect-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-budget-activation/result.json
+          if-no-files-found: ignore
+          retention-days: 14
+  initialize:
+    needs: request
+    if: needs.request.outputs.operation == 'initialize'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout immutable tested operator
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'dc16b71815d002c3bf006266a16c622780d88269'
+          path: runtime
+          persist-credentials: false
+      - name: Checkout the same reviewed request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/project-budget-activation-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform reviewed TypeScript without package installation
+        working-directory: runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])if(existsSync(dir))compile(dir);
+          JS
+      - name: Initialize without provider credentials
+        working-directory: runtime
+        env:
+          FACTORY_BUDGET_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: 'dc16b71815d002c3bf006266a16c622780d88269'
+          FACTORY_SOURCE_CI_RUN: '40207049045'
+          FACTORY_BUDGET_OPERATION: 'initialize'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/project-budget-activation.mjs
+      - name: Preserve metadata including uncertain failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-budget-initialize-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-budget-activation/result.json
+          if-no-files-found: ignore
+          retention-days: 14
