@@ -1,0 +1,74 @@
+name: Read-only Calculator PR confirmation audit
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-pr-confirmation-audit.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: request
+          sparse-checkout: .factory/calculator-pr-confirmation-audit.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate immutable read-only request
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.deepEqual(JSON.parse(readFileSync('request/.factory/calculator-pr-confirmation-audit.json')),{version:1,runtimeSha:'06f1976af238774dd6de9de1cd174586f0f4668f',sourceCiRunId:40190227663,modelCalls:0,targetWrites:0,candidateSha:'558993981c9bbb7c6100c8335860ac5668768314'});
+          JS
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '06f1976af238774dd6de9de1cd174586f0f4668f'
+          path: runtime
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: runtime
+      - name: Verify existing PR, exact source and trusted CI using reads only
+        working-directory: runtime
+        env:
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          CALCULATOR_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: |
+          pnpm exec tsx --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {writeFileSync} from 'node:fs';
+          import {confirmCalculatorDraftPublication} from './github/calculatorPrConfirmation.ts';
+          import {createCalculatorCiReader} from './github/calculatorCi.ts';
+          import {verifyCalculatorAfterCiCandidateCi} from './orchestration/calculatorAfterCi.ts';
+          const factory='erman-ksv/Onay-Agents-Factory',repo='erman-ksv/Onay-Factory-Calculator',runtime='06f1976af238774dd6de9de1cd174586f0f4668f',candidate='558993981c9bbb7c6100c8335860ac5668768314',previous='eac625e5830612c64fb8dafbd3d239c72adbeafd',base='2c1218f2b020962ad93adf68d902a847271a7e72',main='0752de6cf757c833417754bfe7f9a10fd654dbd9',branch='feat/calculator-agent/calculator-pilot-step7-v1',baseRef='feat/calculator-pilot-bootstrap';
+          let reads=0,detailReads=0;
+          async function get(repository,path){assert.ok([factory,repo].includes(repository));const token=repository===factory?process.env.FACTORY_READ_TOKEN:process.env.CALCULATOR_READ_TOKEN;assert.ok(token);reads++;const r=await fetch('https://api.github.com/repos/'+repository+path,{method:'GET',redirect:'error',headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);const b=await r.text();assert.ok(Buffer.byteLength(b)<1048576);return JSON.parse(b);}
+          async function ref(repository,name,expected){const r=await get(repository,'/git/ref/heads/'+encodeURIComponent(name));assert.equal(r.ref,'refs/heads/'+name);assert.equal(r.object.type,'commit');assert.equal(r.object.sha,expected);}
+          try{
+           assert.equal(process.env.GROQ_API_KEY,undefined);assert.equal(process.env.GEMINI_API_KEY,undefined);assert.equal(process.env.AGENT_FACTORY_LEGAL_ENABLED,'false');
+           const run=await get(factory,'/actions/runs/40190227663');assert.equal(run.head_sha,runtime);assert.equal(run.path,'.github/workflows/ci.yml');assert.equal(run.run_attempt,1);assert.equal(run.status,'completed');assert.equal(run.conclusion,'success');
+           const jobs=(await get(factory,'/actions/runs/40190227663/jobs')).jobs;assert.ok(jobs.some(j=>j.conclusion==='success'&&['Typecheck','Test'].every(name=>j.steps.some(s=>s.name===name&&s.conclusion==='success'))));await ref(factory,'main',main);
+           const publication=await confirmCalculatorDraftPublication({repository:repo,branch,baseRef,baseSha:base},candidate,previous,1,{readDetail:async()=>{detailReads++;return get(repo,'/pulls/1');},assertCurrent:async()=>{await ref(repo,branch,candidate);await ref(repo,baseRef,base);}});
+           const commit=await get(repo,'/commits/'+candidate);assert.deepEqual(commit.parents.map(p=>p.sha),[previous]);assert.deepEqual(commit.files.map(f=>f.filename),['test/ui.test.mjs']);
+           const file=await get(repo,'/contents/test/ui.test.mjs?ref='+candidate);assert.equal(file.encoding,'base64');const bytes=Buffer.from(file.content,'base64'),hash=createHash('sha256').update(bytes).digest('hex');assert.equal(hash,'5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930');assert.equal(bytes.length,5464);
+           const workflowPath='.github/workflows/calculator-task-ci.yml',workflow=await get(repo,'/contents/'+workflowPath+'?ref='+base),ci=createCalculatorCiReader({trustedWorkflows:[{id:390241255,path:workflowPath,blobSha:workflow.sha}]},{GITHUB_TOKEN:process.env.CALCULATOR_READ_TOKEN,AGENT_FACTORY_TARGET_PROFILE:'calculator',AGENT_ALLOWED_REPOSITORIES:repo});
+           const evidence=await ci({repository:repo,branch,candidateSha:candidate});assert.ok(verifyCalculatorAfterCiCandidateCi(evidence,repo,branch,candidate));assert.ok(evidence.provenance.verifiedRunIds.includes(40178095158));await ref(repo,branch,candidate);await ref(factory,'main',main);
+           const proof={version:1,status:'existing-draft-pr-confirmed-readonly',runtimeSha:runtime,sourceCiRunId:40190227663,candidateSha:candidate,publication,sourceSha256:hash,sourceBytes:bytes.length,ciRunIds:evidence.provenance.verifiedRunIds,detailReads,apiReads:reads,modelCalls:0,githubWrites:0,legalEnabled:false,mainUnchanged:true,freshPushTested:false,unverified:['No new post-push live publication was attempted; delayed metadata is exercised by regression tests.','Permanent future-CI subscription and general unattended project completion remain separate.']};writeFileSync(process.env.RUNNER_TEMP+'/pr-confirmation-audit.json',JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));
+          }catch{console.log(JSON.stringify({status:'blocked',reason:'read_only_confirmation_unverified',modelCalls:0,githubWrites:0}));process.exitCode=10;}
+          JS
+      - name: Preserve source-free audit proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-pr-confirmation-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr-confirmation-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
