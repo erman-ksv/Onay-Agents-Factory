@@ -6,5 +6,5 @@ export async function loadCalculatorHostSources(repository:string,baseRef:string
  const ui=await loadCalculatorSnapshot({repository,baseRef,baseSha,changePaths:['index.html','styles.css','src/app.mjs']},reader);
  const tests=await loadCalculatorSnapshot({repository,baseRef,baseSha,changePaths:['test/ui.test.mjs']},reader);
  if(await reader.getHead(baseRef)!==baseSha)throw Error('Host source groups became stale');
- return {dependencies:core,sources:new Map([...calculatorSources(core),...calculatorSources(ui),...calculatorSources(tests)])};
+ return {dependencies:core,uiDependencies:ui,sources:new Map([...calculatorSources(core),...calculatorSources(ui),...calculatorSources(tests)])};
 }
