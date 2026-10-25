@@ -1,0 +1,30 @@
+name: Inspect exact T04 correction verdicts and executed checks
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/t04-final-result-audit.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580732860'
+          run-id: '40146425639'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-correction-result
+          merge-multiple: true
+      - name: Show source-free verdicts and host evidence only
+        env:
+          ROOT: ${{ runner.temp }}/t04-correction-result
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,readdirSync} from 'node:fs';import {createHash} from 'node:crypto';
+          const root=process.env.ROOT,task='calculator-pilot-step7-v1-34ee03-t04',report=JSON.parse(readFileSync(root+'/report.json'));assert.equal(report.currentCharge.attemptedRequests,5);assert.equal(report.lastCheckpoint.publicationStarted,false);
+          const capBytes=readFileSync(root+'/execution-private/'+task+'.execution.json'),cap=JSON.parse(capBytes),checks=readdirSync(root).filter(p=>/^(checks-|browser-).+\.json$/.test(p)).map(p=>({path:p,result:JSON.parse(readFileSync(root+'/'+p))}));
+          console.log(JSON.stringify({version:1,taskId:task,capsuleSha256:createHash('sha256').update(capBytes).digest('hex'),proposalDigest:cap.proposalDigest,stage:cap.payload.stage,status:cap.payload.status,assessments:cap.payload.assessments,checks,proposalFiles:cap.payload.proposal?.files.map(f=>({path:f.path,bytes:Buffer.byteLength(f.content),sha256:createHash('sha256').update(f.content).digest('hex')})),charge:report.currentCharge,modelCalls:0}));
+          JS
