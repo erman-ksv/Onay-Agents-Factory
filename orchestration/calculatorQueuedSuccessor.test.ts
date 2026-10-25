@@ -19,3 +19,10 @@ test('T05 consumes only its own owner grant and requires the complete four-task 
  const permit=await admitCalculatorQueuedSuccessor(x.workspace,x.store,record,host);const result=await claimCalculatorQueuedSuccessor(x.workspace,permit);assert.equal(result.selection.task.id,record.nextTaskId);assert.deepEqual(result.selection.verifiedTaskIds,x.plan.tasks.slice(0,4).map(t=>t.id));result.store.finish('blocked','offline-test');result.store.close();await assert.rejects(()=>claimCalculatorQueuedSuccessor(x.workspace,permit));
  }finally{x.cleanup();}}
 });
+
+test('Reviewer-only continuation refuses an unapproved grant before remote admission',async()=>{
+ const {admitCalculatorQueuedT05ReviewerSupplement}=await import('./calculatorQueuedSuccessor.js');
+ for(const grant of [undefined,{id:'owner-t05-ten-free-calls-48000-third-correction-20261025',maxRequests:10,maxReservedTokens:48000,totalCodeCorrections:3,freeTierConfirmed:true},{id:'owner-t05-eleven-free-calls-48000-reviewer-only-20261025',maxRequests:11,maxReservedTokens:48000,totalCodeCorrections:4,freeTierConfirmed:true}]){
+  const x=await setup();try{await assert.rejects(()=>admitCalculatorQueuedT05ReviewerSupplement(x.workspace,x.store,x.record,{} as any,{...x.host,grant} as any));assert.equal(x.writes(),0);}finally{x.cleanup();}
+ }
+});

@@ -119,3 +119,21 @@ export async function admitCalculatorQueuedT05ThirdRepair(workspace:CalculatorWo
  const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'b23564a9511804c8174fbc07e5b34f7653f6d19363f6def0963ffbce7abe907a',grant:g.id,phase:'third-code-correction-from-actual-test-failure'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
  permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
 }
+
+/** One Reviewer-only continuation of exact frozen code. Ten calls stay charged.
+ * Saved Security/Tester approvals apply only to the pinned unchanged proposal. */
+export async function admitCalculatorQueuedT05ReviewerSupplement(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{grant:Readonly<{id:string;maxRequests:11;maxReservedTokens:48000;totalCodeCorrections:3;freeTierConfirmed:true}>;verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const g=host?.grant;if(!g||g.id!=='owner-t05-eleven-free-calls-48000-reviewer-only-20261025'||g.maxRequests!==11||g.maxReservedTokens!==48000||g.totalCodeCorrections!==3||g.freeTierConfirmed!==true)return refuse();
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[4];
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t05'||record.previousTaskId!==plan.tasks[3]?.id||record.planFingerprint!==plan.fingerprint||record.modelRequestsAuthorized!==0||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'5e22b27158ea3fc170e3c9b0a419240edf1095c6d46312974ddffc24bbf4cb00').data,p=data.payload;
+ if(p.stage!=='execution_complete'||p.status!=='blocked'||p.httpInFlight||p.publicationStarted||p.attempt!==1||!p.proposal||data.proposalDigest!=='f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b'||p.modelState.attemptedRequests!==10||p.modelState.totalRequestBytes!==89244||p.modelState.reservedRunTokens!==38023||p.assessments.length!==3||p.assessments.some((a,i)=>a.role!==['security','reviewer','tester'][i])||!p.assessments[0]?.ready||p.assessments[1]?.ready!==false||!p.assessments[2]?.ready)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})}),prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,4).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'5e22b27158ea3fc170e3c9b0a419240edf1095c6d46312974ddffc24bbf4cb00',grant:g.id,phase:'unchanged-code-one-reviewer-supplement'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
