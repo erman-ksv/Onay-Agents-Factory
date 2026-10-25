@@ -17,10 +17,14 @@
     "maxRepairs": 1,
     "freeTierConfirmed": true
   },
-  "executionRuntimeSha": "bb639188f2454cf20bc68d30bc59913c515c292f",
-  "executionSourceCiRunId": 40146290169,
+  "executionRuntimeSha": "227f287ff2f6dfdd035a587689536ccf10ddced9",
+  "executionSourceCiRunId": 40147202434,
   "preflightFix": "bounded-host-source-groups-zero-model-cost",
   "correctionSourceRunId": 40145732417,
   "correctionSourceArtifactId": 12580346942,
-  "scope": "one-saved-draft-correction-plus-three-fresh-reviews-within-original-T04-allowance"
+  "scope": "three-fresh-reviews-only-frozen-code-remaining-three-owner-authorized-calls",
+  "evidenceSourceRunId": 40146425639,
+  "evidenceSourceArtifactId": 12580732860,
+  "maxNewModelCalls": 3,
+  "frozenProposalDigest": "f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf"
 }
