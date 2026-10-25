@@ -145,3 +145,14 @@ test("narrow-screen host evidence requires the added 360px scenario and retains 
  await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{checkProposal:async()=>proposal,checkBrowser:async()=>({...browser,domSelectors:[{selector:".not-proven",matches:1}]})}));
  await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{checkProposal:async()=>proposal,checkBrowser:async()=>({...browser,domSelectors:CALCULATOR_NARROW_DOM_SELECTORS.map(selector=>({selector,matches:-1}))})}));
 });
+
+test('T05 evidence requires exact integration scope, actual Node and full existing browser proof',async()=>{
+ const task=plan.tasks[4]!,snap=await snapshot(task.paths),dependency=await snapshot(['src/calculator.mjs']);
+ const changes=prepareCalculatorRoleChanges('frontend',{summary:'Integration fixture',changes:[{operation:'create',path:'test/ui.test.mjs',content:'// fixture integration tests',message:'fixture'}]},snap),proposalDigest=calculatorProposalDigest(changes);
+ const proposal={repository:changes.repository,taskId:task.id,baseSha:A,proposalDigest,status:'passed' as const,testsExecuted:true,failures:[]};
+ const browser={repository:changes.repository,taskId:task.id,baseSha:A,proposalDigest,dependencySha256:sha(core),status:'passed' as const,testsExecuted:true as const,browser:'Chrome/155.0',sandboxDisabled:false as const,pageErrors:0 as const,blockedRequests:0 as const,scenarios:CALCULATOR_NARROW_BROWSER_SCENARIOS,domSelectors:CALCULATOR_NARROW_DOM_SELECTORS.map(selector=>({selector,matches:1}))};
+ const runners={checkProposal:async()=>proposal,checkBrowser:async()=>browser};const token=await collectCalculatorAssessmentEvidence(task,changes,dependency,runners),packet=calculatorAssessmentEvidencePacket(token,task,changes);assert.ok(!JSON.stringify(packet).includes(core));assert.ok(packet.unverifiedAreas.length>0);
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence({...task,acceptanceIds:task.acceptanceIds.slice(1)},changes,dependency,runners));
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{...runners,checkBrowser:async()=>({...browser,scenarios:CALCULATOR_UI_BROWSER_SCENARIOS})}));
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{...runners,checkProposal:async()=>({...proposal,status:'failed' as const})}));
+});

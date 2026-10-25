@@ -4,6 +4,13 @@ import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.j
 import type { CalculatorPlanTask } from "./calculatorPlan.js";
 import { calculatorProposalDigest, validateCalculatorProposalTests, type CalculatorProposalTests } from "./calculatorExecutionEvidence.js";
 
+/** Exact final saved-plan task only; all original acceptance IDs are required. */
+export function isCalculatorIntegrationTask(task: CalculatorPlanTask): boolean {
+  const ids = ["addition", "negative-result", "multiplication", "division", "decimals", "decimal-display", "zero-recovery", "clear", "backspace", "keyboard", "narrow-screen"];
+  return task.id === "calculator-pilot-step7-v1-34ee03-t05" && task.role === "frontend" &&
+    task.paths.length === 1 && task.paths[0] === "test/ui.test.mjs" &&
+    task.acceptanceIds.length === ids.length && ids.every(id => task.acceptanceIds.includes(id));
+}
 export const CALCULATOR_ASSESSMENT_EVIDENCE_ERROR = "Calculator assessment evidence is unverified. No model call or publication is authorized.";
 const refuse = (): never => { throw new Error(CALCULATOR_ASSESSMENT_EVIDENCE_ERROR); };
 export const CALCULATOR_UI_BROWSER_SCENARIOS = Object.freeze([
@@ -53,9 +60,10 @@ export async function collectCalculatorAssessmentEvidence(task: CalculatorPlanTa
       dependencySha256: string }): Promise<CalculatorBrowserChecks>;
   }): Promise<CalculatorAssessmentEvidence> {
   try {
-    const narrow = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "narrow-screen";
+    const integration = isCalculatorIntegrationTask(task);
+    const narrow = integration || task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "narrow-screen";
     const keyboard = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "keyboard";
-    const paths = narrow ? ["index.html","styles.css"] : keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : ["index.html", "styles.css", "src/app.mjs"];
+    const paths = integration ? ["test/ui.test.mjs"] : narrow ? ["index.html","styles.css"] : keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : ["index.html", "styles.css", "src/app.mjs"];
     const scenarios = narrow ? CALCULATOR_NARROW_BROWSER_SCENARIOS : keyboard ? CALCULATOR_KEYBOARD_BROWSER_SCENARIOS : CALCULATOR_UI_BROWSER_SCENARIOS;
     if (task.role !== "frontend" || (!keyboard && !narrow && (task.acceptanceIds.length !== 2 ||
         !["clear", "backspace"].every(id => task.acceptanceIds.includes(id)))) || task.paths.length !== paths.length ||

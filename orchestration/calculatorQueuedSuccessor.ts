@@ -15,9 +15,10 @@ export async function admitCalculatorQueuedSuccessor(workspace:CalculatorWorkspa
  verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>;
 }>):Promise<CalculatorQueuedPermit>{
  const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),key=calculatorCiDeliveryKey({version:1,repository:record.repository,planFingerprint:record.planFingerprint,taskId:record.previousTaskId,candidateSha:record.candidateSha,ciRunId:record.ciRunId});
- if(store.inspect()?.fingerprint!==plan.fingerprint||record.planFingerprint!==plan.fingerprint||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||!host?.grant||host.grant.id!=='owner-t04-eight-free-calls-48000-20261024'||host.grant.taskId!==record.nextTaskId||host.grant.eventKey!==key||host.grant.maxRequests!==8||host.grant.maxReservedTokens!==48000||host.grant.freeTierConfirmed!==true)return refuse();
+ if(store.inspect()?.fingerprint!==plan.fingerprint||record.planFingerprint!==plan.fingerprint||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||!host?.grant||host.grant.taskId!==record.nextTaskId||host.grant.eventKey!==key||host.grant.maxRequests!==8||host.grant.maxReservedTokens!==48000||host.grant.freeTierConfirmed!==true)return refuse();
  const index=plan.tasks.findIndex(t=>t.id===record.nextTaskId),task=plan.tasks[index];
- if(index!==3||task?.id!=='calculator-pilot-step7-v1-34ee03-t04'||plan.tasks[index-1]?.id!==record.previousTaskId||record.modelRequestsAuthorized!==0)return refuse();
+ const authorized=(index===3&&task?.id==='calculator-pilot-step7-v1-34ee03-t04'&&host.grant.id==='owner-t04-eight-free-calls-48000-20261024')||(index===4&&task?.id==='calculator-pilot-step7-v1-34ee03-t05'&&host.grant.id==='owner-t05-eight-free-calls-48000-20261025');
+ if(!authorized||plan.tasks[index-1]?.id!==record.previousTaskId||record.modelRequestsAuthorized!==0)return refuse();
  const expected=plan.tasks.slice(0,index).map(t=>t.id),proof=await host.verify();if(JSON.stringify(proof)!==JSON.stringify(expected))return refuse();
  if(task.dependsOn.some(id=>!proof.includes(id)))return refuse();
  const receipt=store.taskReceipt(plan,task);try{if(receipt.inspectExisting()||receipt.inspectExistingLock())return refuse();}finally{receipt.close();}
@@ -30,7 +31,7 @@ export async function claimCalculatorQueuedSuccessor(workspace:CalculatorWorkspa
  await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
  if(host.correction){const old=host.store.taskReceipt(plan,task);try{if(JSON.stringify(old.inspectExisting())!==host.correction.originalReceipt||old.inspectExistingLock())return refuse();}finally{old.close();}}
  const receipt=host.correction?new TeamTaskStore(host.correction.directory,{id:'calc-t04-correction-'+host.correction.fingerprint.slice(0,40),fingerprint:host.correction.fingerprint}):host.store.taskReceipt(plan,task);
- try{if(receipt.inspectExisting()||receipt.inspectExistingLock()||receipt.claim()!=='claimed')return refuse();receipt.recordStage('consume_verified_ci_inbox','running');await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);receipt.recordStage('consume_verified_ci_inbox','passed');return {selection:{status:'ready' as const,reasonCode:'verified_queued_successor_admitted',task,verifiedTaskIds:plan.tasks.slice(0,3).map(t=>t.id),wholeAppCompleted:false as const,publicationAuthorized:false as const},store:receipt};}catch{receipt.close();return refuse();}
+ try{if(receipt.inspectExisting()||receipt.inspectExistingLock()||receipt.claim()!=='claimed')return refuse();receipt.recordStage('consume_verified_ci_inbox','running');await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);receipt.recordStage('consume_verified_ci_inbox','passed');return {selection:{status:'ready' as const,reasonCode:'verified_queued_successor_admitted',task,verifiedTaskIds:plan.tasks.slice(0,plan.tasks.findIndex(t=>t.id===task.id)).map(t=>t.id),wholeAppCompleted:false as const,publicationAuthorized:false as const},store:receipt};}catch{receipt.close();return refuse();}
 }
 
 /** Continue only the saved first-generation schema failure, consuming the single

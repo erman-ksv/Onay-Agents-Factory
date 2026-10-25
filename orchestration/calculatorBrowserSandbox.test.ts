@@ -83,3 +83,9 @@ test("narrow-screen proof binds the 360px scenario and cannot accept keyboard-on
  const proof=await runner.check(proposed);assert.deepEqual(proof.scenarios,CALCULATOR_NARROW_BROWSER_SCENARIOS);assert.deepEqual(proof.domSelectors?.map(f=>f.selector),CALCULATOR_NARROW_DOM_SELECTORS);assert.equal(proof.scenarios.at(-1),"At 360px controls and result work without horizontal scrolling");
  const bad=createCalculatorBrowserSandbox({image},{},fixture().run);await bad.preflight();await assert.rejects(()=>bad.check({...proposed,task:{...task,paths:["src/app.mjs","test/ui.test.mjs"]}}));
 });
+
+test('final integration task runs unchanged keyboard and 360px host scenarios without writing UI source',async()=>{
+ const task=plan.tasks[4]!,changes={...input.changes,files:[{path:'test/ui.test.mjs',content:'fixture integration tests',message:'fixture'}]},proposed={...input,task,changes,proposalDigest:calculatorProposalDigest(changes)};
+ const f=fixture(),runner=createCalculatorBrowserSandbox({image},{},f.run);await runner.preflight();const proof=await runner.check(proposed);assert.deepEqual(proof.scenarios,CALCULATOR_NARROW_BROWSER_SCENARIOS);assert.deepEqual(proof.domSelectors?.map(x=>x.selector),CALCULATOR_NARROW_DOM_SELECTORS);
+ for(const selected of [{...task,acceptanceIds:task.acceptanceIds.slice(1)},{...task,paths:['src/app.mjs']}]){const bad=createCalculatorBrowserSandbox({image},{},fixture().run);await bad.preflight();await assert.rejects(()=>bad.check({...proposed,task:selected}));}
+});

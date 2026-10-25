@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { runCalculatorSandboxProcess, type CalculatorSandboxProcess } from "./calculatorSandbox.js";
-import { CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS, CALCULATOR_NARROW_BROWSER_SCENARIOS, CALCULATOR_NARROW_DOM_SELECTORS } from "./calculatorAssessmentEvidence.js";
+import { isCalculatorIntegrationTask, CALCULATOR_UI_BROWSER_SCENARIOS, CALCULATOR_KEYBOARD_BROWSER_SCENARIOS, CALCULATOR_NARROW_BROWSER_SCENARIOS, CALCULATOR_NARROW_DOM_SELECTORS } from "./calculatorAssessmentEvidence.js";
 import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
 import { validateCalculatorScope, CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { scanForSecrets } from "../github/secretScanner.js";
@@ -94,9 +94,10 @@ export function createCalculatorBrowserSandbox(config: Readonly<{ image: string 
       if (!ready || checkStarted) return refuse(); checkStarted = true;
       const { changes, task } = input;
       validateCalculatorScope({ repository: changes.repository, baseRef: changes.baseRef, baseSha: changes.baseSha, changePaths: task.paths });
-      const narrow = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "narrow-screen";
+      const integration = isCalculatorIntegrationTask(task);
+      const narrow = integration || task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "narrow-screen";
       const keyboard = task.acceptanceIds.length === 1 && task.acceptanceIds[0] === "keyboard";
-      const paths = narrow ? ["index.html","styles.css"] : keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : PATHS.slice(0, 3);
+      const paths = integration ? ["test/ui.test.mjs"] : narrow ? ["index.html","styles.css"] : keyboard ? ["src/app.mjs", "test/ui.test.mjs"] : PATHS.slice(0, 3);
       if (task.role !== "frontend" || (!keyboard && !narrow && (task.acceptanceIds.length !== 2 || !["clear", "backspace"].every(id => task.acceptanceIds.includes(id)))) ||
           task.paths.length !== paths.length || !paths.every(path => task.paths.includes(path)) ||
           !changes.files.length || new Set(changes.files.map(f => f.path)).size !== changes.files.length ||
