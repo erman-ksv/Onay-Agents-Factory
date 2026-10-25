@@ -1,3 +1,5 @@
+import ts from 'typescript';
+import {calculatorSources} from '../github/calculatorSnapshot.js';
 /** Host-only description repair. Patch bytes remain entirely agent-authored.
  * Original malformed data stays rejected; the ordinary validator is unchanged. */
 import {createHash} from 'node:crypto';
@@ -14,6 +16,12 @@ export function prepareCalculatorSavedPatchMetadata(task:CalculatorPlanTask,raw:
  const c=raw.changes[0];if(!plain(c)||!exact(c,['operation','path','sourceSha256','edits'])||c.operation!=='patch'||c.path!=='test/ui.test.mjs')return refuse();
  const patchSha256=hash(c),copy=JSON.parse(JSON.stringify(c));
  const changes=prepareCalculatorRoleChanges('frontend',{summary:raw.summary,changes:[{...copy,message:'Host description only: saved agent-authored T05 integration patch'}]},snapshot);
+ const original=calculatorSources(snapshot).get('test/ui.test.mjs');
+ const updated=changes.files.find(file=>file.path==='test/ui.test.mjs')?.content;
+ if(original===undefined||updated===undefined)return refuse();
+ const printer=ts.createPrinter({removeComments:true,newLine:ts.NewLineKind.LineFeed});
+ const executable=(source:string)=>printer.printFile(ts.createSourceFile('ui.test.mjs',source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS));
+ if(executable(original)===executable(updated))throw Error('Saved integration patch changes comments or formatting only; no executable tests were added');
  const {message:_,...unchanged}=copy;
  if(hash(unchanged)!==patchSha256)return refuse();
  return Object.freeze({changes,sourceRawSha256:expectedRawSha256,patchSha256,messageOrigin:'host-only-description' as const,modelCodeChanged:false as const});
