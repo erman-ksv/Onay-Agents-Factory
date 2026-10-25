@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import {createRequire} from 'node:module';
 import {calculatorSources} from '../github/calculatorSnapshot.js';
 /** Host-only description repair. Patch bytes remain entirely agent-authored.
  * Original malformed data stays rejected; the ordinary validator is unchanged. */
@@ -19,8 +19,8 @@ export function prepareCalculatorSavedPatchMetadata(task:CalculatorPlanTask,raw:
  const original=calculatorSources(snapshot).get('test/ui.test.mjs');
  const updated=changes.files.find(file=>file.path==='test/ui.test.mjs')?.content;
  if(original===undefined||updated===undefined)return refuse();
- const printer=ts.createPrinter({removeComments:true,newLine:ts.NewLineKind.LineFeed});
- const executable=(source:string)=>printer.printFile(ts.createSourceFile('ui.test.mjs',source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS));
+ const parser=createRequire(import.meta.resolve('tsx'))('esbuild');
+ const executable=(source:string):string=>parser.transformSync(source,{loader:'js',target:'esnext',legalComments:'none',minifyWhitespace:true,minifySyntax:false,minifyIdentifiers:false}).code;
  if(executable(original)===executable(updated))throw Error('Saved integration patch changes comments or formatting only; no executable tests were added');
  const {message:_,...unchanged}=copy;
  if(hash(unchanged)!==patchSha256)return refuse();
