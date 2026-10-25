@@ -97,6 +97,18 @@ async function taskBlobs(reader: CalculatorSnapshotReader, commitSha: string, ta
   }
   return blobs;
 }
+export async function verifyCalculatorWorkspaceDependency(workspace:CalculatorWorkspace,taskId:string,runner:CalculatorCheckRunner){
+  const host=await fresh(workspace),task=host.plan.tasks.find(t=>t.id===taskId);if(!task)return refuse();
+  const store=host.store.taskReceipt(host.plan,task);
+  try{
+    const receipt=store.inspectExisting();
+    if(!receipt||store.inspectExistingLock()||receipt.status!=='needs-review'||!receipt.publication||
+      !receipt.stages.some(s=>s.stage==='publish_candidate'&&s.status==='passed'))return refuse();
+    const before=JSON.stringify(receipt),result=await verifyDependency(workspace,task,receipt,runner);
+    if(!result||store.inspectExistingLock()||JSON.stringify(store.inspectExisting())!==before)return refuse();
+    return result;
+  }finally{store.close();}
+}
 async function verifyDependency(workspace: CalculatorWorkspace, task: CalculatorPlanTask, receipt: TeamTaskSnapshot,
   runner?: CalculatorCheckRunner, historical?: CalculatorT02ReadOnlyPreselection): Promise<CalculatorDependencyEvidence | undefined> {
   const host = await fresh(workspace);

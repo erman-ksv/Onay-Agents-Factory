@@ -1,4 +1,6 @@
 import {createCalculatorRuntimeProposalRejection} from './calculatorRejectedProposalCheckpoint.js';
+import {prepareCalculatorRuntimeRecoveryHost,calculatorRuntimeRecoverySource,admitCalculatorRuntimeRecovery,assertCalculatorRuntimeRecovery,routeCalculatorRuntimeRecovery,type CalculatorRuntimeRecoveryHost,type CalculatorRuntimeRecoveryPermit} from './calculatorRuntimeRecovery.js';
+import {prepareCalculatorRejectedProposalRecovery} from './calculatorRejectedProposalRecovery.js';
 import {createCalculatorRuntimeFailureCheckpoint} from './calculatorRuntimeFailure.js';
 import {createCalculatorProjectRuntimeTeam,prepareCalculatorProjectRuntimeHost,type CalculatorProjectRuntimeHost} from './calculatorProjectRuntimeTeam.js';
 import type { CalculatorHostPreset } from "./taskModelBudget.js";
@@ -289,7 +291,7 @@ export async function loadCalculatorRuntimeSources(reader: CalculatorSnapshotRea
  * Production adapters remain isolated from model arguments. */
 export async function runCalculatorRuntime(input: unknown, configInput: unknown, directory: string,
   mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env, hostLimits?: CalculatorRuntimeHostLimits,
-  continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi, projectHostInput?:CalculatorProjectRuntimeHost) {
+  continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi, projectHostInput?:CalculatorProjectRuntimeHost,recoveryInput?:CalculatorRuntimeRecoveryHost) {
   let projectHost:CalculatorProjectRuntimeHost|undefined;
   try{projectHost=prepareCalculatorProjectRuntimeHost(projectHostInput);}catch{return refuse();}
   const projectMode=env.AGENT_FACTORY_PROJECT_BUDGET_MODE;
@@ -297,8 +299,10 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     projectMode==='required'&&(mode==='run'||mode==='plan'||mode==='preflight')&&!projectHost)return refuse();
   const limits = prepareCalculatorRuntimeHostLimits(hostLimits), continuation = prepareCalculatorRuntimeContinuation(continuationInput);
   const afterCi = prepareCalculatorRuntimeAfterCi(afterCiInput);
+  const recovery=prepareCalculatorRuntimeRecoveryHost(recoveryInput),recoverySource=recovery?calculatorRuntimeRecoverySource(recovery):undefined;
   const hostPreset = limits && "hostPreset" in limits ? limits.hostPreset : undefined;
-  if (hostPreset && (!afterCi || continuation)) return refuse();
+  if(recovery&&(mode!=='run'||!projectHost||afterCi||continuation||hostPreset!=='calculator-frontend-2048-four-roles'||limits?.maxRequests!==4||limits.maxRepairs!==0))return refuse();
+  if (hostPreset && ((!afterCi&&!recovery) || continuation)) return refuse();
   if (afterCi && (mode !== "run" || continuation || limits?.maxRequests !== 4 || limits.maxRepairs !== 0)) return refuse();
   if ((limits || continuation) && mode !== "run") return refuse();
   if (continuation ? limits?.maxRequests !== (continuation.restoredAssessments?.length === 2 ? 1 : 3) :
@@ -368,6 +372,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     const currentSha = await reader.getHead(saved.branch);
     if (continuation && currentSha !== owner.baseSha) return refuse();
     if (afterCi && (!started || currentSha !== afterCi.request.candidateSha)) return refuse();
+    if(recoverySource&&(!started||currentSha!==recoverySource.identity.baseSha||saved.fingerprint!==recoverySource.identity.planFingerprint))return refuse();
     // Verify the pinned workflow itself before model calls and durable task claim.
     phase = "project_workflow_unverified";
     await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
@@ -375,7 +380,14 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     const sources = await loadCalculatorRuntimeSources(reader, saved.branch, currentSha);
     const checks = createCalculatorSandbox({ image: config.sandboxImage, baseSha: currentSha, baseSources: sources, includeFailureDetails: true }, env);
     phase = "private_execution_checkpoint_unverified";
-    const privateDirectory = privateExecutionDirectory(directory);
+    let privateDirectory = privateExecutionDirectory(directory);
+    if(recoverySource){
+      const recoverySnapshot=await loadCalculatorSnapshot({repository:owner.repository,baseRef:saved.branch,baseSha:currentSha,changePaths:saved.tasks.find(t=>t.id===recoverySource.identity.taskId)?.paths??[]},reader);
+      const prepared=prepareCalculatorRejectedProposalRecovery({...recoverySource,plan:saved,taskId:recoverySource.identity.taskId,snapshot:recoverySnapshot,model:provider.model});
+      privateDirectory=join(privateDirectory,prepared.metadata.executionId);
+      try{mkdirSync(privateDirectory,{mode:0o700});}catch(error){if(!error||typeof error!=='object'||!('code'in error)||error.code!=='EEXIST')return refuse();}
+      const s=lstatSync(privateDirectory);if(!s.isDirectory()||s.isSymbolicLink()||(s.mode&0o777)!==0o700||(process.getuid&&s.uid!==process.getuid()))return refuse();
+    }
     // Runtime checkout provenance is pinned by the host workflow barrier. This
     // digest binds evidence to policy/config/model; it grants no resume authority.
     const runtimeConfigDigest = digest({ policyVersion: "calculator-private-execution-v1", provider: provider.provider, model: provider.model,
@@ -384,6 +396,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       ...(continuation ? { continuationProposalDigest: continuation.proposalDigest } : {}),
       ...(continuation?.restoredAssessments?.length ? { restoredAssessmentsDigest: digest(continuation.restoredAssessments) } : {}),
       ...(afterCi ? { afterCiRequest: afterCi.request } : {}),
+      ...(recoverySource?{rejectedSourceSha256:recoverySource.expectedSha256}:{}),
       version: config.version, sandboxImage: config.sandboxImage,
       trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
     const checkpointIdentity = { repository: owner.repository,
@@ -405,8 +418,13 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         writers.get(activeId).save(next); active = next;
       } catch { checkpointUnavailable = true; return refuse(); }
     }
-    const beforeRequest = createCalculatorRuntimeRequestCheckpoint(limits, (charge, admitted) =>
+    let recoveryPermit:CalculatorRuntimeRecoveryPermit|undefined;
+    const persistBeforeRequest = createCalculatorRuntimeRequestCheckpoint(limits, (charge, admitted) =>
       save({ ...active, status: admitted ? "running" : "blocked", httpInFlight: admitted }, charge));
+    const beforeRequest=async(amount:CalculatorPriorModelCharge)=>{
+      if(recovery){if(!recoveryPermit)return refuse();await assertCalculatorRuntimeRecovery(recoveryPermit);}
+      persistBeforeRequest(amount);
+    };
     let dependencyAssessment: Readonly<{ taskId: string; proposal: PreparedCalculatorChanges; expectedRole: CalculatorRejectedAssessment["role"] }> | undefined;
     const afterAssessmentRejected = createCalculatorRuntimeAssessmentRejection({ directory: privateDirectory,
       context: () => {
@@ -495,14 +513,20 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       };
       phase = "workspace_unverified";
       const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
+      if(recovery){
+        if(!projectHost)return refuse();
+        recoveryPermit=await admitCalculatorRuntimeRecovery(workspace,store,recovery,projectHost.controller,privateDirectory,provider.model);
+      }
       phase = "one_task_execution_failed";
-      const executionOptions = { team, env, checkpoint,
+      const routed=recoveryPermit?routeCalculatorRuntimeRecovery(team,{checkProposal:checks.checkProposal,publish:publisher.publish,ci},recoveryPermit):{team,tools:{checkProposal:checks.checkProposal,publish:publisher.publish,ci}};
+      const executionOptions = { ...routed, env, checkpoint,
+        ...(recoveryPermit?{rejectedProposalPermit:recoveryPermit}:{}),
         ...(limits ? { maxRepairs: limits.maxRepairs } : {}),
         ...(continuation ? { restoreProposal: createCalculatorRuntimeContinuationRestorer(continuation, saved, team) } : {}),
         ...(continuation?.restoredAssessments?.length ? {
           restoreAssessments: (plan: CalculatorPlan, id: string, proposal: PreparedCalculatorChanges) => team.restoredAssessmentPrefix(plan, id, proposal),
         } : {}),
-        tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } };
+        };
       let result: CalculatorExecutionReport;
       if (afterCi) {
         // This directory survives with private evidence. It never sits inside

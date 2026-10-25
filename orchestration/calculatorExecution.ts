@@ -9,6 +9,7 @@ import { evaluateTestExecutionEvidence } from "../agents/tester/agent.js";
 import type { WorkflowRun } from "../github/githubClient.js";
 import type { CiJob } from "../github/ciGate.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
+import {claimCalculatorRuntimeRecovery,type CalculatorRuntimeRecoveryPermit} from './calculatorRuntimeRecovery.js';
 import type { CalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import type { CalculatorCheckRunner, CalculatorWorkspace } from "./calculatorWorkspace.js";
 import { calculatorWorkspacePlan, claimCalculatorWorkspaceTask, loadCalculatorWorkspaceTask,
@@ -63,6 +64,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   queuedSuccessorPermit?: CalculatorQueuedPermit;
   historicalT03Permit?: CalculatorT02ExecutionPermit;
   repairContinuationPermit?: CalculatorT03RepairPermit;
+  rejectedProposalPermit?:CalculatorRuntimeRecoveryPermit;
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
@@ -101,6 +103,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
     if (options.repairContinuationPermit && (options.maxRepairs !== 0 || options.historicalT03Permit || options.restoreProposal || options.restoreAssessments)) return refuseCalculatorExecution();
     if(options.queuedSuccessorPermit&&(options.repairContinuationPermit||options.historicalT03Permit||options.restoreProposal||options.restoreAssessments))return refuseCalculatorExecution();
+    if(options.rejectedProposalPermit&&(options.maxRepairs!==0||options.queuedSuccessorPermit||options.repairContinuationPermit||options.historicalT03Permit||options.restoreProposal||options.restoreAssessments))return refuseCalculatorExecution();
     const maxRepairs = options.maxRepairs ?? 1;
     const env = options.env ?? process.env;
     if ((options.execution ?? "live") === "live" && (env.CALCULATOR_EXECUTION_LIVE_APPROVED !== "RUN_ONE_FREE_CALCULATOR_TASK" ||
@@ -111,12 +114,13 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     if (!options.team || !options.tools || [options.tools.checkProposal, options.tools.publish, options.tools.ci,
         options.team.generate, options.team.repair, options.team.assess].some(value => typeof value !== "function")) return refuseCalculatorExecution();
     const plan = await calculatorWorkspacePlan(workspace);
-    const claimed = options.queuedSuccessorPermit ? await claimCalculatorQueuedSuccessor(workspace,options.queuedSuccessorPermit) : options.repairContinuationPermit ?
+    const claimed = options.rejectedProposalPermit ? await claimCalculatorRuntimeRecovery(workspace,options.rejectedProposalPermit) : options.queuedSuccessorPermit ? await claimCalculatorQueuedSuccessor(workspace,options.queuedSuccessorPermit) : options.repairContinuationPermit ?
       await claimCalculatorT03RepairContinuation(workspace,options.repairContinuationPermit) : options.historicalT03Permit ?
       await claimHistoricalCalculatorT03(workspace,options.historicalT03Permit,options.verifyDependencies) :
       await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies);
     receipt = claimed.store; task = claimed.selection.task;
     if (!receipt || !task) return answer(claimed.selection.status === "blocked" ? "blocked" : "needs-review", claimed.selection.reasonCode);
+    if(options.rejectedProposalPermit){activeAttempt=2;repairs=1;}
     const snapshot = await stage("load_current_source", () => loadCalculatorWorkspaceTask(workspace, task!.id));
     function validateChanges(changes: PreparedCalculatorChanges): PreparedCalculatorChanges {
       // Rebuild static/policy/secret gates before storing a successful proposal.
@@ -134,7 +138,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         return refuseCalculatorExecution();
       return changes;
     }
-    let changes = await stage(options.restoreProposal ? "restore_proposal_1" : "generate_1", async () => {
+    let changes = await stage(options.rejectedProposalPermit?'repair_2':options.restoreProposal ? "restore_proposal_1" : "generate_1", async () => {
       await assertCalculatorWorkspaceCurrent(workspace); attempts++;
       const result = options.restoreProposal ? await options.restoreProposal(plan, task!.id, snapshot) : await options.team.generate(plan, task!.id, snapshot);
       await assertCalculatorWorkspaceCurrent(workspace);
@@ -143,7 +147,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     const restored: readonly CalculatorAssessment[] = options.restoreAssessments ? await options.restoreAssessments(plan, task.id, changes) : [];
     if (options.restoreAssessments && (!Array.isArray(restored) || restored.length !== 2 ||
         restored.some((value, index) => value.role !== (["security", "reviewer"] as const)[index]))) return refuseCalculatorExecution();
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = activeAttempt; attempt <= 2; attempt++) {
       const issues: string[] = [];
       for (const role of ["security", "reviewer", "tester"] as const) {
         const prior: CalculatorAssessment | undefined = restored.find(value => value.role === role);
