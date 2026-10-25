@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "runtimeSha": "7ec862ffa1c6d88fad4d405b19ab62daf0494d90",
+  "sourceCiRunId": 40202191401,
+  "mode": "read-only-migration-preflight",
+  "additionalRequestsAuthorized": 0,
+  "legalEnabled": false,
+  "automaticReplay": false
+}

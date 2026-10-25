@@ -305,11 +305,12 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
   const saved = store.inspect();
   if (mode === "inspect") return { mode, status: saved?.status ?? "unplanned", planFingerprint: saved?.fingerprint,
     taskIds: saved?.tasks.map(task => task.id) ?? [], wholeAppCompleted: false, legalEnabled: false };
+  let projectGrantSha256:string|undefined;
   let phase = "runtime_configuration_unverified";
   try {
     if(projectHost){
       if(!saved||saved.fingerprint!==projectHost.controller.identity.planFingerprint||saved.owner.ownerFingerprint!==projectHost.controller.identity.ownerFingerprint)return refuse();
-      await projectHost.controller.assertAuthorized();await projectHost.controller.inspect();
+      await projectHost.controller.assertAuthorized();projectGrantSha256=(await projectHost.controller.inspect()).grantSha256;
     }
     const config = prepareCalculatorRuntimeConfig(configInput), provider = selectProviderConfig(env);
     if (!["plan", "run", "preflight"].includes(mode) || env.AGENT_FACTORY_TARGET_PROFILE !== "calculator" ||
@@ -376,6 +377,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     // Runtime checkout provenance is pinned by the host workflow barrier. This
     // digest binds evidence to policy/config/model; it grants no resume authority.
     const runtimeConfigDigest = digest({ policyVersion: "calculator-private-execution-v1", provider: provider.provider, model: provider.model,
+      ...(projectHost?{projectBudget:{projectKey:projectHost.controller.projectKey,grantSha256:projectGrantSha256,executionId:projectHost.executionId}}:{}),
       ...(limits ? { hostLimits: limits } : {}),
       ...(continuation ? { continuationProposalDigest: continuation.proposalDigest } : {}),
       ...(continuation?.restoredAssessments?.length ? { restoredAssessmentsDigest: digest(continuation.restoredAssessments) } : {}),

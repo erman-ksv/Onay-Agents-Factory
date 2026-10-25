@@ -1,0 +1,44 @@
+name: Project budget migration preflight without model calls
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/step9-03-budget-preflight.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout immutable tested runtime and audited history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '7ec862ffa1c6d88fad4d405b19ab62daf0494d90'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform reviewed TypeScript without installing packages
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync,existsSync} from 'node:fs';
+          import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){const path=join(dir,entry.name);
+            if(entry.isDirectory())compile(path);else if(path.endsWith('.ts')&&!path.endsWith('.test.ts'))writeFileSync(path.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(path,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])if(existsSync(dir))compile(dir);
+          JS
+      - name: Read existing GitHub state and stage history with zero new allowance
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: '7ec862ffa1c6d88fad4d405b19ab62daf0494d90'
+          FACTORY_SOURCE_CI_RUN: '40202191401'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/project-budget-readonly-preflight.mjs
+      - name: Preserve source-free migration preparation proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-budget-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-budget-preflight/project-budget-migration-plan.json
+          if-no-files-found: error
+          retention-days: 14
