@@ -1,3 +1,4 @@
+import {calculatorPublicationDiagnostic,type CalculatorPublicationDiagnostic} from '../github/calculatorPublisher.js';
 import {claimCalculatorQueuedSuccessor,type CalculatorQueuedPermit} from './calculatorQueuedSuccessor.js';
 import { claimCalculatorT03RepairContinuation, type CalculatorT03RepairPermit } from './calculatorT03RepairContinuation.js';
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
@@ -38,6 +39,7 @@ export type CalculatorExecutionReport = Readonly<{
   status: "blocked" | "needs-review" | "candidate-verified"; reasonCode: string; taskId?: string;
   attempts: number; repairs: number; publication?: Readonly<TeamTaskPublication>;
   proposalTestsExecuted: boolean; candidateTestsExecuted: boolean;
+  publicationDiagnostic?: CalculatorPublicationDiagnostic;
   wholeAppCompleted: false; finalCalculatorCiVerified: false; legalEnabled: false;
 }>;
 /** Private host evidence, persisted before advancing. This is data, never replay
@@ -64,13 +66,14 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
+  let publicationDiagnostic:CalculatorPublicationDiagnostic|undefined;
   let attempts = 0, repairs = 0, proposalTestsExecuted = false, candidateTestsExecuted = false;
   let activeStage: string | undefined, publicationStarted = false;
   let activeAttempt: 1 | 2 = 1, checkpointProposal: PreparedCalculatorChanges | undefined;
   let assessments: CalculatorAssessment[] = [];
   const answer = (status: CalculatorExecutionReport["status"], reasonCode: string): CalculatorExecutionReport => Object.freeze({
     status, reasonCode, ...(task ? { taskId: task.id } : {}), attempts, repairs,
-    ...(publication ? { publication: Object.freeze({ ...publication }) } : {}), proposalTestsExecuted, candidateTestsExecuted,
+    ...(publication ? { publication: Object.freeze({ ...publication }) } : {}), ...(publicationDiagnostic?{publicationDiagnostic}:{}),proposalTestsExecuted, candidateTestsExecuted,
     wholeAppCompleted: false, finalCalculatorCiVerified: false, legalEnabled: false,
   });
   async function checkpoint(stageName: string, status: CalculatorExecutionCheckpointEvent["status"]) {
@@ -208,7 +211,8 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
       return await finish("needs-review", "task_candidate_verified_not_whole_app", "candidate-verified");
     }
     return await finish("blocked", "repair_limit_reached");
-  } catch {
+  } catch (error) {
+    publicationDiagnostic=calculatorPublicationDiagnostic(error);
     if (!receipt) return answer("blocked", "workspace_or_configuration_unverified");
     const candidateUnverified = publication !== undefined && activeStage === "publish_candidate";
     // A failed write is itself terminal: preserve the previous private evidence
