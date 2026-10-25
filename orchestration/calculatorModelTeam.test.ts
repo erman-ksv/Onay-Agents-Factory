@@ -770,3 +770,45 @@ test("restored completed roles and Tester cannot be replayed, while empty-prefix
   assert.ok(Object.isFrozen(team.restoredAssessmentPrefix(plan, task.id, restored)));
   await team.assess("security", plan, task.id, restored); assert.equal(calls, 1);
 });
+
+import {mkdtempSync,rmSync} from 'node:fs';import {join} from 'node:path';import {tmpdir} from 'node:os';
+import {authorizeProjectBudget,reconcileProjectBudgetHistory,projectBudgetApprovalDigest,type AuthorizedProjectTaskScope} from './projectBudgetAuthorization.js';
+import {createProjectModelBudgetFileStore} from './projectModelBudgetFileStore.js';
+import {createProjectBudgetedCalculatorTeam} from './projectBudgetedCalculatorTeam.js';
+async function authorizedProjectFixture(allowance=10){
+ const x=groqCheckpointFixture(),dir=mkdtempSync(join(tmpdir(),'project-team-')),wall=Date.parse('2026-10-25T12:00:00Z');
+ const identity={projectId:x.groqPlan.owner.id,repository:x.groqPlan.owner.repository,planFingerprint:x.groqPlan.fingerprint,ownerFingerprint:x.groqPlan.owner.ownerFingerprint,taskIds:x.groqPlan.tasks.map(t=>t.id)};
+ const history={version:1 as const,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,observations:['planning',...identity.taskIds].map(scopeId=>({scopeId,kind:'cumulative-scope-total' as const,charge:{requests:1,requestBytes:100,reservedTokens:500},evidenceSha256:'c'.repeat(64)}))},h=reconcileProjectBudgetHistory(history,identity);
+ const document={version:1,kind:'authorize-project-model-budget',grant:{version:1,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,grantId:'offline-project-role-grant',maxRequests:h.charge.requests+allowance,maxRequestBytes:24000,maxTotalRequestBytes:200000,maxReservedTokens:96000,historical:h.charge,historicalEvidenceSha256:h.digest,provider:'groq',freeTierConfirmed:true,legalEnabled:false},expiresAt:new Date(wall+86400000).toISOString()};
+ const comment:any={id:1,user:{login:'erman-ksv',type:'User'},author_association:'OWNER',issue_url:'https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/75',html_url:'https://github.com/erman-ksv/Onay-Agents-Factory/pull/75#issuecomment-1',created_at:'2026-10-25T11:00:00Z',updated_at:'2026-10-25T11:00:00Z',body:JSON.stringify(document)};
+ const controller=await authorizeProjectBudget({identity,history,decision:{issueNumber:75,commentId:1,bodySha256:projectBudgetApprovalDigest(document)},token:'offline-owner-read-token',store:createProjectModelBudgetFileStore(dir),transport:async()=>Response.json(comment),now:()=>wall});await controller.initialize();let clock=0;
+ return {...x,controller,comment,historical:h.charge,timing:{now:()=>clock,wait:async(ms:number)=>{clock+=ms;}},scope:(taskId=x.groqPlan.tasks[0]!.id,execution='run-one')=>controller.taskScope(taskId,execution),cleanup:()=>rmSync(dir,{recursive:true,force:true})};
+}
+test('project mode requires a verified one-use capability and cannot opt out through configuration',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const transport:typeof fetch=async()=>{sends++;return response({});};const scope=await f.scope();
+ for(const mode of ['off','optional',''])assert.throws(()=>createProjectBudgetedCalculatorTeam(f.groqOwner,{...f.env,AGENT_FACTORY_PROJECT_BUDGET_MODE:mode},scope,transport),refusal);
+ assert.throws(()=>createCalculatorModelTeam(f.groqOwner,{...f.env,AGENT_FACTORY_PROJECT_BUDGET_MODE:'required'},transport),refusal);
+ assert.throws(()=>createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,{...scope} as AuthorizedProjectTaskScope,transport),refusal);
+ createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,scope,transport,f.timing);assert.throws(()=>createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,scope,transport),refusal);assert.equal(sends,0);
+ }finally{f.cleanup();}});
+test('Coder, Security, Reviewer and Tester all reserve through one authenticated project ledger',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const team=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(),async(_url,init)=>{
+  sends++;assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+sends);const body=String(init?.body);assert.ok(!body.includes('authorize-project-model-budget'));assert.ok(!body.includes('offline-owner-read-token'));assert.ok(!body.includes('offline-project-role-grant'));
+  return Response.json({choices:[{finish_reason:'stop',message:{role:'assistant',content:JSON.stringify(sends===1?generated:{ready:true,summary:'Scoped independent fixture',findings:[],unverifiedAreas:['No actual app test executed']})}}],usage:{prompt_tokens:1000,completion_tokens:80,total_tokens:1080}});
+ },f.timing);
+ const changes=await team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot());for(const role of ['security','reviewer','tester'] as const)assert.equal((await team.assess(role,f.groqPlan,f.groqPlan.tasks[0]!.id,changes)).ready,true);
+ assert.equal(sends,4);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+4);
+ }finally{f.cleanup();}});
+test('Commander planning and Frontend use the same required project boundary',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const commander=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope('planning','planning-run'),async()=>{sends++;return response(f.groqPlan.proposal);},f.timing);assert.equal((await commander.plan()).fingerprint,f.groqPlan.fingerprint);
+ const task=f.groqPlan.tasks[1]!,ui=await loadCalculatorSnapshot({repository:CALCULATOR_PROFILE.repository,baseRef:f.groqPlan.branch,baseSha:A,changePaths:task.paths},{getHead:async()=>A,readCommit:async()=>({sha:A,treeSha:B}),readTree:async()=>({sha:B,truncated:false,tree:[]}),readBlob:async()=>{throw Error('No source');}});
+ const frontend=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(task.id,'frontend-run'),async()=>{sends++;return response({summary:'Offline UI routing fixture',changes:task.paths.map(path=>({operation:'create',path,content:path.endsWith('.html')?'<!doctype html><title>Fixture</title>':path.endsWith('.css')?'body{color:black}':'export const ready=true;',message:'Offline UI fixture'}))});},f.timing);await frontend.generate(f.groqPlan,task.id,ui);assert.equal(sends,2);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+2);
+ }finally{f.cleanup();}});
+test('a fresh team cannot bypass exhausted project allowance with a fresh local budget',async()=>{const f=await authorizedProjectFixture(1);try{
+ let sends=0;const transport:typeof fetch=async()=>{sends++;return response(generated);};const first=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(),transport,f.timing);await first.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot());
+ const second=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(f.groqPlan.tasks[0]!.id,'run-two'),transport,f.timing);await assert.rejects(async()=>second.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);assert.equal(sends,1);
+ }finally{f.cleanup();}});
+test('owner revocation after creation stops HTTP and prevents later specialist traffic',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const team=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(),async()=>{sends++;return response(generated);},f.timing);f.comment.updated_at='2026-10-25T11:02:00Z';await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);assert.equal(sends,0);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+1);
+ }finally{f.cleanup();}});
+test('a task-scoped team cannot plan or execute another task',async()=>{const f=await authorizedProjectFixture();try{let sends=0;const team=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(),async()=>{sends++;return response(generated);},f.timing);await assert.rejects(()=>team.plan(),refusal);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,await snapshot()),refusal);assert.equal(sends,0);}finally{f.cleanup();}});

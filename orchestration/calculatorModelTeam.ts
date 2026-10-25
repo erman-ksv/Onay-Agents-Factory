@@ -1,3 +1,4 @@
+import {consumeAuthorizedProjectTaskScope,type AuthorizedProjectTaskScope} from './projectBudgetAuthorization.js';
 import {calculatorFailureExcerpt} from './calculatorFailureExcerpt.js';
 import {calculatorProposalDiagnostics,type CalculatorProposalDiagnostic} from './calculatorProposalDiagnostics.js';
 import {consumeCalculatorFailedTestEvidence,type CalculatorFailedTestEvidence} from './calculatorFailedTestRepair.js';
@@ -104,7 +105,7 @@ function privateRejectedAssessment(result: unknown, providerKey: string): unknow
 export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.ProcessEnv,
   transport: typeof fetch = globalThis.fetch, timing: CalculatorModelTiming = {}, priorCharge?: CalculatorPriorModelCharge,
   checkpointHooks?: CalculatorModelCheckpointHooks, hostPreset?: CalculatorHostPreset,
-  assessmentEvidence?: CalculatorAssessmentEvidenceProvider) {
+  assessmentEvidence?: CalculatorAssessmentEvidenceProvider, projectScope?: AuthorizedProjectTaskScope) {
   const owner = prepareCalculatorGoal(ownerRequest);
   if (assessmentEvidence !== undefined && typeof assessmentEvidence !== "function") return refuse();
   const requestOwner = Object.freeze({ version: 1 as const, id: owner.id, goal: owner.goal,
@@ -118,6 +119,10 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       (config.provider !== "groq" && config.provider !== "cloudflare" && config.provider !== "gemini")) return refuse();
   // Capture identity/configuration once. No later process.env lookup can switch it.
   const endpoint = config.baseURL.replace(/\/$/, "") + "/chat/completions", model = config.model, apiKey = config.apiKey;
+  const projectMode=env.AGENT_FACTORY_PROJECT_BUDGET_MODE;
+  if((projectMode!==undefined&&projectMode!=='required')||(projectMode==='required'&&(!projectScope||config.provider!=='groq'))||(projectScope!==undefined&&projectMode!=='required'))return refuse();
+  let authorizedProject:ReturnType<typeof consumeAuthorizedProjectTaskScope>|undefined;
+  if(projectMode==='required')try{authorizedProject=consumeAuthorizedProjectTaskScope(projectScope,{projectId:owner.id,repository:owner.repository,ownerFingerprint:owner.ownerFingerprint});}catch{return refuse();}
   const now = timing.now ?? (() => performance.now());
   if (checkpointHooks && (Object.keys(checkpointHooks).some(key => !["beforeRequest", "afterAssessmentRejected", "afterProposalRejected"].includes(key)) ||
       (checkpointHooks.beforeRequest !== undefined && typeof checkpointHooks.beforeRequest !== "function") ||
@@ -139,6 +144,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   let previewRepairOnly=false, repairPreview: Readonly<{status:"ready"|"refused";requestBytes:number;estimatedInputTokens:number;reservedOutputTokens:number}>|undefined;
   let assessmentDiagnostic: Readonly<{ assessmentRole: "security" | "reviewer" | "tester"; validationCode: CalculatorAssessmentValidationCode }> | undefined;
   const guardedTransport: typeof fetch = async (input, init) => {
+    if(authorizedProject)try{await authorizedProject.assertAuthorized();}catch{failureCode??='project_owner_approval_unverified';stopped=true;return refuse();}
     if (checkpointHooks?.beforeRequest) {
       try {
         const state = checkpointCharge();
@@ -154,7 +160,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     httpRequestsSent++;
     return transport(input, init);
   };
-  const budget = createTaskModelBudgetFetch({ now, ...(hostBudget ? { ...hostBudget, hostPreset } : {}), ...(prior ? {
+  const budget = createTaskModelBudgetFetch({ now, ...(authorizedProject?{projectBudget:authorizedProject.projectBudget}:{}), ...(hostBudget ? { ...hostBudget, hostPreset } : {}), ...(prior ? {
     maxRequests: DEFAULT_TASK_MODEL_BUDGET.maxRequests - prior.attemptedRequests,
     maxRunBytes: DEFAULT_TASK_MODEL_BUDGET.maxRunBytes - prior.totalRequestBytes,
     wallTimeMs: DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - prior.elapsedMs,
@@ -265,7 +271,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     const actual = createCalculatorPlan(requestOwner, plan.proposal);
     if (actual.fingerprint !== plan.fingerprint) return refuse();
     const task = actual.tasks.find(item => item.id === taskId);
-    if (!task || actual.status !== "planned") return refuse();
+    if (!task || actual.status !== "planned" || (authorizedProject&&(actual.fingerprint!==authorizedProject.planFingerprint||taskId!==authorizedProject.taskId))) return refuse();
     return task;
   }
   async function propose(plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, repair?: CalculatorRepairRequest): Promise<PreparedCalculatorChanges> {
@@ -347,11 +353,12 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   }
   return Object.freeze({
     async plan(): Promise<CalculatorPlan> {
+      if(authorizedProject&&authorizedProject.taskId!=='planning')return refuse();
       try {
         if (planned || stopped || repairOnly) return refuse(); planned = true;
-        return createCalculatorPlan(requestOwner, await call(buildCalculatorPlanningInstructions(requestOwner), {
+        const result=createCalculatorPlan(requestOwner, await call(buildCalculatorPlanningInstructions(requestOwner), {
           goal: owner.goal, repository: owner.repository, baseSha: owner.baseSha,
-          requirementsSha256: owner.requirementsSha256, unverifiedAreas: ["Source has not been inspected; no task has executed."] }));
+          requirementsSha256: owner.requirementsSha256, unverifiedAreas: ["Source has not been inspected; no task has executed."] }));if(authorizedProject&&result.fingerprint!==authorizedProject.planFingerprint)return refuse();return result;
       } catch { failureCode ??= "model_plan_invalid"; stopped = true; return refuse(); }
     },
     generate: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot) => propose(plan, taskId, snapshot),

@@ -23,7 +23,7 @@ export type ProjectModelBudgetStore=Readonly<{
  read:()=>Promise<Readonly<{revision:string;data:unknown}>|undefined>;
  compareAndSwap:(expectedRevision:string|undefined,data:ProjectModelBudgetState)=>Promise<Readonly<{revision:string}>|undefined>;
 }>;
-function grant(input:unknown):ProjectModelGrant{
+export function parseProjectModelGrant(input:unknown):ProjectModelGrant{
  if(!plain(input)||!exact(input,['version','projectId','repository','planFingerprint','grantId','maxRequests','maxRequestBytes','maxTotalRequestBytes','maxReservedTokens','historical','historicalEvidenceSha256','provider','freeTierConfirmed','legalEnabled'])||
  input.version!==1||!id(input.projectId)||!id(input.grantId)||typeof input.repository!=='string'||!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(input.repository)||input.repository.length>180||!sha(input.planFingerprint)||!sha(input.historicalEvidenceSha256)||input.provider!=='groq'||input.freeTierConfirmed!==true||input.legalEnabled!==false)return refuse();
  for(const [key,ceiling]of [['maxRequests',256],['maxRequestBytes',64000],['maxTotalRequestBytes',16000000],['maxReservedTokens',2000000]] as const)if(!integer(input[key],1)||input[key]>ceiling)return refuse();
@@ -51,7 +51,7 @@ export type ProjectModelBudget=Readonly<{
 }>;
 export function isProjectModelBudget(value:unknown):value is ProjectModelBudget{return !!value&&typeof value==='object'&&ledgers.has(value);}
 export function openProjectModelBudget(input:ProjectModelGrant,store:ProjectModelBudgetStore):ProjectModelBudget{
- const g=grant(input),digest=hash(JSON.stringify(g));if(typeof store?.read!=='function'||typeof store?.compareAndSwap!=='function')return refuse();
+ const g=parseProjectModelGrant(input),digest=hash(JSON.stringify(g));if(typeof store?.read!=='function'||typeof store?.compareAndSwap!=='function')return refuse();
  let initialized=false;const attempted=new Set<string>();
  function parse(data:unknown):ProjectModelBudgetState{
   const state=parseProjectModelBudgetState(data);if(state.grantSha256!==digest||state.reservations.length>g.maxRequests)return refuse();totals(state);return state;
