@@ -6,6 +6,8 @@ import {createCalculatorModelTeam,CALCULATOR_MODEL_ERROR,type CalculatorPriorMod
 import {createTaskModelBudgetFetch,calculatorHostModelBudget,DEFAULT_TASK_MODEL_BUDGET} from './taskModelBudget.js';
 import {createProviderContextBudget,createGroqBudgetedFetch} from '../commander/providerContextBudget.js';
 import {createCalculatorGroqPacer} from './calculatorGroqPacing.js';
+import {prepareCalculatorRejectedProposalRecovery} from './calculatorRejectedProposalRecovery.js';
+import {selectProviderConfig} from '../commander/providerConfig.js';
 
 type Team=ReturnType<typeof createCalculatorModelTeam>;
 type Options=Readonly<{transport?:typeof fetch;timing?:Parameters<typeof createCalculatorModelTeam>[3];
@@ -35,6 +37,7 @@ export async function createCalculatorProjectRuntimeTeam(ownerRequest:unknown,pl
  if(env.AGENT_FACTORY_PROJECT_BUDGET_MODE!==undefined&&env.AGENT_FACTORY_PROJECT_BUDGET_MODE!=='required')return refuse();
  await host.controller.assertAuthorized();await host.controller.inspect();
  const teams=new Map<string,Team>(),timing=options.timing??{},now=timing.now??(()=>performance.now());
+ const recoveryEnv=Object.freeze({...env});
  const limits=options.preset?calculatorHostModelBudget(options.preset):DEFAULT_TASK_MODEL_BUDGET;
  let stopped=false,busy=false,providerCallsSent=0;
  let stopReason:'concurrent_operation'|'operation_failed'|'validation_failed'|'transport_stopped'|undefined;
@@ -91,6 +94,22 @@ export async function createCalculatorProjectRuntimeTeam(ownerRequest:unknown,pl
  return Object.freeze({
   plan:()=>call(async():Promise<CalculatorPlan>=>refuse()),
   generate:(...a:Parameters<Team['generate']>)=>call(()=>taskTeam(a[0],a[1]).generate(...a)),
+  generateFromRejectedCheckpoint:(...a:Parameters<Team['generateFromRejectedCheckpoint']>)=>call(async()=>{
+   const previous=taskTeam(a[0],a[1]),state=previous.snapshot();
+   if(limits.maxOutputTokens!==2048||!options.checkpoints?.beforeRequest||!options.checkpoints.afterProposalRejected||
+    state.generatedTasks||state.restoredTasks||state.repairedTasks||previous.checkpointCharge()?.attemptedRequests)return refuse();
+   // Freeze/copy host evidence before authorization awaits. No request JSON or
+   // environment variable supplies either the native grant or ledger scope.
+   const evidence={bytes:Buffer.from(a[3].bytes),expectedSha256:a[3].expectedSha256,identity:Object.freeze({...a[3].identity})};
+   const config=selectProviderConfig(recoveryEnv);if(config.provider!=='groq')return refuse();
+   const prepared=prepareCalculatorRejectedProposalRecovery({...evidence,plan,taskId:a[1],snapshot:a[2],model:config.model});
+   const scope=await host.controller.taskScope(a[1],prepared.metadata.executionId);active();
+   const team=createProjectBudgetedCalculatorTeam(ownerRequest,recoveryEnv,scope,transport,timing,{
+    ...options.checkpoints,beforeRequest:async()=>{active();await options.checkpoints!.beforeRequest!(checkpointCharge());},
+   },options.preset,options.evidence);
+   teams.set(a[1],team);
+   return team.generateFromRejectedCheckpoint(plan,a[1],a[2],evidence);
+  }),
   repair:(...a:Parameters<Team['repair']>)=>call(()=>taskTeam(a[0],a[1]).repair(...a)),
   assess:(...a:Parameters<Team['assess']>)=>call(()=>taskTeam(a[1],a[2]).assess(...a)),
   prepareRepairFeedback:(...a:Parameters<Team['prepareRepairFeedback']>)=>callSync(()=>taskTeam(a[0],a[1]).prepareRepairFeedback(...a)),

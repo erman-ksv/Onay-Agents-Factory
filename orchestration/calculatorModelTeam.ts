@@ -1,4 +1,5 @@
 import {consumeAuthorizedProjectTaskScope,type AuthorizedProjectTaskScope} from './projectBudgetAuthorization.js';
+import {prepareCalculatorRejectedProposalRecovery} from './calculatorRejectedProposalRecovery.js';
 import {calculatorFailureExcerpt} from './calculatorFailureExcerpt.js';
 import {calculatorProposalDiagnostics,type CalculatorProposalDiagnostic} from './calculatorProposalDiagnostics.js';
 import {consumeCalculatorFailedTestEvidence,type CalculatorFailedTestEvidence} from './calculatorFailedTestRepair.js';
@@ -201,14 +202,14 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     return Object.freeze(charge);
   }
 
-  async function call(instructions: string, packet: unknown, outputTokens: 1200 | 2048 = 1200): Promise<unknown> {
+  async function call(instructions: string, packet: unknown, outputTokens: 1200 | 2048 = 1200, preparedBody?:string): Promise<unknown> {
     let phase = "request_preparation_failed";
     try {
       if (stopped) return refuse();
       httpStatus = undefined; providerHttpStatus = undefined; finishReason = undefined; admissionDiagnostic = undefined;
       const input = JSON.stringify(packet);
       if (Buffer.byteLength(input) > 16_000 || scanForSecrets(input).length) return refuse();
-      const body = JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: outputTokens,
+      const body = preparedBody ?? JSON.stringify({ model, stream: false, n: 1, max_completion_tokens: outputTokens,
         messages: [{ role: "system", content: instructions + (config.provider === "groq" && model === "openai/gpt-oss-120b" ? "\n\nReturn one JSON object matching the requested schema. No Markdown or surrounding text." : "") }, { role: "user", content: input }],
         ...(config.provider === "groq" && model === "openai/gpt-oss-120b" ? {
           reasoning_effort: "low", response_format: { type: "json_object" },
@@ -275,10 +276,15 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     if (!task || actual.status !== "planned" || (authorizedProject&&(actual.fingerprint!==authorizedProject.planFingerprint||taskId!==authorizedProject.taskId))) return refuse();
     return task;
   }
-  async function propose(plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, repair?: CalculatorRepairRequest): Promise<PreparedCalculatorChanges> {
+  async function propose(plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, repair?: CalculatorRepairRequest,
+    rejection?:Pick<Parameters<typeof prepareCalculatorRejectedProposalRecovery>[0],'bytes'|'expectedSha256'|'identity'>): Promise<PreparedCalculatorChanges> {
     try {
       if(authorizedProject?.operationMode==='read-only-review')return refuse();
       const task = taskIn(plan, taskId);
+      const recovery=rejection?prepareCalculatorRejectedProposalRecovery({...rejection,plan,taskId,snapshot,model}):undefined;
+      if(recovery&&(!authorizedProject||authorizedProject.projectBudget.executionId!==recovery.metadata.executionId||
+        !checkpointHooks?.beforeRequest||!checkpointHooks.afterProposalRejected||hostBudget?.maxOutputTokens!==2048||
+        budget.snapshot().attemptedRequests||generated.size||restored.size||repairOnly||repair))return refuse();
       const savedRepair = repair ? repairFeedback.get(repair) : undefined;
       if (stopped || (restored.size && !(repairOnly && repair && savedRepair)) ||
           (repairOnly && (!repair || !savedRepair || savedRepair.taskId !== taskId || savedRepair.previous !== repair.previous)) ||
@@ -307,7 +313,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
           if (typeof value === "string" && privateSources.some(source => source.trim() && value.includes(source))) return refuse();
           if (value && typeof value === "object") pending.push(...Object.values(value));
         }
-      } else generated.add(taskId);
+      } else {generated.add(taskId);if(recovery)repaired.add(taskId);}
       const sources = calculatorSources(snapshot); let excerptBytes = 0;
       const evidence = snapshot.files.map(file => {
         const source = sources.get(file.path);
@@ -322,12 +328,12 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
           unverified: file.exists ? "Remaining original source is omitted; use exact anchored patches only." : "Runtime behavior is unverified." };
       });
       if (excerptBytes > 6_000) return refuse();
-      const outputTokens = task.role === "frontend" && (((hostPreset === "calculator-frontend-2048-four-roles" && !repair) || (hostPreset === "calculator-keyboard-eight-roles" || hostPreset === "calculator-successor-eight-roles")) ||
+      const outputTokens = recovery || task.role === "frontend" && (((hostPreset === "calculator-frontend-2048-four-roles" && !repair) || (hostPreset === "calculator-keyboard-eight-roles" || hostPreset === "calculator-successor-eight-roles")) ||
         (repairOnly && repair)) ? 2048 : 1200;
       const instructions=repairOnly && repair && task.acceptanceIds.includes('keyboard')?calculatorKeyboardRepairInstructions():buildCalculatorRoleInstructions(task.role,outputTokens);
       const output = await call(instructions, { repository: owner.repository,
         task, acceptance: CALCULATOR_ACCEPTANCE.filter(item => task.acceptanceIds.includes(item.id)), baseSha: snapshot.baseSha, requirementsSha256: owner.requirementsSha256, evidence, ...(repair ? { repair: repairEvidence } : {}),
-        unverifiedAreas: ["Unshown originals and other files", "Independent security/review", "Actual tests and browser behavior"] }, outputTokens);
+        unverifiedAreas: ["Unshown originals and other files", "Independent security/review", "Actual tests and browser behavior"] }, outputTokens,recovery?.request.body);
       let prepared:PreparedCalculatorChanges;
       try { prepared=prepareCalculatorRoleChanges(task.role,output,snapshot); }
       catch {
@@ -344,7 +350,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
           }catch{/* Keep the source-free blocked classification only. */}
         }
         if(checkpointHooks?.afterProposalRejected){
-          try { await checkpointHooks.afterProposalRejected(Object.freeze({taskId,kind:repair?'repair':'generation',validationCode:declined?'model_declined_proposal':'proposal_changes_invalid',result:privateRejectedAssessment(output,apiKey)})); }
+          try { await checkpointHooks.afterProposalRejected(Object.freeze({taskId,kind:repair||recovery?'repair':'generation',validationCode:declined?'model_declined_proposal':'proposal_changes_invalid',result:privateRejectedAssessment(output,apiKey)})); }
           catch { failureCode='proposal_rejection_persistence_failed'; }
         }
         return refuse();
@@ -364,6 +370,15 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
       } catch { failureCode ??= "model_plan_invalid"; stopped = true; return refuse(); }
     },
     generate: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot) => propose(plan, taskId, snapshot),
+    /** Host-only, project-scoped single correction. Never available to legacy
+     * per-task clients; the stable ledger reservation survives process restart. */
+    async generateFromRejectedCheckpoint(plan:CalculatorPlan,taskId:string,snapshot:CalculatorSnapshot,
+      evidence:Pick<Parameters<typeof prepareCalculatorRejectedProposalRecovery>[0],'bytes'|'expectedSha256'|'identity'>){
+      try{
+        if(!authorizedProject||!plain(evidence)||!exact(evidence,['bytes','expectedSha256','identity']))return refuse();
+        return await propose(plan,taskId,snapshot,undefined,evidence);
+      }catch{failureCode??='rejected_recovery_invalid';stopped=true;return refuse();}
+    },
     repair: (plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest) => propose(plan, taskId, snapshot, request),
     adoptSavedUnpublishedCorrection(plan:CalculatorPlan,taskId:string,snapshot:CalculatorSnapshot,request:CalculatorRepairRequest,raw:unknown){
       try{
