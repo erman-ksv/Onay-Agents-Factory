@@ -1,4 +1,5 @@
 import { constants, closeSync, fstatSync, fsyncSync, linkSync, lstatSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {prepareCalculatorVerifiedCorrections,resolveCalculatorVerifiedCorrection,type CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
 import { isAbsolute, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { TeamTaskStore, type TeamTaskSnapshot } from "./teamTaskStore.js";
@@ -18,6 +19,7 @@ export type CalculatorDependencyEvidence = {
   securityReady: true; independentReviewReady: true; taskChecksPassed: true; testsExecuted: true;
 };
 export type CalculatorSelectionOptions = {
+  verifiedCorrections?:readonly CalculatorVerifiedCorrection[];
   currentBaseSha: string;
   verifyTask?: (task: CalculatorPlanTask, receipt: TeamTaskSnapshot, currentBaseSha: string) => Promise<CalculatorDependencyEvidence | undefined>;
   /** Read-only historical inspection: NEVER a task-claim or executor permit. */
@@ -144,6 +146,8 @@ export class CalculatorPlanStore {
     });
     if (plan.status === "blocked") return answer("blocked", "plan_has_unresolved_blockers");
     const historical = options.inspectedT02;
+    const corrections=prepareCalculatorVerifiedCorrections(options.verifiedCorrections);
+    if(historical&&corrections)return refuseCalculatorPlan();
     if (historical) {
       try { assertCalculatorT02InspectedSuccessorPreview(historical); }
       catch { return answer("needs-review", "historical_publication_unverified"); }
@@ -172,9 +176,9 @@ export class CalculatorPlanStore {
         const receipt = store.inspectExisting();
         // Historical recovery never trusts a receipt while a writer may still
         // own it, including a crash lock without any receipt.
-        if (historical && store.inspectExistingLock()) return answer("needs-review", "historical_task_lock_present");
+        if ((historical||corrections) && store.inspectExistingLock()) return answer("needs-review", "historical_task_lock_present");
         if (receipt) saved.set(task.id, receipt);
-        if (historical) originalState.set(task.id, receipt ? JSON.stringify(receipt) : undefined);
+        if (historical||corrections) originalState.set(task.id, receipt ? JSON.stringify(receipt) : undefined);
       } finally { store.close(); }
     }
     if (historical) {
@@ -186,6 +190,10 @@ export class CalculatorPlanStore {
         return answer("needs-review", "historical_receipt_digest_changed");
     }
     // No recorded/started task is ever selected again, regardless of a status label.
+    if(corrections)for(const correction of corrections){
+      if(!plan.tasks.some(t=>t.id===correction.taskId))return refuseCalculatorPlan();
+      saved.set(correction.taskId,await resolveCalculatorVerifiedCorrection(correction,plan,saved.get(correction.taskId),options.currentBaseSha));
+    }
     if ([...saved.values()].some(item => item.status === "running")) return answer("needs-review", "interrupted_or_running_task_no_replay");
     if ([...saved.values()].some(item => item.status === "blocked")) return answer("blocked", "failed_task_requires_explicit_repair");
     if (!saved.size && options.currentBaseSha !== plan.owner.baseSha) return answer("needs-review", "initial_base_changed");
@@ -212,7 +220,11 @@ export class CalculatorPlanStore {
         return answer("needs-review", "dependency_or_candidate_unverified");
       verified.push(task.id);
     }
-    if (historical) {
+    if(corrections)for(const correction of corrections){
+      const task=plan.tasks.find(t=>t.id===correction.taskId)!;const r=this.taskReceipt(plan,task);
+      try{await resolveCalculatorVerifiedCorrection(correction,plan,r.inspectExisting(),options.currentBaseSha);}finally{r.close();}
+    }
+    if (historical||corrections) {
       // A host verification callback is asynchronous: re-check EVERY task,
       // including unclaimed successors, immediately before displaying ready.
       for (const task of plan.tasks) {

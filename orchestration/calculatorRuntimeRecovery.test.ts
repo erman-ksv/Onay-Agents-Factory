@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync} from 'node:fs';import {join} from 'node:path';import {tmpdir} from 'node:os';
-import {CalculatorPlanStore} from './calculatorPlanStore.js';import {openCalculatorWorkspace} from './calculatorWorkspace.js';
+import {CalculatorPlanStore} from './calculatorPlanStore.js';import {openCalculatorWorkspace,selectCalculatorWorkspaceTask} from './calculatorWorkspace.js';
+import {qualifyCalculatorVerifiedCorrection,prepareCalculatorVerifiedCorrections,CALCULATOR_VERIFIED_CORRECTION_ERROR} from './calculatorVerifiedCorrection.js';
+import {runCalculatorAfterCi} from './calculatorAfterCi.js';
 import {createCalculatorExecutionCheckpointStore,type CalculatorExecutionCheckpointPayload} from './calculatorExecutionCheckpoint.js';
 import {createCalculatorRuntimeCheckpointWriters,runCalculatorRuntime,CALCULATOR_RUNTIME_ERROR} from './calculatorRuntime.js';
 import {prepareCalculatorRuntimeRecoveryHost,calculatorRuntimeRecoverySource,admitCalculatorRuntimeRecovery,claimCalculatorRuntimeRecovery,assertCalculatorRuntimeRecovery,routeCalculatorRuntimeRecovery,CALCULATOR_RUNTIME_RECOVERY_ERROR} from './calculatorRuntimeRecovery.js';
@@ -36,7 +38,7 @@ async function setup(mode='development'){
  let claims=0,sourceChecks=0,claimChecks=0,dependencies=0,sourceOk=true,recoveryOk=true;
  const raw={bytes,expectedSha256:ref.sha256,identity,receipt,receiptSha256:hash(receipt),verifyDependencies:async(e:any)=>{dependencies++;return {...e,taskId:e.task.id,securityReady:true as const,independentReviewReady:true as const,taskChecksPassed:true as const,testsExecuted:true as const};},assertSourceRemote:async(b:any)=>{sourceChecks++;assert.equal(b.checkpointSha256,ref.sha256);assert.equal(b.receiptSha256,hash(receipt));if(!sourceOk)throw Error('Private source unavailable');},claimRecovery:async()=>{if(claims)throw Error('Duplicate claim');claims++;},assertRecovery:async()=>{claimChecks++;if(!recoveryOk||claims!==1)throw Error('Private marker unavailable');}};
  const host=prepareCalculatorRuntimeRecoveryHost(raw)!;
- return {root,store,plan,task,A,workspace,controller,raw,host,reader,sourcePath,receiptPath,bytes,receipt,counts:()=>({claims,sourceChecks,claimChecks,dependencies}),setSourceOk:(v:boolean)=>{sourceOk=v;},setRecoveryOk:(v:boolean)=>{recoveryOk=v;},move:(sha:string)=>{head=sha;},publish:(files:readonly {path:string;content:string}[])=>{tree=[...baseTree,...files.map(f=>({path:f.path,sha:blob(f.content),type:'blob',mode:'100644'}))];head=C;},cleanup:()=>rmSync(root,{recursive:true,force:true})};
+ return {root,store,plan,task,A,workspace,controller,raw,host,reader,sourcePath,receiptPath,bytes,receipt,counts:()=>({claims,sourceChecks,claimChecks,dependencies}),setSourceOk:(v:boolean)=>{sourceOk=v;},setRecoveryOk:(v:boolean)=>{recoveryOk=v;},move:(sha:string)=>{head=sha;},publish:(files:readonly {path:string;content:string}[])=>{for(const f of files)blobs.set(blob(f.content),f.content);tree=[...baseTree,...files.map(f=>({path:f.path,sha:blob(f.content),type:'blob',mode:'100644'}))];head=C;},cleanup:()=>rmSync(root,{recursive:true,force:true})};
 }
 test('host recovery input copies private evidence and refuses JSON, getters, wrong hashes and altered identity',async()=>{const f=await setup();try{
  let reads=0;const getter=Object.defineProperty({...f.raw},'identity',{enumerable:true,get(){reads++;return f.raw.identity;}});
@@ -79,7 +81,7 @@ test('normal runtime rejects recovery outside project run or with incompatible m
  const directory=join(f.root,'uncreated'),error={message:CALCULATOR_RUNTIME_ERROR},limits={maxRequests:4,maxRunBytes:96000,maxRepairs:0,hostPreset:'calculator-frontend-2048-four-roles'} as const;
  for(const mode of ['inspect','plan','preflight','run'] as const)await assert.rejects(()=>runCalculatorRuntime({}, {},directory,mode,{},limits,undefined,undefined,undefined,f.raw),error);assert.equal(existsSync(directory),false);
  }finally{f.cleanup();}});
-test('routed executor preserves original failure and runs correction roles tools publication and candidate CI with separate phase state',async()=>{const f=await setup();try{
+async function completedRecovery(){const f=await setup();try{
  const permit=await admitCalculatorRuntimeRecovery(f.workspace,f.store,f.host,f.controller,join(f.root,'phase'),'openai/gpt-oss-120b');
  let clock=0,sends=0,checks=0,publishes=0,ciReads=0;const env={AGENT_FACTORY_TARGET_PROFILE:'calculator',AGENT_FACTORY_PROVIDER:'groq',GROQ_API_KEY:'fixture-key',CALCULATOR_MODEL_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_LEGAL_ENABLED:'false'};
  const identity={...f.raw.identity,runtimeConfigDigest:'9'.repeat(64)},writers=createCalculatorRuntimeCheckpointWriters(join(f.root,'phase'),identity);
@@ -92,5 +94,46 @@ test('routed executor preserves original failure and runs correction roles tools
  const result=await runCalculatorExecution(f.workspace,{...routed,maxRepairs:0,rejectedProposalPermit:permit,execution:'offline-test',checkpoint:event=>{const {taskId:_,...fields}=event;active={...fields,modelState:team.checkpointCharge(),httpInFlight:event.status==='passed'?false:active.httpInFlight};writers.get(f.task.id).save(active);}});
  assert.equal(result.status,'candidate-verified',JSON.stringify({result,sends,diagnostic:team.diagnostic(),stage:active.stage}));assert.equal(result.repairs,1);assert.deepEqual({sends,checks,publishes,ciReads},{sends:4,checks:1,publishes:1,ciReads:1});assert.equal(result.wholeAppCompleted,false);
  assert.equal(writers.get(f.task.id).read()!.attempt,2);assert.equal(writers.get(f.task.id).read()!.modelState.attemptedRequests,4);writers.close();
+ assert.deepEqual(readFileSync(f.sourcePath),f.bytes);assert.deepEqual(readFileSync(f.receiptPath),f.receipt);
+ const correction=readFileSync(join(f.root,'phase',f.task.id+'.execution.json')),receipt=readFileSync(join(f.root,'phase','calc-recovery-'+hash(permit.executionId).slice(0,40)+'.json'));
+ const archive={original:{bytes:f.bytes,sha256:hash(f.bytes),identity:f.raw.identity},originalReceipt:{bytes:f.receipt,sha256:hash(f.receipt)},correction:{bytes:correction,sha256:hash(correction),identity},correctionReceipt:{bytes:receipt,sha256:hash(receipt)}};
+ let remoteOk=true,ciOk=true,hostReady=true,remoteHook:undefined|(()=>Promise<void>);
+ const ci=async()=>{const evidence=await tools.ci({repository:f.plan.owner.repository,branch:f.plan.branch,candidateSha:C});return {...evidence,...(!ciOk?{runs:evidence.runs.map(r=>({...r,conclusion:'failure'}))}:{}),provenance:{candidateSha:C,workflowPins:[{id:99,path:'.github/workflows/calculator-task-ci.yml',blobSha:D}],verifiedRunIds:[17]}};};
+ const qualificationHost={assertRemote:async(binding:any)=>{assert.equal(binding.originalCheckpointSha256,archive.original.sha256);assert.equal(binding.checkpointSha256,archive.correction.sha256);if(!remoteOk)throw Error('Private remote proof unavailable');await remoteHook?.();},ci,getHead:f.reader.getHead,verifyCandidate:async(input:any)=>{assert.equal(input.taskId,f.task.id);assert.equal(input.checkpoint.assessments.length,3);assert.equal(input.candidateSha,C);return hostReady?{repository:f.plan.owner.repository,planFingerprint:f.plan.fingerprint,taskId:f.task.id,candidateSha:C,currentSha:C,securityReady:true as const,independentReviewReady:true as const,taskChecksPassed:true as const,testsExecuted:true as const}:undefined;}};
+ const select=async(corrections?:Parameters<typeof prepareCalculatorVerifiedCorrections>[0])=>selectCalculatorWorkspaceTask(await openCalculatorWorkspace(f.store,f.reader,f.plan.branch,C),f.raw.verifyDependencies,undefined,corrections as any);
+ return {...f,tools,ci,archive,qualificationHost,result,qualify:()=>qualifyCalculatorVerifiedCorrection(f.plan,archive,qualificationHost),select,setCiOk:(v:boolean)=>{ciOk=v;},setRemoteOk:(v:boolean)=>{remoteOk=v;},setHostReady:(v:boolean)=>{hostReady=v;},setRemoteHook:(v:()=>Promise<void>)=>{remoteHook=v;}};
+ }catch(error){f.cleanup();throw error;}}
+test('routed executor preserves original failure and runs correction roles tools publication and candidate CI with separate phase state',async()=>{const f=await completedRecovery();try{assert.equal(f.result.status,'candidate-verified');}finally{f.cleanup();}});
+test('only qualified correction evidence lets the ordinary selector advance past the original blocked receipt',async()=>{const f=await completedRecovery();try{
+ const before=await f.select();assert.equal(before.status,'blocked');const cap=await f.qualify(),selected=await f.select([cap]);assert.equal(selected.status,'ready');assert.equal(selected.task!.id,f.plan.tasks[2]!.id);assert.ok(selected.verifiedTaskIds.includes(f.task.id));assert.equal(cap.executionAuthorized,false);
+ assert.deepEqual(readFileSync(f.receiptPath),f.receipt);assert.deepEqual(readFileSync(f.sourcePath),f.bytes);assert.ok(!JSON.stringify(cap).includes('PRIVATE_SAVED_REJECTION'));
+ assert.throws(()=>prepareCalculatorVerifiedCorrections([{...cap}]),{message:CALCULATOR_VERIFIED_CORRECTION_ERROR});await assert.rejects(()=>f.select([{...cap}]));
+ }finally{f.cleanup();}});
+test('red CI, missing host checks, wrong archive hash and mismatched recovery receipt cannot qualify a correction',async()=>{const f=await completedRecovery();try{
+ f.setCiOk(false);await assert.rejects(()=>f.qualify());f.setCiOk(true);f.setHostReady(false);await assert.rejects(()=>f.qualify());f.setHostReady(true);
+ await assert.rejects(()=>qualifyCalculatorVerifiedCorrection(f.plan,{...f.archive,correction:{...f.archive.correction,sha256:'f'.repeat(64)}},f.qualificationHost));
+ await assert.rejects(()=>qualifyCalculatorVerifiedCorrection(f.plan,{...f.archive,correctionReceipt:f.archive.originalReceipt},f.qualificationHost));
+ const missingPins={...f.qualificationHost,ci:async()=>({...await f.ci(),provenance:{candidateSha:C,workflowPins:[],verifiedRunIds:[17]}})};await assert.rejects(()=>qualifyCalculatorVerifiedCorrection(f.plan,f.archive,missingPins));
+ assert.equal((await f.select()).status,'blocked');
+ }finally{f.cleanup();}});
+test('a CI regression after qualification prevents selection and cannot revive the same capability',async()=>{const f=await completedRecovery();try{
+ const cap=await f.qualify();f.setCiOk(false);await assert.rejects(()=>f.select([cap]));f.setCiOk(true);await assert.rejects(()=>f.select([cap]));assert.equal((await f.select()).status,'blocked');
+ }finally{f.cleanup();}});
+test('remote provenance loss or a changed original failure prevents corrected successor selection',async()=>{
+ for(const mode of ['remote','receipt']){const f=await completedRecovery();try{const cap=await f.qualify();
+  if(mode==='remote')f.setRemoteOk(false);else{const saved=JSON.parse(f.receipt.toString());saved.reasonCode='changed-original';writeFileSync(f.receiptPath,JSON.stringify(saved)+'\n');}
+  await assert.rejects(()=>f.select([cap]));
+ }finally{f.cleanup();}}
+});
+test('state mutation during final asynchronous correction verification cannot display a ready successor',async()=>{const f=await completedRecovery();try{
+ const cap=await f.qualify();let reads=0;f.setRemoteHook(async()=>{reads++;if(reads===4){const task=f.store.taskReceipt(f.plan,f.plan.tasks[2]!);task.claim();task.finish('blocked','racing-worker');task.close();}});
+ const selected=await f.select([cap]);assert.notEqual(selected.status,'ready');assert.equal(selected.reasonCode,'historical_state_changed_during_verification');
+ }finally{f.cleanup();}});
+test('after-CI consumes the corrected candidate event once and dispatches exactly its successor without replaying correction',async()=>{const f=await completedRecovery();try{
+ const cap=await f.qualify();mkdirSync(join(f.root,'events'),{mode:0o700});let dispatched=0,persisted=0;
+ const input={version:1,planFingerprint:f.plan.fingerprint,previousTaskId:f.task.id,candidateSha:C,expectedNextTaskId:f.plan.tasks[2]!.id};
+ const options={eventDirectory:join(f.root,'events'),ci:f.ci,verifyDependencies:f.raw.verifyDependencies,verifiedCorrections:[cap],persistBarrier:async()=>{persisted++;},execution:{execution:'offline-test' as const,maxRepairs:0 as const,tools:f.tools,team:{generate:async(_p:any,id:string)=>{assert.equal(id,input.expectedNextTaskId);dispatched++;throw Error('Offline dispatch stops before model HTTP');},repair:async()=>{throw Error('Unexpected repair');},assess:async()=>{throw Error('Unexpected assessment');}}}};
+ const first=await runCalculatorAfterCi(f.store,f.reader,input,options);assert.equal(first.execution!.taskId,input.expectedNextTaskId);assert.equal(dispatched,1);assert.equal(persisted,1);
+ const duplicate=await runCalculatorAfterCi(f.store,f.reader,input,options);assert.equal(duplicate.reasonCode,'after_ci_event_already_recorded_no_replay');assert.equal(dispatched,1);assert.equal(persisted,1);
  assert.deepEqual(readFileSync(f.sourcePath),f.bytes);assert.deepEqual(readFileSync(f.receiptPath),f.receipt);
  }finally{f.cleanup();}});

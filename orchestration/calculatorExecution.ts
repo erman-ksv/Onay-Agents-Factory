@@ -10,6 +10,7 @@ import type { WorkflowRun } from "../github/githubClient.js";
 import type { CiJob } from "../github/ciGate.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
 import {claimCalculatorRuntimeRecovery,type CalculatorRuntimeRecoveryPermit} from './calculatorRuntimeRecovery.js';
+import type {CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
 import type { CalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import type { CalculatorCheckRunner, CalculatorWorkspace } from "./calculatorWorkspace.js";
 import { calculatorWorkspacePlan, claimCalculatorWorkspaceTask, loadCalculatorWorkspaceTask,
@@ -65,6 +66,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   historicalT03Permit?: CalculatorT02ExecutionPermit;
   repairContinuationPermit?: CalculatorT03RepairPermit;
   rejectedProposalPermit?:CalculatorRuntimeRecoveryPermit;
+  verifiedCorrections?:readonly CalculatorVerifiedCorrection[];
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
@@ -117,7 +119,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     const claimed = options.rejectedProposalPermit ? await claimCalculatorRuntimeRecovery(workspace,options.rejectedProposalPermit) : options.queuedSuccessorPermit ? await claimCalculatorQueuedSuccessor(workspace,options.queuedSuccessorPermit) : options.repairContinuationPermit ?
       await claimCalculatorT03RepairContinuation(workspace,options.repairContinuationPermit) : options.historicalT03Permit ?
       await claimHistoricalCalculatorT03(workspace,options.historicalT03Permit,options.verifyDependencies) :
-      await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies);
+      await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies,options.verifiedCorrections);
     receipt = claimed.store; task = claimed.selection.task;
     if (!receipt || !task) return answer(claimed.selection.status === "blocked" ? "blocked" : "needs-review", claimed.selection.reasonCode);
     if(options.rejectedProposalPermit){activeAttempt=2;repairs=1;}

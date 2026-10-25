@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type {CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader, type CalculatorSnapshot, type CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
@@ -139,11 +140,11 @@ async function verifyDependency(workspace: CalculatorWorkspace, task: Calculator
     securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
 }
 export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner,
-  historical?: Readonly<{ inspectedT02: CalculatorT02ReadOnlyPreselection; eventDirectory: string; admittedPermit?:CalculatorT02ExecutionPermit }>
+  historical?: Readonly<{ inspectedT02: CalculatorT02ReadOnlyPreselection; eventDirectory: string; admittedPermit?:CalculatorT02ExecutionPermit }>,verifiedCorrections?:readonly CalculatorVerifiedCorrection[]
 ): Promise<CalculatorSelection> {
   try {
     const host = await fresh(workspace);
-    const selection = await host.store.select({ currentBaseSha: workspace.sha,
+    const selection = await host.store.select({ currentBaseSha: workspace.sha,verifiedCorrections,
       ...(historical ? { inspectedT02: historical.inspectedT02, eventDirectory: historical.eventDirectory, ...(historical.admittedPermit?{admittedPermit:historical.admittedPermit}:{}) } : {}),
       verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner, historical?.inspectedT02) });
     await fresh(workspace); return selection;
@@ -151,13 +152,13 @@ export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspa
 }
 /** Claim is persisted before future model execution. Movement after claim leaves
  * a blocked receipt; it must not erase the barrier and automatically replay. */
-export async function claimCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner):
+export async function claimCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner,verifiedCorrections?:readonly CalculatorVerifiedCorrection[]):
   Promise<{ selection: CalculatorSelection; store?: TeamTaskStore }> {
   let claimed: TeamTaskStore | undefined;
   try {
     const host = await fresh(workspace);
     if (workspace.ref !== host.plan.branch) return refuse();
-    const result = await host.store.claimNext({ currentBaseSha: workspace.sha,
+    const result = await host.store.claimNext({ currentBaseSha: workspace.sha,verifiedCorrections,
       verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner) });
     claimed = result.store; await fresh(workspace); return result;
   } catch {

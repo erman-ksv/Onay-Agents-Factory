@@ -1,6 +1,7 @@
 import {createCalculatorRuntimeProposalRejection} from './calculatorRejectedProposalCheckpoint.js';
 import {prepareCalculatorRuntimeRecoveryHost,calculatorRuntimeRecoverySource,admitCalculatorRuntimeRecovery,assertCalculatorRuntimeRecovery,routeCalculatorRuntimeRecovery,type CalculatorRuntimeRecoveryHost,type CalculatorRuntimeRecoveryPermit} from './calculatorRuntimeRecovery.js';
 import {prepareCalculatorRejectedProposalRecovery} from './calculatorRejectedProposalRecovery.js';
+import {prepareCalculatorVerifiedCorrections,resolveCalculatorVerifiedCorrection,type CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
 import {createCalculatorRuntimeFailureCheckpoint} from './calculatorRuntimeFailure.js';
 import {createCalculatorProjectRuntimeTeam,prepareCalculatorProjectRuntimeHost,type CalculatorProjectRuntimeHost} from './calculatorProjectRuntimeTeam.js';
 import type { CalculatorHostPreset } from "./taskModelBudget.js";
@@ -34,6 +35,7 @@ function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
  * JSON, model output and old receipt status cannot provide this capability.
  * The checker must verify archived approvals and actual current host tests. */
 export type CalculatorRuntimeAfterCi = Readonly<{
+  verifiedCorrections?:readonly CalculatorVerifiedCorrection[];
   request: CalculatorAfterCiRequest; verifyDependencies: CalculatorCheckRunner;
   persistBarrier: CalculatorAfterCiBarrierPersistence;
 }>;
@@ -42,11 +44,13 @@ export function prepareCalculatorRuntimeAfterCi(value: unknown): CalculatorRunti
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return refuse();
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).length !== 3 || !Object.hasOwn(descriptors, "request") || !Object.hasOwn(descriptors, "verifyDependencies") ||
+  const hasCorrections=Object.hasOwn(descriptors,'verifiedCorrections');
+  if (Reflect.ownKeys(value).length !== (hasCorrections?4:3) || !Object.hasOwn(descriptors, "request") || !Object.hasOwn(descriptors, "verifyDependencies") ||
       !Object.hasOwn(descriptors, "persistBarrier") ||
       !Object.values(descriptors).every(item => Object.hasOwn(item, "value")) ||
       typeof descriptors.verifyDependencies.value !== "function" || typeof descriptors.persistBarrier.value !== "function") return refuse();
   try { return Object.freeze({ request: prepareCalculatorAfterCiRequest(descriptors.request.value),
+    ...(hasCorrections?{verifiedCorrections:prepareCalculatorVerifiedCorrections(descriptors.verifiedCorrections!.value)}:{}),
     verifyDependencies: descriptors.verifyDependencies.value as CalculatorCheckRunner,
     persistBarrier: descriptors.persistBarrier.value as CalculatorAfterCiBarrierPersistence }); }
   catch { return refuse(); }
@@ -396,6 +400,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       ...(continuation ? { continuationProposalDigest: continuation.proposalDigest } : {}),
       ...(continuation?.restoredAssessments?.length ? { restoredAssessmentsDigest: digest(continuation.restoredAssessments) } : {}),
       ...(afterCi ? { afterCiRequest: afterCi.request } : {}),
+      ...(afterCi?.verifiedCorrections?{verifiedCorrections:afterCi.verifiedCorrections}:{}),
       ...(recoverySource?{rejectedSourceSha256:recoverySource.expectedSha256}:{}),
       version: config.version, sandboxImage: config.sandboxImage,
       trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
@@ -423,6 +428,10 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       save({ ...active, status: admitted ? "running" : "blocked", httpInFlight: admitted }, charge));
     const beforeRequest=async(amount:CalculatorPriorModelCharge)=>{
       if(recovery){if(!recoveryPermit)return refuse();await assertCalculatorRuntimeRecovery(recoveryPermit);}
+      if(afterCi?.verifiedCorrections)for(const correction of afterCi.verifiedCorrections){
+        const task=saved.tasks.find(t=>t.id===correction.taskId);if(!task)return refuse();const receipt=store.taskReceipt(saved,task);
+        try{await resolveCalculatorVerifiedCorrection(correction,saved,receipt.inspectExisting(),currentSha);}finally{receipt.close();}
+      }
       persistBeforeRequest(amount);
     };
     let dependencyAssessment: Readonly<{ taskId: string; proposal: PreparedCalculatorChanges; expectedRole: CalculatorRejectedAssessment["role"] }> | undefined;
@@ -538,6 +547,7 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700 ||
             (process.getuid && stat.uid !== process.getuid())) return refuse();
         const transition = await runCalculatorAfterCi(store, reader, afterCi.request, { eventDirectory, ci,
+          ...(afterCi.verifiedCorrections?{verifiedCorrections:afterCi.verifiedCorrections}:{}),
           verifyDependencies: afterCi.verifyDependencies, persistBarrier: afterCi.persistBarrier, execution: executionOptions });
         result = transition.execution ?? { status: transition.status === "blocked" ? "blocked" as const : "needs-review" as const,
           reasonCode: transition.reasonCode, attempts: 0, repairs: 0, proposalTestsExecuted: false,

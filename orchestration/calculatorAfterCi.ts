@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import {prepareCalculatorVerifiedCorrections,resolveCalculatorVerifiedCorrection,type CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
 import { evaluateTestExecutionEvidence } from "../agents/tester/agent.js";
 import type { createCalculatorCiReader, CalculatorCiEvidence, CalculatorWorkflowPin } from "../github/calculatorCi.js";
 import type { CalculatorSnapshotReader } from "../github/calculatorSnapshot.js";
@@ -18,6 +19,7 @@ export type CalculatorAfterCiReport = Readonly<{
 }>;
 type Execution = Omit<Parameters<typeof runCalculatorExecution>[1], "verifyDependencies" | "restoreProposal" | "restoreAssessments">;
 export type CalculatorAfterCiOptions = Readonly<{
+  verifiedCorrections?:readonly CalculatorVerifiedCorrection[];
   /** Stable, preserved private directory shared by every delivery of this transition.
    * A new empty directory is not a retry/resume mechanism. The host restores it. */
   eventDirectory: string;
@@ -98,6 +100,7 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
   let barrier: TeamTaskStore | undefined, claimed = false;
   try {
     const request = prepareCalculatorAfterCiRequest(input), plan = store.inspect();
+    const corrections=prepareCalculatorVerifiedCorrections(options?.verifiedCorrections);
     if (!plan || plan.status !== "planned" || plan.fingerprint !== request.planFingerprint ||
         !plan.tasks.some(task => task.id === request.previousTaskId) ||
         !plan.tasks.some(task => task.id === request.expectedNextTaskId) || !options ||
@@ -117,7 +120,11 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
       const receipt = store.taskReceipt(plan, previousTask);
       try { return receipt.inspectExisting(); } finally { receipt.close(); }
     };
-    const prior = previous();
+    const effectivePrevious=async()=>{
+      const original=previous(),correction=corrections?.find(c=>c.taskId===previousTask.id);
+      return correction?resolveCalculatorVerifiedCorrection(correction,plan,original,request.candidateSha):original;
+    };
+    const originalPrevious=digest(previous()),prior = await effectivePrevious();
     if (!validPrevious(prior, plan.branch, plan.owner.repository, request.candidateSha))
       return answer("blocked", "after_ci_previous_candidate_unverified");
     if (await reader.getHead(plan.branch) !== request.candidateSha) return answer("needs-review", "after_ci_candidate_no_longer_current");
@@ -143,7 +150,7 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
           proof.securityReady !== true || proof.independentReviewReady !== true || proof.taskChecksPassed !== true || proof.testsExecuted !== true) return undefined;
       proofs.set(key, Object.freeze({ ...proof })); return { ...proof };
     };
-    const selection = await selectCalculatorWorkspaceTask(workspace, verify); selecting = false;
+    const selection = await selectCalculatorWorkspaceTask(workspace, verify,undefined,corrections); selecting = false;
     if (selection.status !== "ready" || selection.task?.id !== request.expectedNextTaskId ||
         !selection.verifiedTaskIds.includes(request.previousTaskId)) return answer("needs-review", "after_ci_next_task_not_ready");
     // Dependency checks can take time. Fresh API evidence and head are checked
@@ -151,7 +158,7 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
     if (!verifyCalculatorAfterCiCandidateCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha))
       return answer("needs-review", "after_ci_required_checks_changed");
     await assertCalculatorWorkspaceCurrent(workspace);
-    if (digest(previous()) !== digest(prior)) return answer("blocked", "after_ci_previous_receipt_changed");
+    if (digest(previous()) !== originalPrevious||digest(await effectivePrevious())!==digest(prior)) return answer("blocked", "after_ci_previous_receipt_changed");
     if (barrier.claim() !== "claimed") return answer("needs-review", "after_ci_event_already_recorded_no_replay");
     claimed = true; barrier.recordStage("execute_next_task", "running");
     if (options.persistBarrier) {
@@ -160,10 +167,10 @@ export async function runCalculatorAfterCi(store: CalculatorPlanStore, reader: C
       // claiming the successor or letting its first model request leave.
       if (!verifyCalculatorAfterCiCandidateCi(await options.ci(ciInput), plan.owner.repository, plan.branch, request.candidateSha)) return refuse();
       await assertCalculatorWorkspaceCurrent(workspace);
-      if (digest(previous()) !== digest(prior)) return refuse();
+      if (digest(previous()) !== originalPrevious||digest(await effectivePrevious())!==digest(prior)) return refuse();
     }
     const execution = options.execution, assertTask = (id: string) => { if (id !== request.expectedNextTaskId) return refuse(); };
-    const result = await runCalculatorExecution(workspace, { ...execution, verifyDependencies: verify,
+    const result = await runCalculatorExecution(workspace, { ...execution, verifyDependencies: verify,verifiedCorrections:corrections,
       team: {
         generate: async (saved, id, snapshot) => { assertTask(id); return execution.team.generate(saved, id, snapshot); },
         repair: async (saved, id, snapshot, repair) => { assertTask(id); return execution.team.repair(saved, id, snapshot, repair); },
