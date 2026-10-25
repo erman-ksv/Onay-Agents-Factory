@@ -37,6 +37,13 @@ function reservation(input:unknown):ProjectModelReservation{
  if(!plain(input)||!exact(input,['reservationId','taskId','requestSha256','requestBytes','reservedTokens'])||!id(input.reservationId)||!id(input.taskId)||!sha(input.requestSha256)||!integer(input.requestBytes,1)||!integer(input.reservedTokens,1)||scanForSecrets(JSON.stringify(input)).length)return refuse();
  return Object.freeze({reservationId:input.reservationId,taskId:input.taskId,requestSha256:input.requestSha256,requestBytes:input.requestBytes,reservedTokens:input.reservedTokens});
 }
+/** Source-free storage schema shared by local and remote adapters. This is not
+ * owner authorization; concrete grant identity and totals are checked by ledger. */
+export function parseProjectModelBudgetState(data:unknown):ProjectModelBudgetState{
+ if(!plain(data)||!exact(data,['version','grantSha256','reservations'])||data.version!==1||!sha(data.grantSha256)||!Array.isArray(data.reservations)||data.reservations.length>256||Buffer.byteLength(JSON.stringify(data))>262144)return refuse();
+ const entries=data.reservations.map(reservation);if(new Set(entries.map(e=>e.reservationId)).size!==entries.length)return refuse();
+ return Object.freeze({version:1,grantSha256:data.grantSha256,reservations:Object.freeze(entries)});
+}
 const ledgers=new WeakSet<object>();
 export type ProjectModelBudget=Readonly<{
  initialize:()=>Promise<void>;reserve:(input:ProjectModelReservation)=>Promise<void>;
@@ -47,9 +54,7 @@ export function openProjectModelBudget(input:ProjectModelGrant,store:ProjectMode
  const g=grant(input),digest=hash(JSON.stringify(g));if(typeof store?.read!=='function'||typeof store?.compareAndSwap!=='function')return refuse();
  let initialized=false;const attempted=new Set<string>();
  function parse(data:unknown):ProjectModelBudgetState{
-  if(!plain(data)||!exact(data,['version','grantSha256','reservations'])||data.version!==1||data.grantSha256!==digest||!Array.isArray(data.reservations)||data.reservations.length>g.maxRequests||Buffer.byteLength(JSON.stringify(data))>262144)return refuse();
-  const entries=data.reservations.map(reservation);if(new Set(entries.map(e=>e.reservationId)).size!==entries.length)return refuse();
-  const state={version:1 as const,grantSha256:digest,reservations:Object.freeze(entries)};totals(state);return Object.freeze(state);
+  const state=parseProjectModelBudgetState(data);if(state.grantSha256!==digest||state.reservations.length>g.maxRequests)return refuse();totals(state);return state;
  }
  function totals(state:ProjectModelBudgetState):ProjectModelCharge{
   const used={...g.historical};for(const e of state.reservations){if(e.requestBytes>g.maxRequestBytes)return refuse();used.requests++;used.requestBytes+=e.requestBytes;used.reservedTokens+=e.reservedTokens;}
