@@ -1,7 +1,11 @@
+import {createHash} from 'node:crypto';
+import {isProjectModelBudget,type ProjectModelBudget} from './projectModelBudget.js';
 /** One host-owned ledger for every model client in a single task. It does not
  * discover provider quota or retry a rejected task. Serialized request bytes
  * include instructions, tools and model history, independently of tokenizers. */
 export type TaskModelBudgetOptions = {
+  /** Host-only opt-in. Initialization/owner approval remain outside transport. */
+  projectBudget?: Readonly<{ledger:ProjectModelBudget;taskId:string;executionId:string;provider:'groq'}>;
   maxRequests?: number;
   maxRequestBytes?: number;
   maxRunBytes?: number;
@@ -46,7 +50,7 @@ export function calculatorHostModelBudget(preset: CalculatorHostPreset) {
 
 export type TaskModelBudgetFailureCode = "request_limit" | "request_bytes_limit" |
   "run_bytes_limit" | "task_timeout" | "invalid_request" | "rate_limited" |
-  "transport_error" | "request_aborted";
+  "transport_error" | "request_aborted" | "project_budget_refused";
 
 export type TaskModelBudgetFailure = {
   code: TaskModelBudgetFailureCode;
@@ -72,6 +76,7 @@ const MESSAGES: Record<TaskModelBudgetFailureCode, string> = {
   rate_limited: "Model provider returned HTTP 429. This task is stopped without retry.",
   transport_error: "Model transport failed. This task is stopped without retry.",
   request_aborted: "Model request was cancelled. This task is stopped.",
+  project_budget_refused: "Shared project budget was not durably reserved. Stop before HTTP without replay.",
 };
 
 function isPositiveInteger(value: unknown): value is number {
@@ -104,7 +109,9 @@ export function createTaskModelBudgetFetch(
   readonly failure: TaskModelBudgetFailure | undefined;
   readonly providerHttpStatus: number | undefined;
 } {
-  const { now = () => performance.now(), hostPreset, ...overrides } = options;
+  const { now = () => performance.now(), hostPreset, projectBudget, ...overrides } = options;
+  if(projectBudget&&(!isProjectModelBudget(projectBudget.ledger)||projectBudget.provider!=='groq'||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(projectBudget.taskId)||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(projectBudget.executionId)))throw Error('Invalid host project budget scope.');
   const limits = { ...DEFAULT_TASK_MODEL_BUDGET, ...overrides };
   const preset = hostPreset === undefined ? undefined : calculatorHostModelBudget(hostPreset);
   if (preset && Object.entries(preset).some(([key, value]) => limits[key as keyof typeof limits] !== value))
@@ -186,6 +193,7 @@ export function createTaskModelBudgetFetch(
     if (stopped) return failureResponse(stopped);
     let request: Record<string, unknown>;
     let headers: Headers;
+    let outputTokens = limits.maxOutputTokens;
     try {
       const original = await inputBody(input, init);
       checkDeadline();
@@ -200,7 +208,6 @@ export function createTaskModelBudgetFetch(
       }
       request = parsed as Record<string, unknown>;
       if (request.n !== undefined && request.n !== 1) return failureResponse(stop("invalid_request"));
-      let outputTokens = limits.maxOutputTokens;
       for (const key of ["max_tokens", "max_completion_tokens"] as const) {
         if (request[key] === undefined) continue;
         if (!isPositiveInteger(request[key])) return failureResponse(stop("invalid_request"));
@@ -226,7 +233,7 @@ export function createTaskModelBudgetFetch(
     if (bytes > limits.maxRunBytes - totalRequestBytes) return failureResponse(stop("run_bytes_limit"));
 
     // No await between these checks, reservation and registering cancellation.
-    attemptedRequests++;
+    attemptedRequests++;const reservationSequence=attemptedRequests;
     providerHttpStatus = undefined;
     totalRequestBytes += bytes;
     const controller = new AbortController();
@@ -248,9 +255,16 @@ export function createTaskModelBudgetFetch(
         onAbort = () => resolve(failureResponse(stopped ?? stop("request_aborted")));
         controller.signal.addEventListener("abort", onAbort, { once: true });
       });
-      const transport = Promise.resolve().then(() => {
+      const transport = Promise.resolve().then(async () => {
         // A concurrent request can stop the ledger before this microtask runs.
         if (stopped) return failureResponse(stopped);
+        if(projectBudget){
+          if((input instanceof Request?input.url:String(input))!=='https://api.groq.com/openai/v1/chat/completions')return failureResponse(stop('project_budget_refused'));
+          try{await projectBudget.ledger.reserve({reservationId:projectBudget.executionId+':r'+reservationSequence,taskId:projectBudget.taskId,
+            requestSha256:createHash('sha256').update(body).digest('hex'),requestBytes:bytes,reservedTokens:Math.ceil(bytes/3)+256+outputTokens});}
+          catch{return failureResponse(stop('project_budget_refused'));}
+          if(stopped)return failureResponse(stopped);
+        }
         return underlyingFetch(input, { ...init, headers, body, signal: controller.signal });
       }).then((response) => {
         if (!stopped && Number.isInteger(response.status) && response.status >= 100 && response.status <= 599)
