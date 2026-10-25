@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "date": "2026-10-25",
+  "step": "9.2",
+  "status": "remote-atomic-storage-implemented-and-verified",
+  "overallStep9Completed": false,
+  "runtimeSha": "79109785f2f167c83faaefa8d68948252c4a3b8b",
+  "sourceCi": {
+    "runId": 40192582230,
+    "jobId": 121166551257,
+    "typecheck": "passed",
+    "tests": {
+      "total": 2246,
+      "passed": 2246,
+      "failed": 0
+    }
+  },
+  "eventCi": {
+    "runId": 40192910389,
+    "status": "success"
+  },
+  "localTests": {
+    "newRemoteStore": 18,
+    "priorBudgetRegression": 42,
+    "allPassed": true,
+    "dependencyInstallation": false
+  },
+  "audit": {
+    "runId": 40192910457,
+    "jobs": {
+      "seed": 121167549196,
+      "writerA": 121167601517,
+      "writerB": 121167601473,
+      "readOnlyVerifier": 121167666819
+    },
+    "artifacts": [
+      {
+        "id": 12598985401,
+        "name": "remote-budget-race-b-40192910457",
+        "digest": "sha256:86a124add2609d70d993b3a3fd33c6cc71b628fd0ca681b75d7ea937ffd5e335"
+      },
+      {
+        "id": 12598732418,
+        "name": "remote-budget-proof-40192910457",
+        "digest": "sha256:c516ba210a6e27a39661f8ef4f55b90c8e6c4772a9ef426ae904f2377aacdd45"
+      },
+      {
+        "id": 12598059979,
+        "name": "remote-budget-race-a-40192910457",
+        "digest": "sha256:0b3d785d66b3069a16e9c1fdeadaf21bf772bdc25335fc701f3fc24249dc8335"
+      }
+    ],
+    "result": {
+      "version": 1,
+      "status": "remote-budget-cas-verified-between-independent-actions-jobs",
+      "runtimeSha": "79109785f2f167c83faaefa8d68948252c4a3b8b",
+      "sourceCiRunId": 40192582230,
+      "projectKey": "e52ab801c8cd6a56fd428cba7a58de1e5fb9e1b60d7106d91b5c3d5b36c19094",
+      "metadataRef": "refs/heads/state/project-model-budget/e52ab801c8cd6a56fd428cba7a58de1e5fb9e1b60d7106d91b5c3d5b36c19094",
+      "initialRevision": "77247bd09043aaf1681fd39a7fe46a36ce9f2eeed9aec548e0c9242b8fb64df6",
+      "finalRevision": "d35739a7a56f525e04cf67145656c19b4faaffad888fb33ec9d53ca7cb330d6e",
+      "independentWriters": 2,
+      "outcomes": [
+        {
+          "worker": "a",
+          "outcome": "refused",
+          "modelCalls": 0
+        },
+        {
+          "worker": "b",
+          "outcome": "accepted",
+          "revision": "d35739a7a56f525e04cf67145656c19b4faaffad888fb33ec9d53ca7cb330d6e",
+          "modelCalls": 0
+        }
+      ],
+      "reservations": 1,
+      "staleWriteRefusedBeforeObjects": true,
+      "verificationWorkerReadOnly": true,
+      "syntheticStorageFixture": true,
+      "modelCalls": 0,
+      "newLiveOwnerGrant": false,
+      "actualT05LedgerMigrated": false,
+      "calculatorWrites": 0,
+      "mainUnchanged": true,
+      "legalEnabled": false
+    }
+  },
+  "modelCalls": 0,
+  "newLiveOwnerGrant": false,
+  "actualT05LedgerMigrated": false,
+  "t05Budget": {
+    "requestsUsed": 11,
+    "requestsLimit": 11,
+    "reservedTokens": 43761,
+    "reservedTokenLimit": 48000,
+    "remainingRequests": 0
+  },
+  "legalEnabled": false,
+  "calculatorWrites": 0,
+  "onayWrites": 0,
+  "mainWrites": 0,
+  "merge": false,
+  "deployment": false,
+  "remaining": [
+    "9.3: authenticated project-wide owner grant, complete history migration and mandatory controller wiring for all roles",
+    "9.4: bounded real model/CI continuation under explicit approved project allowance"
+  ],
+  "limitations": [
+    "Live audit uses isolated synthetic storage metadata, not a real model-budget authorization.",
+    "Actual provider calls and migration of existing T05 ledger were not performed.",
+    "The adapter never force-updates or deletes state; administrative alteration outside this trusted adapter is outside this validation."
+  ]
+}
