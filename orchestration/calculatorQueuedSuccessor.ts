@@ -85,3 +85,20 @@ export async function admitCalculatorQueuedT05SecondRepair(workspace:CalculatorW
  const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'d85c290bd5465f7c84e112731965059ee26b642bb72484b7d3c79df3c3a7a7d2',grant:g.id,phase:'second-code-correction'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
  permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
 }
+
+/** Review-only continuation of the saved six-call failure; no author call. */
+export async function admitCalculatorQueuedT05SavedAppend(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{grant:Readonly<{id:string;maxRequests:9;maxReservedTokens:48000;totalCodeCorrections:2;freeTierConfirmed:true}>;verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const g=host?.grant;if(!g||g.id!=='owner-t05-nine-free-calls-48000-second-correction-20261025'||g.maxRequests!==9||g.maxReservedTokens!==48000||g.totalCodeCorrections!==2||g.freeTierConfirmed!==true)return refuse();
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[4];
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t05'||record.previousTaskId!==plan.tasks[3]?.id||record.planFingerprint!==plan.fingerprint||record.modelRequestsAuthorized!==0||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'b65438b9c77945c1a7ecb1cf1dc532119ed1e516de4b4b95d632563beb4cfb36').data,p=data.payload;
+ if(p.stage!=='generate_1'||p.status!=='blocked'||p.httpInFlight||p.publicationStarted||p.proposal||p.modelState.attemptedRequests!==6||p.modelState.totalRequestBytes!==49601||p.modelState.reservedRunTokens!==23454||p.assessments.length!==0)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})}),prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,4).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'b65438b9c77945c1a7ecb1cf1dc532119ed1e516de4b4b95d632563beb4cfb36',grant:g.id,phase:'saved-generated-append-three-reviews'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
