@@ -5,8 +5,9 @@ import {calculatorSources,type CalculatorSnapshot} from '../github/calculatorSna
 import {calculatorProposalDiagnostics} from './calculatorProposalDiagnostics.js';
 import {scanForSecrets} from '../github/secretScanner.js';
 import type {CalculatorPlanTask} from './calculatorPlan.js';
+import {prepareCalculatorRejectedProposal} from './calculatorRejectedProposalCheckpoint.js';
 export function buildCalculatorRejectedDraftCorrection(model:string,task:CalculatorPlanTask,rejection:unknown,snapshot:CalculatorSnapshot){
- const r=rejection as {taskId?:unknown;kind?:unknown;validationCode?:unknown;result?:unknown};
+ const r=prepareCalculatorRejectedProposal(rejection);
  if(!r||r.taskId!==task.id||r.kind!=='generation'||r.validationCode!=='proposal_changes_invalid'||!model)throw Error('Rejected draft provenance invalid');
  const sources=calculatorSources(snapshot),diagnostics=calculatorProposalDiagnostics(r.result,snapshot);if(!diagnostics.length)throw Error('No actual validator failure');
  const evidence=snapshot.files.map(f=>{const source=sources.get(f.path);if(!source)return f;const end=Math.min(1000,Math.floor(source.length/2)),start=Math.max(end+1,Math.floor(source.length*0.75));return {...f,excerpt:{startCharacter:0,endCharacter:end,text:source.slice(0,end)},relatedExcerpt:{startCharacter:start,endCharacter:source.length,text:source.slice(start)},unverified:'The middle of the original file is omitted. Patch only exact supplied unique anchors.'};});
