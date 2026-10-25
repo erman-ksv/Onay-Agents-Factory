@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "projectId": "calculator-pilot-step7-v1",
+  "repository": "erman-ksv/Onay-Factory-Calculator",
+  "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+  "observations": [
+    {
+      "scopeId": "planning",
+      "charge": {
+        "requests": 3,
+        "requestBytes": 54267,
+        "reservedTokens": 13855
+      },
+      "evidenceSha256": "ce50ebb99d318d980fac1f05990b90f344f9c79aa67707837cb275fa2f9b78c0",
+      "kind": "cumulative-scope-total"
+    },
+    {
+      "scopeId": "calculator-pilot-step7-v1-34ee03-t01",
+      "charge": {
+        "requests": 7,
+        "requestBytes": 86029,
+        "reservedTokens": 32708
+      },
+      "evidenceSha256": "9f1c11011ce0ee867c9c4ebee0b1d638fa545ee32288bca971df4c8c8305bd34",
+      "kind": "cumulative-scope-total"
+    },
+    {
+      "scopeId": "calculator-pilot-step7-v1-34ee03-t02",
+      "charge": {
+        "requests": 12,
+        "requestBytes": 110138,
+        "reservedTokens": 40564
+      },
+      "evidenceSha256": "50029042af0cebfb22484895e3292c5843e32824ab1240976663a43a7a462983",
+      "kind": "cumulative-scope-total"
+    },
+    {
+      "scopeId": "calculator-pilot-step7-v1-34ee03-t03",
+      "charge": {
+        "requests": 18,
+        "requestBytes": 142611,
+        "reservedTokens": 74531
+      },
+      "evidenceSha256": "368112f170f05f2d045ef21d14291abc649d254c3d9a5896953d33f591de445d",
+      "kind": "cumulative-scope-total"
+    },
+    {
+      "scopeId": "calculator-pilot-step7-v1-34ee03-t04",
+      "charge": {
+        "requests": 8,
+        "requestBytes": 58775,
+        "reservedTokens": 24994
+      },
+      "evidenceSha256": "0ab6290de47b811894f9b010380ba849b8cafd69107ba9046bb0bee74aaa2d70",
+      "kind": "cumulative-scope-total"
+    },
+    {
+      "scopeId": "calculator-pilot-step7-v1-34ee03-t05",
+      "charge": {
+        "requests": 11,
+        "requestBytes": 102088,
+        "reservedTokens": 43761
+      },
+      "evidenceSha256": "96f7c598ba024e8473ad65f71c2a1e5d47eeb3d2092f7a58bee3347965213da4",
+      "kind": "cumulative-scope-total"
+    }
+  ]
+}

@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "status": "history-prepared-owner-decision-pending",
+  "originalAudit": {
+    "version": 1,
+    "status": "history-reconciled-proposal-not-approved",
+    "runtimeSha": "c3179b1ad9d865aeb422f3a817f30a8159cd5375",
+    "sourceCiRunId": 40199059698,
+    "identity": {
+      "projectId": "calculator-pilot-step7-v1",
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+      "ownerFingerprint": "34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8",
+      "taskIds": [
+        "calculator-pilot-step7-v1-34ee03-t01",
+        "calculator-pilot-step7-v1-34ee03-t02",
+        "calculator-pilot-step7-v1-34ee03-t03",
+        "calculator-pilot-step7-v1-34ee03-t04",
+        "calculator-pilot-step7-v1-34ee03-t05"
+      ]
+    },
+    "history": {
+      "version": 1,
+      "projectId": "calculator-pilot-step7-v1",
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+      "observations": [
+        {
+          "scopeId": "planning",
+          "charge": {
+            "requests": 3,
+            "requestBytes": 54267,
+            "reservedTokens": 13855
+          },
+          "evidenceSha256": "ce50ebb99d318d980fac1f05990b90f344f9c79aa67707837cb275fa2f9b78c0",
+          "kind": "cumulative-scope-total"
+        },
+        {
+          "scopeId": "calculator-pilot-step7-v1-34ee03-t01",
+          "charge": {
+            "requests": 7,
+            "requestBytes": 86029,
+            "reservedTokens": 32708
+          },
+          "evidenceSha256": "9f1c11011ce0ee867c9c4ebee0b1d638fa545ee32288bca971df4c8c8305bd34",
+          "kind": "cumulative-scope-total"
+        },
+        {
+          "scopeId": "calculator-pilot-step7-v1-34ee03-t02",
+          "charge": {
+            "requests": 12,
+            "requestBytes": 110138,
+            "reservedTokens": 40564
+          },
+          "evidenceSha256": "50029042af0cebfb22484895e3292c5843e32824ab1240976663a43a7a462983",
+          "kind": "cumulative-scope-total"
+        },
+        {
+          "scopeId": "calculator-pilot-step7-v1-34ee03-t03",
+          "charge": {
+            "requests": 18,
+            "requestBytes": 142611,
+            "reservedTokens": 74531
+          },
+          "evidenceSha256": "368112f170f05f2d045ef21d14291abc649d254c3d9a5896953d33f591de445d",
+          "kind": "cumulative-scope-total"
+        },
+        {
+          "scopeId": "calculator-pilot-step7-v1-34ee03-t04",
+          "charge": {
+            "requests": 8,
+            "requestBytes": 58775,
+            "reservedTokens": 24994
+          },
+          "evidenceSha256": "0ab6290de47b811894f9b010380ba849b8cafd69107ba9046bb0bee74aaa2d70",
+          "kind": "cumulative-scope-total"
+        },
+        {
+          "scopeId": "calculator-pilot-step7-v1-34ee03-t05",
+          "charge": {
+            "requests": 11,
+            "requestBytes": 102088,
+            "reservedTokens": 43761
+          },
+          "evidenceSha256": "96f7c598ba024e8473ad65f71c2a1e5d47eeb3d2092f7a58bee3347965213da4",
+          "kind": "cumulative-scope-total"
+        }
+      ]
+    },
+    "historyDigest": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+    "historicalCharge": {
+      "requests": 59,
+      "requestBytes": 553908,
+      "reservedTokens": 230413
+    },
+    "inventorySha256": "2a1aa5e063d824133a5151fd227d3a596b7fd8eb8298493afccc68f8285dfc94",
+    "firstTaskDerivation": [
+      {
+        "path": "prior-evidence/evidence/context.json",
+        "field": "request.previousCharges.oldExecution",
+        "charge": {
+          "attemptedRequests": 2,
+          "totalRequestBytes": 48000,
+          "reservedRunTokens": 16000,
+          "elapsedMs": 120000
+        },
+        "fileSha256": "9f1c11011ce0ee867c9c4ebee0b1d638fa545ee32288bca971df4c8c8305bd34"
+      },
+      {
+        "path": "prior-evidence/evidence/context.json",
+        "field": "request.previousCharges.regeneration",
+        "charge": {
+          "attemptedRequests": 2,
+          "totalRequestBytes": 13304,
+          "reservedRunTokens": 6061,
+          "elapsedMs": 63809
+        },
+        "fileSha256": "9f1c11011ce0ee867c9c4ebee0b1d638fa545ee32288bca971df4c8c8305bd34"
+      },
+      {
+        "path": "prior-evidence/evidence/context.json",
+        "field": "request.previousCharges.priorContinuation",
+        "charge": {
+          "attemptedRequests": 2,
+          "totalRequestBytes": 16463,
+          "reservedRunTokens": 6437,
+          "elapsedMs": 65646
+        },
+        "fileSha256": "9f1c11011ce0ee867c9c4ebee0b1d638fa545ee32288bca971df4c8c8305bd34"
+      },
+      {
+        "path": "prior-evidence/evidence/context.json",
+        "field": "request.previousCharges.completedTask",
+        "charge": {
+          "attemptedRequests": 1,
+          "totalRequestBytes": 8262,
+          "reservedRunTokens": 4210,
+          "elapsedMs": 16575
+        },
+        "fileSha256": "9f1c11011ce0ee867c9c4ebee0b1d638fa545ee32288bca971df4c8c8305bd34"
+      }
+    ],
+    "proposal": {
+      "version": 1,
+      "kind": "authorize-project-model-budget",
+      "grant": {
+        "version": 1,
+        "projectId": "calculator-pilot-step7-v1",
+        "repository": "erman-ksv/Onay-Factory-Calculator",
+        "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+        "grantId": "proposed-project-budget-step9-readonly-review",
+        "maxRequests": 62,
+        "maxRequestBytes": 24000,
+        "maxTotalRequestBytes": 625908,
+        "maxReservedTokens": 248413,
+        "historical": {
+          "requests": 59,
+          "requestBytes": 553908,
+          "reservedTokens": 230413
+        },
+        "historicalEvidenceSha256": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+        "provider": "groq",
+        "freeTierConfirmed": true,
+        "legalEnabled": false
+      },
+      "expiresAt": "2026-11-01T00:00:00.000Z"
+    },
+    "proposalDigest": "f7f5ff25271fc67f7620241be65c909ffeb5158c941b6d2c5311ed4ba82c1eec",
+    "proposedAdditional": {
+      "requests": 3,
+      "requestBytes": 72000,
+      "reservedTokens": 18000,
+      "purpose": "read-only project-budget integration review; no app writes"
+    },
+    "ownerDecision": null,
+    "actualLedgerInitialized": false,
+    "modelCalls": 0,
+    "repositoryWrites": 0,
+    "legalEnabled": false,
+    "notes": [
+      "Conservative historical reservation accounting, including charged failed/unknown attempts; not a provider invoice.",
+      "Raw snapshot rows and packet-budget simulations were not blindly added.",
+      "Owner approval is still required. This document does not authorize calls or initialize a funded ledger."
+    ]
+  },
+  "currentProposal": {
+    "version": 1,
+    "kind": "authorize-project-model-budget",
+    "grant": {
+      "version": 1,
+      "projectId": "calculator-pilot-step7-v1",
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+      "grantId": "proposed-project-budget-step9-readonly-review",
+      "maxRequests": 62,
+      "maxRequestBytes": 24000,
+      "maxTotalRequestBytes": 625908,
+      "maxReservedTokens": 248413,
+      "historical": {
+        "requests": 59,
+        "requestBytes": 553908,
+        "reservedTokens": 230413
+      },
+      "historicalEvidenceSha256": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+      "provider": "groq",
+      "freeTierConfirmed": true,
+      "legalEnabled": false
+    },
+    "expiresAt": "2026-11-01T00:00:00.000Z",
+    "mode": "read-only-review"
+  },
+  "currentProposalDigest": "afaf23c899abbd5349787e912e6249092a5e6690d66abc1f3eb5d1adbc8318b6",
+  "ownerDecision": null,
+  "actualLedgerInitialized": false,
+  "modelCalls": 0
+}
