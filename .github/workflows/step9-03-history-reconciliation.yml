@@ -1,0 +1,101 @@
+name: Reconcile full project history and prepare inactive owner proposal
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/step9-03-history-reconciliation.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: request
+          sparse-checkout: .factory/step9-03-history-reconciliation.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'c3179b1ad9d865aeb422f3a817f30a8159cd5375'
+          path: runtime
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12600571956'
+          run-id: '40196980267'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/inventory
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12437994649'
+          run-id: '39808880793'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t02-audit
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580304973'
+          run-id: '40148177866'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-completion
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: runtime
+      - name: Reconcile authenticated scope totals without activating any budget
+        working-directory: runtime
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          INVENTORY_DIRECTORY: ${{ runner.temp }}/inventory
+          T02_AUDIT_DIRECTORY: ${{ runner.temp }}/t02-audit
+          T04_DIRECTORY: ${{ runner.temp }}/t04-completion
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          RECONCILIATION_SCRIPT: |
+            import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';
+            import {createCalculatorPlan} from './orchestration/calculatorPlan.ts';
+            import {CALCULATOR_T02_CHARGE_PIN as PIN,inspectCalculatorT02ConservativeCharge} from './orchestration/calculatorT02ChargeReconciliation.ts';
+            import {reconcileProjectBudgetHistory,projectBudgetApprovalDigest} from './orchestration/projectBudgetAuthorization.ts';
+            const env=process.env,repo='erman-ksv/Onay-Agents-Factory',runtime='c3179b1ad9d865aeb422f3a817f30a8159cd5375',sourceCi=40199059698,hash=b=>createHash('sha256').update(b).digest('hex');
+            async function get(path){const r=await fetch('https://api.github.com/repos/'+repo+path,{method:'GET',redirect:'error',headers:{Authorization:'Bearer '+env.FACTORY_READ_TOKEN,Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);const b=await r.text();assert.ok(Buffer.byteLength(b)<1048576);return JSON.parse(b);}
+            const short=c=>({requests:c.attemptedRequests,requestBytes:c.totalRequestBytes,reservedTokens:c.reservedRunTokens});
+            try{
+             assert.equal(env.GITHUB_REPOSITORY,repo);assert.equal(env.GITHUB_REF,'refs/heads/feat/calculator-t02-charge-reconcile-20261022');assert.equal(env.GITHUB_EVENT_NAME,'push');assert.equal(env.GITHUB_RUN_ATTEMPT,'1');assert.equal(env.AGENT_FACTORY_LEGAL_ENABLED,'false');for(const k of ['GROQ_API_KEY','GEMINI_API_KEY','CLOUDFLARE_API_KEY'])assert.equal(env[k],undefined);
+             assert.deepEqual(JSON.parse(readFileSync('../request/.factory/step9-03-history-reconciliation.json')),{version:1,runtimeSha:runtime,sourceCiRunId:sourceCi,mode:'readonly-reconciliation-and-proposal',modelCalls:0});
+             const ci=await get('/actions/runs/'+sourceCi);assert.equal(ci.head_sha,runtime);assert.equal(ci.path,'.github/workflows/ci.yml');assert.equal(ci.run_attempt,1);assert.equal(ci.conclusion,'success');
+             for(const p of [{id:12600571956,run:40196980267,head:'eb026b2c1f08449f0e5f71dd6cd00d4ce62491d7',digest:'165077dd3d21a677b8c8e9ce7c85828fa1b8fece1bdb25f71a0e350ff682ce82'},{id:12437994649,run:39808880793,head:'7dd8648e10451b420b1b0a65bbfbb2341c93cf50',digest:'8622ac2b30d98572446450f6bd27f4cd2d9d1a03854f411bb5876759e33cb2ad'},{id:12580304973,run:40148177866,head:'f5396364711f7fda678ee085838273b4bbf4234c',digest:'adfd35c4c323d2adb907837ae409c79065e1a167d7228159c30c406d8e24d1e0'}]){const a=await get('/actions/artifacts/'+p.id);assert.equal(a.workflow_run.id,p.run);assert.equal(a.workflow_run.head_sha,p.head);assert.equal(a.digest,'sha256:'+p.digest);assert.equal(a.expired,false);}
+             const fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal);assert.equal(plan.fingerprint,'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2');
+             const identity={projectId:plan.owner.id,repository:plan.owner.repository,planFingerprint:plan.fingerprint,ownerFingerprint:plan.owner.ownerFingerprint,taskIds:plan.tasks.map(t=>t.id)},invBytes=readFileSync(join(env.INVENTORY_DIRECTORY,'history-inventory.json')),inv=JSON.parse(invBytes);assert.equal(inv.status,'authenticated-historical-charge-inventory');assert.equal(inv.manifestSha256,'68f3854c9df47e48219e206df977dc0f68d2cfe4cdcfeaaa0b5380fc013ce71c');assert.equal(inv.sourceArchiveFiles,255);assert.equal(inv.rows.length,347);
+             const planning=[...new Map(inv.rows.filter(r=>r.path.endsWith('/prior-state/planning-accounting.json')&&r.field==='aggregatePlanningCharge').map(r=>[r.fileSha256+JSON.stringify(r.charge),r])).values()];assert.equal(planning.length,1);assert.deepEqual(short(planning[0].charge),{requests:3,requestBytes:54267,reservedTokens:13855});
+             const firstFields=['oldExecution','regeneration','priorContinuation','completedTask'].map(k=>'request.previousCharges.'+k),first=firstFields.map(field=>{const r=inv.rows.filter(r=>r.path==='prior-evidence/evidence/context.json'&&r.field===field);assert.equal(r.length,1);return r[0];}),t01=first.reduce((a,r)=>{const c=short(r.charge);for(const k of Object.keys(a))a[k]+=c[k];return a;},{requests:0,requestBytes:0,reservedTokens:0});assert.deepEqual(t01,{requests:7,requestBytes:86029,reservedTokens:32708});assert.ok(first.every(x=>x.fileSha256===first[0].fileSha256));
+             const auditBytes=readFileSync(join(env.T02_AUDIT_DIRECTORY,'publication-reconcile-report.json')),audit=JSON.parse(auditBytes),t02=inspectCalculatorT02ConservativeCharge({manifestSha256:PIN.manifestSha256,candidateSha:PIN.candidateSha,sourceRunId:PIN.sourceRunId,artifactId:PIN.artifactId,phases:audit.charges.phaseCosts.map(({runId,settled,checkpointHighWater})=>({runId,settled,checkpointHighWater})),recordedAggregate:audit.charges.recordedAggregate,finalNewCharge:audit.charges.settledNew});
+             async function proofFile(path){const f=await get('/contents/'+path+'?ref=a998d54c861f3b8d5a8209c00532cb3c3e227b09');assert.equal(f.encoding,'base64');const b=Buffer.from(f.content,'base64');assert.equal(createHash('sha1').update(Buffer.concat([Buffer.from('blob '+b.length+'\0'),b])).digest('hex'),f.sha);return {data:JSON.parse(b),sha256:hash(b)};}
+             const third=await proofFile('.factory/calculator-t03-verified-20261024.json');assert.deepEqual(short(third.data.charge),{requests:18,requestBytes:142611,reservedTokens:74531});
+             const t04Bytes=readFileSync(join(env.T04_DIRECTORY,'t04-verified-completion.json'));assert.equal(hash(t04Bytes),'0ab6290de47b811894f9b010380ba849b8cafd69107ba9046bb0bee74aaa2d70');const fourth=JSON.parse(t04Bytes);assert.deepEqual(short(fourth.charge),{requests:8,requestBytes:58775,reservedTokens:24994});
+             const fifth=await proofFile('.factory/t05-reviewer-supplement-proof-20261025.json');assert.deepEqual(short(fifth.data.budget.final),{requests:11,requestBytes:102088,reservedTokens:43761});
+             const values=[{scopeId:'planning',charge:short(planning[0].charge),evidenceSha256:planning[0].fileSha256},{scopeId:plan.tasks[0].id,charge:t01,evidenceSha256:first[0].fileSha256},{scopeId:plan.tasks[1].id,charge:short(t02.priorCharge),evidenceSha256:hash(auditBytes)},{scopeId:plan.tasks[2].id,charge:short(third.data.charge),evidenceSha256:third.sha256},{scopeId:plan.tasks[3].id,charge:short(fourth.charge),evidenceSha256:hash(t04Bytes)},{scopeId:plan.tasks[4].id,charge:short(fifth.data.budget.final),evidenceSha256:fifth.sha256}];
+             const history={version:1,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,observations:values.map(v=>({...v,kind:'cumulative-scope-total'}))},h=reconcileProjectBudgetHistory(history,identity);assert.deepEqual(h.charge,{requests:59,requestBytes:553908,reservedTokens:230413});
+             const proposal={version:1,kind:'authorize-project-model-budget',grant:{version:1,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,grantId:'proposed-project-budget-step9-readonly-review',maxRequests:62,maxRequestBytes:24000,maxTotalRequestBytes:625908,maxReservedTokens:248413,historical:h.charge,historicalEvidenceSha256:h.digest,provider:'groq',freeTierConfirmed:true,legalEnabled:false},expiresAt:'2026-11-01T00:00:00.000Z'};
+             const proof={version:1,status:'history-reconciled-proposal-not-approved',runtimeSha:runtime,sourceCiRunId:sourceCi,identity,history,historyDigest:h.digest,historicalCharge:h.charge,inventorySha256:hash(invBytes),firstTaskDerivation:first.map(r=>({path:r.path,field:r.field,charge:r.charge,fileSha256:r.fileSha256})),proposal,proposalDigest:projectBudgetApprovalDigest(proposal),proposedAdditional:{requests:3,requestBytes:72000,reservedTokens:18000,purpose:'read-only project-budget integration review; no app writes'},ownerDecision:null,actualLedgerInitialized:false,modelCalls:0,repositoryWrites:0,legalEnabled:false,notes:['Conservative historical reservation accounting, including charged failed/unknown attempts; not a provider invoice.','Raw snapshot rows and packet-budget simulations were not blindly added.','Owner approval is still required. This document does not authorize calls or initialize a funded ledger.']};
+             for(const [name,value]of [['project-history.json',history],['proposed-owner-approval.json',proposal],['history-reconciliation-proof.json',proof]])writeFileSync(join(env.RUNNER_TEMP,name),JSON.stringify(value,null,2)+'\n');console.log(JSON.stringify(proof));
+            }catch{console.log(JSON.stringify({status:'blocked',reason:'history-reconciliation-unverified',modelCalls:0,repositoryWrites:0}));process.exitCode=10;}
+        run: |
+          node --input-type=module -e 'import {writeFileSync} from "node:fs";writeFileSync(".history-reconciliation.mjs",process.env.RECONCILIATION_SCRIPT)'
+          pnpm exec tsx .history-reconciliation.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-history-reconciliation-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/project-history.json
+            ${{ runner.temp }}/proposed-owner-approval.json
+            ${{ runner.temp }}/history-reconciliation-proof.json
+          if-no-files-found: error
+          retention-days: 14
