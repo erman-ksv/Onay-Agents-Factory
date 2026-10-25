@@ -776,13 +776,13 @@ import {authorizeProjectBudget,reconcileProjectBudgetHistory,projectBudgetApprov
 import {createProjectModelBudgetFileStore} from './projectModelBudgetFileStore.js';
 import {createProjectBudgetedCalculatorTeam} from './projectBudgetedCalculatorTeam.js';
 async function authorizedProjectFixture(allowance=10,mode='development'){
- const x=groqCheckpointFixture(),dir=mkdtempSync(join(tmpdir(),'project-team-'));let wall=Date.parse('2026-10-25T12:00:00Z');
+ const x=groqCheckpointFixture(),dir=mkdtempSync(join(tmpdir(),'project-team-'));let wall=Date.parse('2026-10-25T12:00:00Z');let ownerReadHook:(()=>Promise<void>)|undefined;
  const identity={projectId:x.groqPlan.owner.id,repository:x.groqPlan.owner.repository,planFingerprint:x.groqPlan.fingerprint,ownerFingerprint:x.groqPlan.owner.ownerFingerprint,taskIds:x.groqPlan.tasks.map(t=>t.id)};
  const history={version:1 as const,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,observations:['planning',...identity.taskIds].map(scopeId=>({scopeId,kind:'cumulative-scope-total' as const,charge:{requests:1,requestBytes:100,reservedTokens:500},evidenceSha256:'c'.repeat(64)}))},h=reconcileProjectBudgetHistory(history,identity);
  const document={version:1,kind:'authorize-project-model-budget',mode,grant:{version:1,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,grantId:'offline-project-role-grant',maxRequests:h.charge.requests+allowance,maxRequestBytes:24000,maxTotalRequestBytes:200000,maxReservedTokens:96000,historical:h.charge,historicalEvidenceSha256:h.digest,provider:'groq',freeTierConfirmed:true,legalEnabled:false},expiresAt:new Date(wall+86400000).toISOString()};
  const comment:any={id:1,user:{login:'erman-ksv',type:'User'},author_association:'OWNER',issue_url:'https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/75',html_url:'https://github.com/erman-ksv/Onay-Agents-Factory/pull/75#issuecomment-1',created_at:'2026-10-25T11:00:00Z',updated_at:'2026-10-25T11:00:00Z',body:JSON.stringify(document)};
- const controller=await authorizeProjectBudget({identity,history,decision:{issueNumber:75,commentId:1,bodySha256:projectBudgetApprovalDigest(document)},token:'offline-owner-read-token',store:createProjectModelBudgetFileStore(dir),transport:async()=>Response.json(comment),now:()=>wall});await controller.initialize();let clock=0;
- return {...x,controller,comment,setWall:(v:number)=>{wall=v;},historical:h.charge,timing:{now:()=>clock,wait:async(ms:number)=>{clock+=ms;}},scope:(taskId=x.groqPlan.tasks[0]!.id,execution='run-one')=>controller.taskScope(taskId,execution),cleanup:()=>rmSync(dir,{recursive:true,force:true})};
+ const controller=await authorizeProjectBudget({identity,history,decision:{issueNumber:75,commentId:1,bodySha256:projectBudgetApprovalDigest(document)},token:'offline-owner-read-token',store:createProjectModelBudgetFileStore(dir),transport:async()=>{await ownerReadHook?.();return Response.json(comment);},now:()=>wall});await controller.initialize();let clock=0;
+ return {...x,controller,comment,setOwnerReadHook:(hook:()=>Promise<void>)=>{ownerReadHook=hook;},setWall:(v:number)=>{wall=v;},historical:h.charge,timing:{now:()=>clock,wait:async(ms:number)=>{clock+=ms;}},scope:(taskId=x.groqPlan.tasks[0]!.id,execution='run-one')=>controller.taskScope(taskId,execution),cleanup:()=>rmSync(dir,{recursive:true,force:true})};
 }
 test('project mode requires a verified one-use capability and cannot opt out through configuration',async()=>{const f=await authorizedProjectFixture();try{
  let sends=0;const transport:typeof fetch=async()=>{sends++;return response({});};const scope=await f.scope();
@@ -840,7 +840,7 @@ test('fresh runtime after restart cannot bypass exhausted project requests',asyn
 test('runtime stops all task clients on Groq 429 without retrying or refunding',async()=>{const f=await authorizedProjectFixture();try{
  let sends=0;const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'offline-rate-limit'},{timing:f.timing,transport:async()=>{sends++;return new Response('PRIVATE_UPSTREAM',{status:429});}});
  await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,await runtimeUiSnapshot(f)),refusal);
- assert.equal(sends,1);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+1);assert.ok(!JSON.stringify(team.diagnostic()).includes('PRIVATE_UPSTREAM'));
+ assert.equal(sends,1);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+1);assert.ok(!JSON.stringify(team.diagnostic()).includes('PRIVATE_UPSTREAM'));assert.ok(team.diagnostic().scopedFailures.some(t=>t.httpStatus===429||t.providerHttpStatus===429||t.taskBudgetCode==='rate_limited'));
  }finally{f.cleanup();}});
 test('runtime checkpoints retain all role charges and failure stops the next task',async()=>{const f=await authorizedProjectFixture();try{
  let sends=0;const aggregate:number[]=[];const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'offline-persistence'},{timing:f.timing,checkpoints:{beforeRequest:c=>{aggregate.push(c.attemptedRequests);if(c.attemptedRequests===2)throw Error('private persistence failure');}},transport:async()=>{sends++;return response(generated);}});
@@ -860,4 +860,31 @@ test('dependency Security Reviewer Tester and successor Frontend retain one runt
  const observed=team.observeCommitted(f.groqPlan,task.id,await snapshot(),current);for(const role of ['security','reviewer','tester'] as const)assert.equal((await team.assess(role,f.groqPlan,task.id,observed)).ready,true);
  const next=f.groqPlan.tasks[1]!,changes=await team.generate(f.groqPlan,next.id,await runtimeUiSnapshot(f));assert.equal(sends,4);assert.deepEqual(aggregate,[1,2,3,4]);
  await assert.rejects(()=>team.assess('security',f.groqPlan,next.id,changes),refusal);assert.equal(sends,4);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+5);
+ }finally{f.cleanup();}});
+
+function runtimeStopGate(){let release!:()=>void,enter!:()=>void;const blocked=new Promise<void>(r=>{release=r;}),ready=new Promise<void>(r=>{enter=r;});return {blocked,ready,release,enter};}
+test('runtime stop while owner verification is pending prevents the waiting provider request',{timeout:3000},async()=>{const f=await authorizedProjectFixture(),gate=runtimeStopGate();let pending:Promise<unknown>|undefined;try{
+ let sends=0,reads=0;const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'stop-before-provider'},{timing:f.timing,transport:async()=>{sends++;return response(generated);}});
+ const ui=await runtimeUiSnapshot(f),core=await snapshot();f.setOwnerReadHook(async()=>{if(++reads===2){gate.enter();await gate.blocked;}});
+ pending=team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,core);await gate.ready;
+ await assert.rejects(()=>team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,ui),refusal);gate.release();await assert.rejects(()=>pending!,refusal);
+ assert.equal(sends,0);assert.equal(team.diagnostic().providerCallsSent,0);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+1);
+ }finally{gate.release();await pending?.catch(()=>undefined);f.cleanup();}});
+test('runtime late provider result cannot complete a task after a concurrent operation stopped the run',{timeout:3000},async()=>{const f=await authorizedProjectFixture(),gate=runtimeStopGate();let pending:Promise<unknown>|undefined;try{
+ let sends=0;const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'stop-after-provider'},{timing:f.timing,transport:async()=>{sends++;gate.enter();await gate.blocked;return response(generated);}});
+ const ui=await runtimeUiSnapshot(f);pending=team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot());await gate.ready;
+ await assert.rejects(()=>team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,ui),refusal);gate.release();await assert.rejects(()=>pending!,refusal);
+ assert.equal(sends,1);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+1);assert.equal(team.snapshot().stopped,true);
+ }finally{gate.release();await pending?.catch(()=>undefined);f.cleanup();}});
+test('runtime synchronous proposal validation failure stops other task clients before HTTP',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'stop-sync-validation'},{timing:f.timing,transport:async()=>{sends++;return response(runtimeUiChanges(f));}});
+ const core=await snapshot();assert.throws(()=>team.restoreProposal(f.groqPlan,f.groqPlan.tasks[0]!.id,core,{},'a'.repeat(64)),refusal);
+ await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,await runtimeUiSnapshot(f)),refusal);assert.equal(sends,0);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests);
+ }finally{f.cleanup();}});
+
+
+test('runtime rejected planning cannot leave task clients open for further HTTP',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'stop-invalid-planning'},{timing:f.timing,transport:async()=>{sends++;return response(generated);}});
+ await assert.rejects(()=>team.plan(),refusal);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);
+ assert.equal(sends,0);assert.equal(team.diagnostic().providerCallsSent,0);assert.equal(team.snapshot().stopped,true);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests);
  }finally{f.cleanup();}});

@@ -36,8 +36,19 @@ export async function createCalculatorProjectRuntimeTeam(ownerRequest:unknown,pl
  await host.controller.assertAuthorized();await host.controller.inspect();
  const teams=new Map<string,Team>(),timing=options.timing??{},now=timing.now??(()=>performance.now());
  const limits=options.preset?calculatorHostModelBudget(options.preset):DEFAULT_TASK_MODEL_BUDGET;
- let stopped=false,busy=false;
- const wire=createTaskModelBudgetFetch({...limits,...(options.preset?{hostPreset:options.preset}:{}),now},options.transport??fetch);
+ let stopped=false,busy=false,providerCallsSent=0;
+ let stopReason:'concurrent_operation'|'operation_failed'|'validation_failed'|'transport_stopped'|undefined;
+ function stop(reason:NonNullable<typeof stopReason>){stopped=true;stopReason??=reason;}
+ function active(){if(stopped||[...teams.values()].some(t=>t.snapshot().stopped)){stop('operation_failed');return refuse();}}
+ const upstream=options.transport??fetch;
+ const guardedUpstream:typeof fetch=async(input,init)=>{
+  active();if(init?.signal?.aborted){stop('transport_stopped');return refuse();}
+  providerCallsSent++;
+  const result=await upstream(input,init);
+  if(stopped||init?.signal?.aborted){void result.body?.cancel().catch(()=>undefined);stop('transport_stopped');return refuse();}
+  return result;
+ };
+ const wire=createTaskModelBudgetFetch({...limits,...(options.preset?{hostPreset:options.preset}:{}),now},guardedUpstream);
  const context=createProviderContextBudget({now,reservedOutputTokens:limits.maxOutputTokens,
  ...(options.preset==='calculator-keyboard-eight-roles'?{maxRunTokens:32000}:{}),
  ...(options.preset==='calculator-successor-eight-roles'?{maxRunTokens:48000}:{}),
@@ -46,8 +57,8 @@ export async function createCalculatorProjectRuntimeTeam(ownerRequest:unknown,pl
  const bounded=createGroqBudgetedFetch(context,wire.fetch);
  const transport:typeof fetch=async(input,init)=>{
   if(stopped||typeof init?.body!=='string')return refuse();
-  try{await pace(init.body);await host.controller.assertAuthorized();return await bounded(input,init);}
-  catch{stopped=true;return refuse();}
+  try{await pace(init.body);active();await host.controller.assertAuthorized();active();return await bounded(input,init);}
+  catch{stop('transport_stopped');return refuse();}
  };
  function checkpointCharge():CalculatorPriorModelCharge{
   const sum={attemptedRequests:0,totalRequestBytes:0,reservedRunTokens:0,elapsedMs:0};
@@ -70,21 +81,30 @@ export async function createCalculatorProjectRuntimeTeam(ownerRequest:unknown,pl
   if(stopped||actual.fingerprint!==plan.fingerprint||actual.owner.ownerFingerprint!==owner.ownerFingerprint)return refuse();
   const team=teams.get(id);if(!team)return refuse();return team;
  }
+ function enter(){active();if(busy){stop('concurrent_operation');return refuse();}busy=true;}
  async function call<T>(operation:()=>Promise<T>):Promise<T>{
-  if(stopped||busy){stopped=true;return refuse();}busy=true;
-  try{return await operation();}catch{stopped=true;return refuse();}finally{busy=false;}
+  enter();try{const result=await operation();active();return result;}catch{stop('operation_failed');return refuse();}finally{busy=false;}
+ }
+ function callSync<T>(operation:()=>T):T{
+  enter();try{const result=operation();active();return result;}catch{stop('validation_failed');return refuse();}finally{busy=false;}
  }
  return Object.freeze({
-  plan:async():Promise<CalculatorPlan>=>refuse(),
+  plan:()=>call(async():Promise<CalculatorPlan>=>refuse()),
   generate:(...a:Parameters<Team['generate']>)=>call(()=>taskTeam(a[0],a[1]).generate(...a)),
   repair:(...a:Parameters<Team['repair']>)=>call(()=>taskTeam(a[0],a[1]).repair(...a)),
   assess:(...a:Parameters<Team['assess']>)=>call(()=>taskTeam(a[1],a[2]).assess(...a)),
-  prepareRepairFeedback:(...a:Parameters<Team['prepareRepairFeedback']>)=>taskTeam(a[0],a[1]).prepareRepairFeedback(...a),
-  restoreProposal:(...a:Parameters<Team['restoreProposal']>)=>taskTeam(a[0],a[1]).restoreProposal(...a),
-  restoredAssessmentPrefix:(...a:Parameters<Team['restoredAssessmentPrefix']>)=>taskTeam(a[0],a[1]).restoredAssessmentPrefix(...a),
-  observeCommitted:(...a:Parameters<Team['observeCommitted']>)=>taskTeam(a[0],a[1]).observeCommitted(...a),
+  prepareRepairFeedback:(...a:Parameters<Team['prepareRepairFeedback']>)=>callSync(()=>taskTeam(a[0],a[1]).prepareRepairFeedback(...a)),
+  restoreProposal:(...a:Parameters<Team['restoreProposal']>)=>callSync(()=>taskTeam(a[0],a[1]).restoreProposal(...a)),
+  restoredAssessmentPrefix:(...a:Parameters<Team['restoredAssessmentPrefix']>)=>callSync(()=>taskTeam(a[0],a[1]).restoredAssessmentPrefix(...a)),
+  observeCommitted:(...a:Parameters<Team['observeCommitted']>)=>callSync(()=>taskTeam(a[0],a[1]).observeCommitted(...a)),
   checkpointCharge,
   snapshot:()=>({stopped:stopped||[...teams.values()].some(t=>t.snapshot().stopped),projectBudgetRequired:true as const,aggregateCharge:checkpointCharge()}),
-  diagnostic:()=>Object.freeze({reasonCode:'project_runtime_stopped',...checkpointCharge(),providerCallsSent:wire.snapshot().attemptedRequests}),
+  diagnostic:()=>Object.freeze({reasonCode:stopReason??(stopped?'project_runtime_stopped':'project_runtime_ready'),...checkpointCharge(),
+   providerCallsSent,providerAttemptsReserved:wire.snapshot().attemptedRequests,
+   scopedFailures:Object.freeze([...teams].filter(([,team])=>team.snapshot().stopped).map(([taskId,team])=>{
+    const d=team.diagnostic();return Object.freeze({taskId,reasonCode:d.reasonCode,
+     ...(d.httpStatus!==undefined?{httpStatus:d.httpStatus}:{}),...(d.providerHttpStatus!==undefined?{providerHttpStatus:d.providerHttpStatus}:{}),
+     ...(d.taskBudgetCode?{taskBudgetCode:d.taskBudgetCode}:{}),...(d.contextBudgetCode?{contextBudgetCode:d.contextBudgetCode}:{})});})),
+  }),
  });
 }
