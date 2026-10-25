@@ -16,13 +16,19 @@ export function prepareCalculatorSavedPatchMetadata(task:CalculatorPlanTask,raw:
  const c=raw.changes[0];if(!plain(c)||!exact(c,['operation','path','sourceSha256','edits'])||c.operation!=='patch'||c.path!=='test/ui.test.mjs')return refuse();
  const patchSha256=hash(c),copy=JSON.parse(JSON.stringify(c));
  const changes=prepareCalculatorRoleChanges('frontend',{summary:raw.summary,changes:[{...copy,message:'Host description only: saved agent-authored T05 integration patch'}]},snapshot);
- const original=calculatorSources(snapshot).get('test/ui.test.mjs');
- const updated=changes.files.find(file=>file.path==='test/ui.test.mjs')?.content;
- if(original===undefined||updated===undefined)return refuse();
- const parser=createRequire(import.meta.resolve('tsx'))('esbuild');
- const executable=(source:string):string=>parser.transformSync(source,{loader:'js',target:'esnext',legalComments:'none',minifyWhitespace:true,minifySyntax:false,minifyIdentifiers:false}).code;
- if(executable(original)===executable(updated))throw Error('Saved integration patch changes comments or formatting only; no executable tests were added');
+ assertCalculatorExecutableTestChange(task,snapshot,changes);
  const {message:_,...unchanged}=copy;
  if(hash(unchanged)!==patchSha256)return refuse();
  return Object.freeze({changes,sourceRawSha256:expectedRawSha256,patchSha256,messageOrigin:'host-only-description' as const,modelCodeChanged:false as const});
+}
+
+/** Static pre-review guard; this executes no application code and grants no writes. */
+export function assertCalculatorExecutableTestChange(task:CalculatorPlanTask,snapshot:CalculatorSnapshot,changes:import('../commander/calculatorChanges.js').PreparedCalculatorChanges){
+ if(!isCalculatorIntegrationTask(task))throw Error('Integration scope refused');
+ const original=calculatorSources(snapshot).get('test/ui.test.mjs');
+ const updated=changes.files.find(file=>file.path==='test/ui.test.mjs')?.content;
+ if(original===undefined||updated===undefined)throw Error('Test source unavailable');
+ const parser=createRequire(import.meta.resolve('tsx'))('esbuild');
+ const executable=(source:string):string=>parser.transformSync(source,{loader:'js',target:'esnext',legalComments:'none',minifyWhitespace:true,minifySyntax:false,minifyIdentifiers:false}).code;
+ if(executable(original)===executable(updated))throw Error('Saved integration patch changes comments or formatting only; no executable tests were added');
 }

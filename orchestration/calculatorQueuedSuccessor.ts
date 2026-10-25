@@ -67,3 +67,21 @@ export async function admitCalculatorQueuedEvidenceReview(workspace:CalculatorWo
  const permit=Object.freeze({kind:'verified-ci-queued-successor' as const}),fingerprint=hash(JSON.stringify({plan:plan.fingerprint,task:task.id,source:hash(source.capsule),phase:'frozen-code-fresh-dom-evidence'}));
  permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
 }
+
+/** One new owner-approved repair of the exact saved negative T05 review.
+ * Historical claims/receipts are preserved; the 5 charged calls never reset. */
+export async function admitCalculatorQueuedT05SecondRepair(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{grant:Readonly<{id:string;maxRequests:9;maxReservedTokens:48000;totalCodeCorrections:2;freeTierConfirmed:true}>;verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const g=host?.grant;if(!g||g.id!=='owner-t05-nine-free-calls-48000-second-correction-20261025'||g.maxRequests!==9||g.maxReservedTokens!==48000||g.totalCodeCorrections!==2||g.freeTierConfirmed!==true)return refuse();
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[4];
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t05'||record.previousTaskId!==plan.tasks[3]?.id||record.planFingerprint!==plan.fingerprint||record.modelRequestsAuthorized!==0||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'d85c290bd5465f7c84e112731965059ee26b642bb72484b7d3c79df3c3a7a7d2').data,p=data.payload;
+ if(p.stage!=='execution_complete'||p.status!=='blocked'||p.httpInFlight||p.publicationStarted||!p.proposal||data.proposalDigest!=='fb9b7af7b84571663c5181465473538025c7a0c6688619e9b654f5537f6d9cb7'||p.modelState.attemptedRequests!==5||p.modelState.totalRequestBytes!==42174||p.modelState.reservedRunTokens!==18674||p.assessments.length!==3||p.assessments.some((a,i)=>a.role!==['security','reviewer','tester'][i])||p.assessments[1]?.ready!==false||p.assessments[2]?.ready!==false)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})}),prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,4).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'d85c290bd5465f7c84e112731965059ee26b642bb72484b7d3c79df3c3a7a7d2',grant:g.id,phase:'second-code-correction'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
