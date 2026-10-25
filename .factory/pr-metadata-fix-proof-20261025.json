@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "date": "2026-10-25",
+  "status": "bounded-pr-metadata-confirmation-implemented-and-verified",
+  "scope": "Factory PR-confirmation handling; no new Calculator publication",
+  "runtimeSha": "06f1976af238774dd6de9de1cd174586f0f4668f",
+  "sourceCi": {
+    "runId": 40190227663,
+    "typecheck": "passed",
+    "tests": {
+      "total": 2207,
+      "passed": 2207,
+      "failed": 0
+    }
+  },
+  "audit": {
+    "runId": 40190410104,
+    "jobId": 121160014666,
+    "artifact": [
+      {
+        "id": 12596909183,
+        "name": "calculator-pr-confirmation-audit-40190410104",
+        "digest": "sha256:c21b95d3cf7f4b0bc5f8c0bcc51ab5cd0cbfec06683785076adf387aa98366a7"
+      }
+    ],
+    "result": {
+      "version": 1,
+      "status": "existing-draft-pr-confirmed-readonly",
+      "runtimeSha": "06f1976af238774dd6de9de1cd174586f0f4668f",
+      "sourceCiRunId": 40190227663,
+      "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+      "publication": {
+        "branch": "feat/calculator-agent/calculator-pilot-step7-v1",
+        "headSha": "558993981c9bbb7c6100c8335860ac5668768314",
+        "number": 1,
+        "url": "https://github.com/erman-ksv/Onay-Factory-Calculator/pull/1"
+      },
+      "sourceSha256": "5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930",
+      "sourceBytes": 5464,
+      "ciRunIds": [
+        40178095158
+      ],
+      "detailReads": 1,
+      "apiReads": 13,
+      "modelCalls": 0,
+      "githubWrites": 0,
+      "legalEnabled": false,
+      "mainUnchanged": true,
+      "freshPushTested": false,
+      "unverified": [
+        "No new post-push live publication was attempted; delayed metadata is exercised by regression tests.",
+        "Permanent future-CI subscription and general unattended project completion remain separate."
+      ]
+    },
+    "apiCounterScope": "apiReads counts explicit host metadata requests; CI adapter requests are not included"
+  },
+  "behavior": {
+    "maxDetailReads": 4,
+    "waitsMs": [
+      250,
+      750,
+      1500
+    ],
+    "onlyRecognizedPreviousHeadMayWait": true,
+    "exactCandidateRequired": true,
+    "authoritativeRefsCheckedBeforeAndAfterEveryRead": true,
+    "httpFailureRetried": false,
+    "writesRetried": false,
+    "modelCalls": 0,
+    "calculatorWrites": 0
+  },
+  "historicalT05": {
+    "budgetRequestsUsed": 11,
+    "budgetRequestsLimit": 11,
+    "reservedTokens": 43761,
+    "reservedTokenLimit": 48000,
+    "oldNeedsReviewReceiptPreserved": true
+  },
+  "originalStep8": {
+    "confirmedInBoundedPilot": 4,
+    "unconfirmedInBoundedPilot": 0,
+    "generalUnattendedOperationConfirmed": false
+  },
+  "limitations": [
+    "Historical T05 diagnostic identified phase pr_detail and HTTP 200 but did not retain the rejected field; the precise stale field in that response is not independently proven.",
+    "Delayed PR head behavior is reproduced by regression and publisher integration tests. The real audit confirms the existing published candidate; no fresh post-push live execution was attempted.",
+    "Persistent future-CI subscription and project-wide budget remain separate work."
+  ]
+}
