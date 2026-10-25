@@ -36,6 +36,7 @@ declare const scopeBrand:unique symbol;
 export type AuthorizedProjectTaskScope=Readonly<{[scopeBrand]:true}>;
 type RecordScope={identity:ProjectBudgetIdentity;taskId:string;executionId:string;ledger:ProjectModelBudget;assertAuthorized:()=>Promise<void>;assertCurrentTime:()=>void;operationMode:'development'|'read-only-review';used:boolean};
 const scopes=new WeakMap<AuthorizedProjectTaskScope,RecordScope>();
+const controllers=new WeakSet<object>();
 /** Host-only, not an SDK tool. JSON cloning and reuse cannot recreate a scope. */
 export function consumeAuthorizedProjectTaskScope(scope:unknown,expected:Readonly<{projectId:string;repository:string;ownerFingerprint:string}>){
  const value=scopes.get(scope as AuthorizedProjectTaskScope);if(!value||value.used||value.identity.projectId!==expected.projectId||value.identity.repository!==expected.repository||value.identity.ownerFingerprint!==expected.ownerFingerprint)return refuse();value.assertCurrentTime();value.used=true;
@@ -62,7 +63,8 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
   }
   const grant=await readApproval(),ledger=openProjectModelBudget(grant,options.store),issued=new Set<string>();
   const assertCurrentTime=()=>{if(revoked||expiresAt===undefined||touchClock()>=expiresAt){revoked=true;return refuse();}};const assertAuthorized=async()=>{if(revoked)return refuse();try{await readApproval();}catch{revoked=true;return refuse();}};
-  return Object.freeze({
+  const controller=Object.freeze({
+   identity,assertAuthorized,
    projectKey:hash(canonical({projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,ownerFingerprint:identity.ownerFingerprint})),
    historyDigest:history.digest,historicalCharge:history.charge,
    async initialize(){await assertAuthorized();await ledger.initialize();},
@@ -71,7 +73,7 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
     if(!['planning',...identity.taskIds].includes(taskId)||!safeId(executionId)||executionId.length>96||issued.has(executionId))return refuse();await assertAuthorized();issued.add(executionId);
     const scope=Object.freeze({}) as AuthorizedProjectTaskScope;scopes.set(scope,{identity,taskId,executionId,ledger,assertAuthorized,assertCurrentTime,operationMode:operationMode!,used:false});return scope;
    },
-  });
+  });controllers.add(controller);return controller;
  }catch{return refuse();}
 }
 
@@ -82,3 +84,6 @@ export async function authorizeGitHubProjectBudget(options:Omit<Parameters<typeo
  const i=options.identity,key=hash(canonical({projectId:i.projectId,repository:i.repository,planFingerprint:i.planFingerprint,ownerFingerprint:i.ownerFingerprint}));
  return authorizeProjectBudget({...options,store:createProjectModelBudgetGitHubStore({projectKey:key,token:options.token,...(options.transport?{transport:options.transport}:{})})});
 }
+
+export type AuthorizedProjectBudgetController=Awaited<ReturnType<typeof authorizeProjectBudget>>;
+export function isAuthorizedProjectBudgetController(value:unknown):value is AuthorizedProjectBudgetController{return !!value&&typeof value==='object'&&controllers.has(value);}

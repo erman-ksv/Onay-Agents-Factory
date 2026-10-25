@@ -1,3 +1,4 @@
+import {createCalculatorProjectRuntimeTeam,prepareCalculatorProjectRuntimeHost,type CalculatorProjectRuntimeHost} from './calculatorProjectRuntimeTeam.js';
 import type { CalculatorHostPreset } from "./taskModelBudget.js";
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync } from "node:fs";
@@ -286,7 +287,12 @@ export async function loadCalculatorRuntimeSources(reader: CalculatorSnapshotRea
  * Production adapters remain isolated from model arguments. */
 export async function runCalculatorRuntime(input: unknown, configInput: unknown, directory: string,
   mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env, hostLimits?: CalculatorRuntimeHostLimits,
-  continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi) {
+  continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi, projectHostInput?:CalculatorProjectRuntimeHost) {
+  let projectHost:CalculatorProjectRuntimeHost|undefined;
+  try{projectHost=prepareCalculatorProjectRuntimeHost(projectHostInput);}catch{return refuse();}
+  const projectMode=env.AGENT_FACTORY_PROJECT_BUDGET_MODE;
+  if(projectMode!==undefined&&projectMode!=='required'||projectHost&&projectMode!=='required'||
+    projectMode==='required'&&(mode==='run'||mode==='plan'||mode==='preflight')&&!projectHost)return refuse();
   const limits = prepareCalculatorRuntimeHostLimits(hostLimits), continuation = prepareCalculatorRuntimeContinuation(continuationInput);
   const afterCi = prepareCalculatorRuntimeAfterCi(afterCiInput);
   const hostPreset = limits && "hostPreset" in limits ? limits.hostPreset : undefined;
@@ -301,6 +307,10 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     taskIds: saved?.tasks.map(task => task.id) ?? [], wholeAppCompleted: false, legalEnabled: false };
   let phase = "runtime_configuration_unverified";
   try {
+    if(projectHost){
+      if(!saved||saved.fingerprint!==projectHost.controller.identity.planFingerprint||saved.owner.ownerFingerprint!==projectHost.controller.identity.ownerFingerprint)return refuse();
+      await projectHost.controller.assertAuthorized();await projectHost.controller.inspect();
+    }
     const config = prepareCalculatorRuntimeConfig(configInput), provider = selectProviderConfig(env);
     if (!["plan", "run", "preflight"].includes(mode) || env.AGENT_FACTORY_TARGET_PROFILE !== "calculator" ||
         env.AGENT_FACTORY_LEGAL_ENABLED !== "false" || env.ONAY_TEAM_FREE_TIER_CONFIRMED !== "true" ||
@@ -411,7 +421,9 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
           status: active.status, httpInFlight: active.httpInFlight };
       }, charge: () => charge(), persistReturned: returnedCharge => save({ ...active, status: "blocked", httpInFlight: false }, returnedCharge),
     });
-    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected }, hostPreset);
+    const team = projectHost
+      ? await createCalculatorProjectRuntimeTeam(input,saved,env,projectHost,{checkpoints:{beforeRequest,afterAssessmentRejected},...(hostPreset?{preset:hostPreset}:{})})
+      : createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected }, hostPreset);
     function charge(): CalculatorPriorModelCharge {
       const result = team.checkpointCharge(); if (!result) return refuse(); return result;
     }

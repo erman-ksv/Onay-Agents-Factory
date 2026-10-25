@@ -816,3 +816,48 @@ test('a task-scoped team cannot plan or execute another task',async()=>{const f=
 test('owner-approved read-only mode cannot plan, generate or repair source',async()=>{const f=await authorizedProjectFixture(3,'read-only-review');try{let sends=0;const team=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(),async()=>{sends++;return response(generated);},f.timing);await assert.rejects(()=>team.plan(),refusal);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);assert.equal(sends,0);}finally{f.cleanup();}});
 
 test('expiry during checkpoint persistence still stops the provider after a valid native approval read',async()=>{const f=await authorizedProjectFixture();try{let sends=0;const team=createProjectBudgetedCalculatorTeam(f.groqOwner,f.env,await f.scope(),async()=>{sends++;return response(generated);},f.timing,{beforeRequest:()=>{f.setWall(Date.parse('2026-10-27T12:00:00Z'));}});await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);assert.equal(sends,0);}finally{f.cleanup();}});
+
+import {createCalculatorProjectRuntimeTeam,prepareCalculatorProjectRuntimeHost} from './calculatorProjectRuntimeTeam.js';
+test('project runtime rejects JSON-cloned controller, accessors and budget opt-out before model HTTP',async()=>{const f=await authorizedProjectFixture();try{
+ assert.throws(()=>prepareCalculatorProjectRuntimeHost({controller:JSON.parse(JSON.stringify(f.controller)),executionId:'offline-runtime'}),refusal);
+ let reads=0;const accessor=Object.defineProperty({executionId:'offline-runtime'},'controller',{enumerable:true,get(){reads++;return f.controller;}});
+ assert.throws(()=>prepareCalculatorProjectRuntimeHost(accessor),refusal);assert.equal(reads,0);
+ for(const mode of ['off','optional',''])await assert.rejects(()=>createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,{...f.env,AGENT_FACTORY_PROJECT_BUDGET_MODE:mode},{controller:f.controller,executionId:'offline-runtime'}),refusal);
+ }finally{f.cleanup();}});
+async function runtimeUiSnapshot(f:Awaited<ReturnType<typeof authorizedProjectFixture>>){const task=f.groqPlan.tasks[1]!;return loadCalculatorSnapshot({repository:CALCULATOR_PROFILE.repository,baseRef:f.groqPlan.branch,baseSha:A,changePaths:task.paths},{getHead:async()=>A,readCommit:async()=>({sha:A,treeSha:B}),readTree:async()=>({sha:B,truncated:false,tree:[]}),readBlob:async()=>{throw Error('No source');}});}
+function runtimeUiChanges(f:Awaited<ReturnType<typeof authorizedProjectFixture>>){return {summary:'Offline frontend routing fixture',changes:f.groqPlan.tasks[1]!.paths.map(path=>({operation:'create',path,content:path.endsWith('.html')?'<!doctype html><title>Fixture</title>':path.endsWith('.css')?'body{color:black}':'export const ready=true;',message:'Offline fixture'}))};}
+test('runtime dependency scope and successor scope share historical budget and cumulative checkpoints',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const checkpoints:number[]=[];const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'offline-router'},{timing:f.timing,checkpoints:{beforeRequest:c=>{checkpoints.push(c.attemptedRequests);}},transport:async()=>{sends++;assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+sends);return response(sends===1?generated:runtimeUiChanges(f));}});
+ await team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot());await team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,await runtimeUiSnapshot(f));
+ assert.equal(sends,2);assert.deepEqual(checkpoints,[1,2]);assert.equal(team.checkpointCharge().attemptedRequests,2);
+ const live=await f.controller.inspect();assert.equal(live.used.reservedTokens,f.historical.reservedTokens+team.checkpointCharge().reservedRunTokens);
+ }finally{f.cleanup();}});
+test('fresh runtime after restart cannot bypass exhausted project requests',async()=>{const f=await authorizedProjectFixture(1);try{
+ let sends=0;const options={timing:f.timing,transport:async()=>{sends++;return response(generated);}};
+ const first=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'runtime-one'},options);await first.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot());
+ const second=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'runtime-two'},options);await assert.rejects(async()=>second.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,await runtimeUiSnapshot(f)),refusal);assert.equal(sends,1);
+ }finally{f.cleanup();}});
+test('runtime stops all task clients on Groq 429 without retrying or refunding',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'offline-rate-limit'},{timing:f.timing,transport:async()=>{sends++;return new Response('PRIVATE_UPSTREAM',{status:429});}});
+ await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,await runtimeUiSnapshot(f)),refusal);
+ assert.equal(sends,1);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+1);assert.ok(!JSON.stringify(team.diagnostic()).includes('PRIVATE_UPSTREAM'));
+ }finally{f.cleanup();}});
+test('runtime checkpoints retain all role charges and failure stops the next task',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const aggregate:number[]=[];const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'offline-persistence'},{timing:f.timing,checkpoints:{beforeRequest:c=>{aggregate.push(c.attemptedRequests);if(c.attemptedRequests===2)throw Error('private persistence failure');}},transport:async()=>{sends++;return response(generated);}});
+ const changes=await team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot());await assert.rejects(()=>team.assess('security',f.groqPlan,f.groqPlan.tasks[0]!.id,changes),refusal);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[1]!.id,await runtimeUiSnapshot(f)),refusal);
+ assert.equal(sends,1);assert.deepEqual(aggregate,[1,2]);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+2);
+ }finally{f.cleanup();}});
+test('zero remaining project allowance permits inspection but no runtime request',async()=>{const f=await authorizedProjectFixture(0);try{
+ let sends=0;const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'offline-no-allowance'},{timing:f.timing,transport:async()=>{sends++;return response(generated);}});
+ assert.equal((await f.controller.inspect()).remaining.requests,0);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);assert.equal(sends,0);
+ }finally{f.cleanup();}});
+
+test('dependency Security Reviewer Tester and successor Frontend retain one runtime request ceiling',async()=>{const f=await authorizedProjectFixture();try{
+ let sends=0;const aggregate:number[]=[];const team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'offline-dependency-roles'},{timing:f.timing,preset:'calculator-frontend-2048-four-roles',checkpoints:{beforeRequest:c=>{aggregate.push(c.attemptedRequests);}},transport:async()=>{sends++;return response(sends<=3?{ready:true,summary:'Offline scoped inspection',findings:[],unverifiedAreas:['No actual app tests executed']}:runtimeUiChanges(f));}});
+ const task=f.groqPlan.tasks[0]!,sources=new Map(task.paths.map(path=>[path,path==='src/calculator.mjs'?'export const add=(a,b)=>a+b;':'import test from "node:test";test("fixture",()=>{});']));
+ const entries=[{path:'src',type:'tree',mode:'040000',sha:B},{path:'test',type:'tree',mode:'040000',sha:B},...[...sources].map(([path,content])=>({path,type:'blob',mode:'100644',sha:createHash('sha1').update('blob '+Buffer.byteLength(content)+'\0'+content).digest('hex')}))];
+ const current=await loadCalculatorSnapshot({repository:CALCULATOR_PROFILE.repository,baseRef:f.groqPlan.branch,baseSha:B,changePaths:task.paths},{getHead:async()=>B,readCommit:async()=>({sha:B,treeSha:A}),readTree:async()=>({sha:A,truncated:false,tree:entries}),readBlob:async sha=>{const e=entries.find(e=>e.type==='blob'&&e.sha===sha)!;return {sha,encoding:'base64',content:Buffer.from(sources.get(e.path)!).toString('base64')};}});
+ const observed=team.observeCommitted(f.groqPlan,task.id,await snapshot(),current);for(const role of ['security','reviewer','tester'] as const)assert.equal((await team.assess(role,f.groqPlan,task.id,observed)).ready,true);
+ const next=f.groqPlan.tasks[1]!,changes=await team.generate(f.groqPlan,next.id,await runtimeUiSnapshot(f));assert.equal(sends,4);assert.deepEqual(aggregate,[1,2,3,4]);
+ await assert.rejects(()=>team.assess('security',f.groqPlan,next.id,changes),refusal);assert.equal(sends,4);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+5);
+ }finally{f.cleanup();}});
