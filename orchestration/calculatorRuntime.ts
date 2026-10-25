@@ -1,3 +1,4 @@
+import {createCalculatorRuntimeProposalRejection} from './calculatorRejectedProposalCheckpoint.js';
 import {createCalculatorRuntimeFailureCheckpoint} from './calculatorRuntimeFailure.js';
 import {createCalculatorProjectRuntimeTeam,prepareCalculatorProjectRuntimeHost,type CalculatorProjectRuntimeHost} from './calculatorProjectRuntimeTeam.js';
 import type { CalculatorHostPreset } from "./taskModelBudget.js";
@@ -424,9 +425,13 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
           status: active.status, httpInFlight: active.httpInFlight };
       }, charge: () => charge(), persistReturned: returnedCharge => save({ ...active, status: "blocked", httpInFlight: false }, returnedCharge),
     });
+    const afterProposalRejected=createCalculatorRuntimeProposalRejection({
+      context:()=>activeId!==runtimeId&&saved.tasks.some(t=>t.id===activeId)?{taskId:activeId,stage:active.stage,attempt:active.attempt,status:active.status,httpInFlight:active.httpInFlight,publicationStarted:active.publicationStarted}:undefined,
+      charge:()=>charge(),persistReturned:(rejectedProposal,amount)=>save({...active,status:'blocked',httpInFlight:false,rejectedProposal},amount),
+    });
     const team = projectHost
-      ? await createCalculatorProjectRuntimeTeam(input,saved,env,projectHost,{checkpoints:{beforeRequest,afterAssessmentRejected},...(hostPreset?{preset:hostPreset}:{})})
-      : createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected }, hostPreset);
+      ? await createCalculatorProjectRuntimeTeam(input,saved,env,projectHost,{checkpoints:{beforeRequest,afterAssessmentRejected,afterProposalRejected},...(hostPreset?{preset:hostPreset}:{})})
+      : createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected,afterProposalRejected }, hostPreset);
     function charge(): CalculatorPriorModelCharge {
       const result = team.checkpointCharge(); if (!result) return refuse(); return result;
     }
@@ -435,6 +440,12 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       persist:(failure,amount)=>save({...active,status:'blocked',failure},amount),
     });
     function checkpoint(event: CalculatorExecutionCheckpointEvent): void {
+      // The parsed rejected response is already durable and terminal. The
+      // executor's generic failure callback must not discard that evidence.
+      if(active.rejectedProposal){
+        if(event.taskId===activeId&&event.attempt===active.attempt&&event.stage===active.stage&&event.status==='blocked')return;
+        return refuse();
+      }
       if (!saved!.tasks.some(task => task.id === event.taskId) ||
           (continuation && event.taskId !== saved!.tasks[0]!.id) ||
           (activeId !== runtimeId && activeId !== event.taskId) || (activeId !== event.taskId && active.httpInFlight)) return refuse();

@@ -1,3 +1,4 @@
+import {prepareCalculatorRejectedProposal,calculatorRejectedProposalMetadata,type CalculatorRejectedProposal} from './calculatorRejectedProposalCheckpoint.js';
 import {parseCalculatorRuntimeFailure,type CalculatorRuntimeFailure} from './calculatorRuntimeFailure.js';
 /** Private execution evidence, separate from source-free task/stage receipts.
  * A checkpoint records data, never permission to replay or resume a model/tool.
@@ -33,7 +34,7 @@ export type CalculatorExecutionModelState = Readonly<{
 export type CalculatorExecutionCheckpointPayload = Readonly<{
   attempt: 1 | 2; stage: string; status: "running" | "passed" | "blocked";
   proposal?: PreparedCalculatorChanges; assessments: readonly CalculatorAssessment[];
-  modelState: CalculatorExecutionModelState; httpInFlight: boolean; publicationStarted: boolean; failure?:CalculatorRuntimeFailure;
+  modelState: CalculatorExecutionModelState; httpInFlight: boolean; publicationStarted: boolean; failure?:CalculatorRuntimeFailure; rejectedProposal?:CalculatorRejectedProposal;
 }>;
 type HistoryEntry = {
   sequence: number; payload: CalculatorExecutionCheckpointPayload;
@@ -48,7 +49,7 @@ export type CalculatorExecutionCheckpointMetadata = CalculatorExecutionCheckpoin
   identity: CalculatorExecutionCheckpointIdentity; attempt: 1 | 2; stage: string;
   status: CalculatorExecutionCheckpointPayload["status"]; proposalDigest?: string;
   completedRoles: readonly string[]; modelState: CalculatorExecutionModelState;
-  httpInFlight: boolean; publicationStarted: boolean; chargeAccounting: "conservative-high-water"; failure?:CalculatorRuntimeFailure;
+  httpInFlight: boolean; publicationStarted: boolean; chargeAccounting: "conservative-high-water"; failure?:CalculatorRuntimeFailure; rejectedProposal?:ReturnType<typeof calculatorRejectedProposalMetadata>;
 }>;
 export type CalculatorExecutionCheckpointStore = Readonly<{
   save(payload: CalculatorExecutionCheckpointPayload): CalculatorExecutionCheckpointReference;
@@ -136,7 +137,7 @@ function validateAssessment(value: unknown, role: string): CalculatorAssessment 
 }
 function validatePayload(value: unknown, identity: CalculatorExecutionCheckpointIdentity): CalculatorExecutionCheckpointPayload {
   if (!plain(value) || !exact(value, ["attempt", "stage", "status", "assessments", "modelState", "httpInFlight", "publicationStarted",
-      ...(Object.hasOwn(value, "proposal") ? ["proposal"] : []),...(Object.hasOwn(value,"failure")?["failure"]:[])]) ||
+      ...(Object.hasOwn(value, "proposal") ? ["proposal"] : []),...(Object.hasOwn(value,"failure")?["failure"]:[]),...(Object.hasOwn(value,"rejectedProposal")?["rejectedProposal"]:[])]) ||
       (value.attempt !== 1 && value.attempt !== 2) || typeof value.stage !== "string" || !STAGE.test(value.stage) ||
       (value.status !== "running" && value.status !== "passed" && value.status !== "blocked") || typeof value.httpInFlight !== "boolean" ||
       typeof value.publicationStarted !== "boolean" || !plain(value.modelState) ||
@@ -145,6 +146,12 @@ function validatePayload(value: unknown, identity: CalculatorExecutionCheckpoint
       (value.httpInFlight && value.status === "passed")) return refuse();
   let failure:CalculatorRuntimeFailure|undefined;
   if(Object.hasOwn(value,"failure")){if(value.status!=="blocked")return refuse();try{const d=Object.getOwnPropertyDescriptor(value,"failure");if(!d||!Object.hasOwn(d,"value"))return refuse();failure=parseCalculatorRuntimeFailure(d.value);}catch{return refuse();}}
+  let rejectedProposal:CalculatorRejectedProposal|undefined;
+  if(Object.hasOwn(value,'rejectedProposal')){
+    if(value.status!=='blocked'||value.httpInFlight!==false||value.publicationStarted)return refuse();
+    try{const d=Object.getOwnPropertyDescriptor(value,'rejectedProposal');if(!d||!Object.hasOwn(d,'value'))return refuse();rejectedProposal=prepareCalculatorRejectedProposal(d.value);}catch{return refuse();}
+    if(rejectedProposal.taskId!==identity.taskId||(rejectedProposal.kind==='generation'?(value.attempt!==1||value.stage!=='generate_1'):(value.attempt!==2||value.stage!=='repair_2')))return refuse();
+  }
   const proposal = Object.hasOwn(value, "proposal") ? validateProposal(value.proposal, identity) : undefined;
   if (!proposal && value.assessments.length) return refuse();
   const assessments = value.assessments.map((assessment, index) => validateAssessment(assessment, ROLES[index]!));
@@ -155,11 +162,15 @@ function validatePayload(value: unknown, identity: CalculatorExecutionCheckpoint
     ...(proposal ? { proposal } : {}), assessments, modelState: {
       attemptedRequests: state.attemptedRequests, totalRequestBytes: state.totalRequestBytes,
       reservedRunTokens: state.reservedRunTokens, elapsedMs: state.elapsedMs,
-    }, httpInFlight: value.httpInFlight, publicationStarted: value.publicationStarted,...(failure?{failure}:{}) });
+    }, httpInFlight: value.httpInFlight, publicationStarted: value.publicationStarted,...(failure?{failure}:{}),...(rejectedProposal?{rejectedProposal}:{}) });
 }
 function validateTransition(previous: CalculatorExecutionCheckpointPayload, payload: CalculatorExecutionCheckpointPayload,
   repairUsed: boolean): boolean {
   if(previous.failure)return refuse();
+  if(previous.rejectedProposal){
+    const {failure,...rest}=payload;
+    if(!failure||!same({...previous,modelState:payload.modelState},rest))return refuse();
+  }
   if (payload.attempt < previous.attempt || payload.attempt > previous.attempt + 1 ||
       (previous.publicationStarted && !payload.publicationStarted) || (previous.proposal && !payload.proposal) ||
       ["attemptedRequests", "totalRequestBytes", "reservedRunTokens", "elapsedMs"].some(key =>
@@ -344,7 +355,7 @@ export function createCalculatorExecutionCheckpointStore(directoryInput: string,
             stage: payload.stage, status: payload.status, ...(proposalDigest ? { proposalDigest } : {}),
             completedRoles: Object.freeze(payload.assessments.map(value => value.role)), modelState: Object.freeze({ ...payload.modelState }),
             httpInFlight: payload.httpInFlight, publicationStarted: payload.publicationStarted,
-            chargeAccounting: "conservative-high-water" as const,...(payload.failure?{failure:Object.freeze({...payload.failure})}:{}) });
+            chargeAccounting: "conservative-high-water" as const,...(payload.failure?{failure:Object.freeze({...payload.failure})}:{}),...(payload.rejectedProposal?{rejectedProposal:calculatorRejectedProposalMetadata(payload.rejectedProposal)}:{}) });
         } catch { return refuse(); }
       },
       close(): void {

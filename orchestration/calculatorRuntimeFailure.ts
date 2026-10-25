@@ -1,7 +1,7 @@
 /** Source-free terminal failure DATA. It never grants resume or replay rights. */
 export const CALCULATOR_RUNTIME_FAILURE_ERROR='Runtime failure record is unverified. Preserve the prior checkpoint; no retry or replay.';
 const reasons=['concurrent_operation','operation_failed','validation_failed','transport_stopped','model_rate_limited',
- 'project_owner_approval_unverified','checkpoint_persistence_failed','model_failed','execution_failed'] as const;
+ 'project_owner_approval_unverified','checkpoint_persistence_failed','model_failed','execution_failed','proposal_changes_invalid','model_declined_proposal','proposal_rejection_persistence_failed'] as const;
 export type CalculatorRuntimeFailure=Readonly<{reasonCode:typeof reasons[number];httpStatus?:number}>;
 type Charge=Readonly<{attemptedRequests:number;totalRequestBytes:number;reservedRunTokens:number;elapsedMs:number}>;
 const refuse=():never=>{throw Error(CALCULATOR_RUNTIME_FAILURE_ERROR);};
@@ -24,7 +24,7 @@ export function captureCalculatorRuntimeFailure(diagnostic:unknown):CalculatorRu
  let providerStatus:number|undefined,responseStatus:number|undefined;
  for(const item of items){
   const provider=own(item,'providerHttpStatus'),http=own(item,'httpStatus');if(providerStatus===undefined&&status(provider))providerStatus=provider;if(responseStatus===undefined&&status(http))responseStatus=http;
-  if(!primary){const code=own(item,'reasonCode');if(code==='project_owner_approval_unverified')reason=code;else if(code==='model_checkpoint_persistence_failed')reason='checkpoint_persistence_failed';}
+  if(!primary){const code=own(item,'reasonCode');if(code==='project_owner_approval_unverified')reason=code;else if(code==='model_checkpoint_persistence_failed')reason='checkpoint_persistence_failed';else if(code==='proposal_changes_invalid'||code==='model_declined_proposal'||code==='proposal_rejection_persistence_failed')reason=code;}
  }
  const httpStatus=providerStatus??responseStatus;
  if(!primary&&httpStatus===429)reason='model_rate_limited';

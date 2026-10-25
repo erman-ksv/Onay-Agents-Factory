@@ -888,3 +888,17 @@ test('runtime rejected planning cannot leave task clients open for further HTTP'
  await assert.rejects(()=>team.plan(),refusal);await assert.rejects(async()=>team.generate(f.groqPlan,f.groqPlan.tasks[0]!.id,await snapshot()),refusal);
  assert.equal(sends,0);assert.equal(team.diagnostic().providerCallsSent,0);assert.equal(team.snapshot().stopped,true);assert.equal((await f.controller.inspect()).used.requests,f.historical.requests);
  }finally{f.cleanup();}});
+
+import {createCalculatorRuntimeProposalRejection} from './calculatorRejectedProposalCheckpoint.js';
+import {createCalculatorExecutionCheckpointStore,type CalculatorExecutionCheckpointPayload} from './calculatorExecutionCheckpoint.js';
+import {captureCalculatorRuntimeFailure} from './calculatorRuntimeFailure.js';
+test('project runtime preserves one rejected author response privately without author replay',async()=>{const f=await authorizedProjectFixture(),directory=mkdtempSync(join(tmpdir(),'project-author-rejection-'));let store:ReturnType<typeof createCalculatorExecutionCheckpointStore>|undefined;try{
+ const task=f.groqPlan.tasks[0]!;store=createCalculatorExecutionCheckpointStore(directory,{repository:f.groqPlan.owner.repository,goalId:f.groqPlan.owner.id,ownerFingerprint:f.groqPlan.owner.ownerFingerprint,planFingerprint:f.groqPlan.fingerprint,taskId:task.id,branch:f.groqPlan.branch,baseSha:A,bootstrapSha:A,runtimeConfigDigest:'e'.repeat(64)});
+ let active:CalculatorExecutionCheckpointPayload={attempt:1,stage:'generate_1',status:'running',assessments:[],modelState:{attemptedRequests:0,totalRequestBytes:0,reservedRunTokens:0,elapsedMs:0},httpInFlight:false,publicationStarted:false};let sends=0;
+ let team!:Awaited<ReturnType<typeof createCalculatorProjectRuntimeTeam>>;
+ const afterProposalRejected=createCalculatorRuntimeProposalRejection({context:()=>({taskId:task.id,stage:active.stage,attempt:active.attempt,status:active.status,httpInFlight:active.httpInFlight,publicationStarted:active.publicationStarted}),charge:()=>team.checkpointCharge(),persistReturned:(rejectedProposal,modelState)=>{const next={...active,status:'blocked' as const,httpInFlight:false,rejectedProposal,modelState};store!.save(next);active=next;}});
+ team=await createCalculatorProjectRuntimeTeam(f.groqOwner,f.groqPlan,f.env,{controller:f.controller,executionId:'rejected-author-private-capture'},{timing:f.timing,checkpoints:{beforeRequest:modelState=>{const next={...active,modelState,httpInFlight:true};store!.save(next);active=next;},afterProposalRejected},transport:async()=>{sends++;return response({summary:'PRIVATE_REJECTED_AUTHOR',changes:[{operation:'create',path:'outside-scope.txt',content:'export const fixture=1;',message:'Invalid path fixture'}]});}});
+ await assert.rejects(async()=>team.generate(f.groqPlan,task.id,await snapshot()),refusal);assert.equal(sends,1);assert.equal(store.read()!.httpInFlight,false);assert.equal(store.inspect()!.rejectedProposal!.validationCode,'proposal_changes_invalid');assert.ok(!JSON.stringify(store.inspect()).includes('PRIVATE_REJECTED_AUTHOR'));
+ store.save({...active,failure:captureCalculatorRuntimeFailure(team.diagnostic())});assert.equal(store.read()!.failure!.reasonCode,'proposal_changes_invalid');assert.equal((await f.controller.inspect()).used.requests,f.historical.requests+1);
+ await assert.rejects(async()=>team.generate(f.groqPlan,task.id,await snapshot()),refusal);assert.equal(sends,1);
+ }finally{store?.close();rmSync(directory,{recursive:true,force:true});f.cleanup();}});
