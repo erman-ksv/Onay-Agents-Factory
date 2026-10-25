@@ -36,11 +36,11 @@ export function buildT05ReviewerSupplement(model:string,task:CalculatorPlanTask,
  hostEvidence.proposalDigest!==T05_REVIEW_FROZEN.proposalDigest||hostEvidence.baseSha!==changes.baseSha||hostEvidence.evidenceId!=='host-checks@'+T05_REVIEW_FROZEN.proposalDigest||
  syntax.sourceSha256!==T05_REVIEW_FROZEN.fileSha256||syntax.proposalDigest!==T05_REVIEW_FROZEN.proposalDigest||syntax.exitCode!==0||syntax.sourceBytes!==T05_REVIEW_FROZEN.bytes)return refuse();
  const allowedEvidenceRefs=Object.freeze(['changes@'+changes.baseSha,hostEvidence.evidenceId,'node-check@'+syntax.sourceSha256]);
- const packet={repository:changes.repository,baseSha:changes.baseSha,proposalDigest:T05_REVIEW_FROZEN.proposalDigest,
+ const packet={repository:changes.repository,baseSha:changes.baseSha,
  task:{id:task.id,role:task.role,goal:task.goal,paths:task.paths,acceptanceIds:task.acceptanceIds},
  acceptance:CALCULATOR_ACCEPTANCE.filter(a=>task.acceptanceIds.includes(a.id)),allowedEvidenceRefs,
  completeChangedText:{changes:JSON.parse(changes.reviewEvidence).changes},verifiedHostEvidence:hostEvidence,
- parserEvidence:syntax,previousReview:{ready:false,summary:(previousReview as any)?.summary,findings:(previousReview as any)?.findings},
+ parserEvidence:syntax,previousReview:{ready:false,findings:(previousReview as any)?.findings},
  clarification:'Independently reassess unchanged code using supplied proof: Node --check exit 0 and actual project tests passed. A semicolon separates adjacent calls; no newline is required. Retain any other concrete blocker. Approval never grants publication authority.',
  unverifiedAreas:['Unshown source, phones and other browsers remain unverified; no publication or candidate CI yet']};
  const body=JSON.stringify({model,reasoning_effort:'low',response_format:{type:'json_object'},max_completion_tokens:1200,
