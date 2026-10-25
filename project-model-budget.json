@@ -1,1 +1,1 @@
-{"version":1,"grantSha256":"bc5bbff6ed1b4a327947f24ff870979bf1435b419df3d6c5f8032dbaa520d1bb","reservations":[]}
+{"version":1,"grantSha256":"bc5bbff6ed1b4a327947f24ff870979bf1435b419df3d6c5f8032dbaa520d1bb","reservations":[{"reservationId":"synthetic-shared-r1","taskId":"storage-audit-only","requestSha256":"9b1229e633c16587d3db93941e7063fd6662e432be7cbdb2dfa9f489afc369cf","requestBytes":1,"reservedTokens":1}]}
