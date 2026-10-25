@@ -1,3 +1,4 @@
+import {createCalculatorRuntimeFailureCheckpoint} from './calculatorRuntimeFailure.js';
 import {createCalculatorProjectRuntimeTeam,prepareCalculatorProjectRuntimeHost,type CalculatorProjectRuntimeHost} from './calculatorProjectRuntimeTeam.js';
 import type { CalculatorHostPreset } from "./taskModelBudget.js";
 import { createHash } from "node:crypto";
@@ -429,6 +430,10 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     function charge(): CalculatorPriorModelCharge {
       const result = team.checkpointCharge(); if (!result) return refuse(); return result;
     }
+    const recordFailure=createCalculatorRuntimeFailureCheckpoint({
+      diagnostic:()=>team.snapshot().stopped?team.diagnostic():{reasonCode:'execution_failed'},charge,
+      persist:(failure,amount)=>save({...active,status:'blocked',failure},amount),
+    });
     function checkpoint(event: CalculatorExecutionCheckpointEvent): void {
       if (!saved!.tasks.some(task => task.id === event.taskId) ||
           (continuation && event.taskId !== saved!.tasks[0]!.id) ||
@@ -503,12 +508,12 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
           reasonCode: transition.reasonCode, attempts: 0, repairs: 0, proposalTestsExecuted: false,
           candidateTestsExecuted: false, wholeAppCompleted: false as const, finalCalculatorCiVerified: false as const, legalEnabled: false as const };
       } else result = await runCalculatorExecution(workspace, { ...executionOptions, verifyDependencies });
-      if (active.httpInFlight || (active.status === "running" && writers.has(activeId)))
-        save({ ...active, status: "blocked" }, charge());
-      if (team.snapshot().stopped) console.error(JSON.stringify({ event: "calculator_execution_model_failed", ...team.diagnostic() }));
+      if(team.snapshot().stopped){
+        await recordFailure();console.error(JSON.stringify({event:'calculator_execution_model_failed',...team.diagnostic()}));
+      }else if(active.httpInFlight||(active.status==='running'&&writers.has(activeId)))save({...active,status:'blocked'},charge());
       return result;
     } catch {
-      if (writers.has(activeId)) try { save({ ...active, status: "blocked" }, charge()); } catch { /* Retain the last durable conservative capsule. */ }
+      if (writers.has(activeId)) try { await recordFailure(); } catch { /* Retain the last durable conservative capsule; never retry an uncertain write. */ }
       throw new Error(CALCULATOR_RUNTIME_ERROR);
     } finally { writers.close(); }
   } catch { console.error(JSON.stringify({ event: "calculator_runtime_failed", reasonCode: phase })); return refuse(); }
