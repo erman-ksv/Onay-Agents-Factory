@@ -40,11 +40,16 @@ export function buildT05ReviewerSupplement(model:string,task:CalculatorPlanTask,
  task:{id:task.id,role:task.role,goal:task.goal,paths:task.paths,acceptanceIds:task.acceptanceIds},
  acceptance:CALCULATOR_ACCEPTANCE.filter(a=>task.acceptanceIds.includes(a.id)),allowedEvidenceRefs,
  completeChangedText:{changes:JSON.parse(changes.reviewEvidence).changes},verifiedHostEvidence:hostEvidence,
- parserEvidence:syntax,previousReview,
- clarification:'Supplement the prior assessment on exactly the same code. The independent Node parser returned exit 0 for the full proposed test module, and actual project tests passed. Adjacent test calls separated by a semicolon do not require a newline. Reassess the previous syntax finding using this evidence. Keep an independent verdict and identify any other concrete blocker. Do not invent failures or treat approval as CI/publication authority.',
- unverifiedAreas:['Unshown unchanged source except host-verified contract and execution evidence','Physical phones, other browsers and viewport widths','Publication and exact-candidate CI have not executed']};
+ parserEvidence:syntax,previousReview:{ready:false,summary:(previousReview as any)?.summary,findings:(previousReview as any)?.findings},
+ clarification:'Independently reassess unchanged code using supplied proof: Node --check exit 0 and actual project tests passed. A semicolon separates adjacent calls; no newline is required. Retain any other concrete blocker. Approval never grants publication authority.',
+ unverifiedAreas:['Unshown source, phones and other browsers remain unverified; no publication or candidate CI yet']};
  const body=JSON.stringify({model,reasoning_effort:'low',response_format:{type:'json_object'},max_completion_tokens:1200,
  messages:[{role:'system',content:buildCalculatorRoleInstructions('reviewer')},{role:'user',content:JSON.stringify(packet)}]});
- if(Buffer.byteLength(body)>24000||scanForSecrets(body).length)return refuse();
+ assertT05ReviewerRequestFits(body);if(scanForSecrets(body).length)return refuse();
  return Object.freeze({body,allowedEvidenceRefs,requestBytes:Buffer.byteLength(body)});
+}
+
+/** Conservative Groq estimate, checked before acquiring the one-shot claim. */
+export function assertT05ReviewerRequestFits(body:string):void{
+ const bytes=Buffer.byteLength(body);if(bytes>13000||Math.ceil(bytes/3)+256+1200>6000)return refuse();
 }

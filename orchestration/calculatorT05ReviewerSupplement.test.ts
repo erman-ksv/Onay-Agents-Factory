@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateCalculatorAssessment} from '../commander/calculatorTeam.js';
-import {T05_REVIEW_FROZEN,restoreT05UnchangedApproval,buildT05ReviewerSupplement} from './calculatorT05ReviewerSupplement.js';
+import {T05_REVIEW_FROZEN,restoreT05UnchangedApproval,buildT05ReviewerSupplement,assertT05ReviewerRequestFits} from './calculatorT05ReviewerSupplement.js';
 import {createProviderContextBudget,createGroqBudgetedFetch} from '../commander/providerContextBudget.js';
 const refs=['changes@'+T05_REVIEW_FROZEN.baseSha,'host-checks@'+T05_REVIEW_FROZEN.proposalDigest];
 for(const role of ['security','tester'] as const){
@@ -27,3 +27,5 @@ test('exhausted Reviewer context budget refuses before HTTP and never retries',a
  const send=createGroqBudgetedFetch(context,async()=>{sends++;return new Response('{}');});
  const response=await send('https://api.groq.com/openai/v1/chat/completions',{method:'POST',body:JSON.stringify({model:'openai/gpt-oss-120b',max_completion_tokens:1200,messages:[{role:'user',content:'Bounded review'}]})});assert.equal(response.ok,false);assert.equal((await response.json()).error.providerFailure.code,'run_budget_exceeded');assert.equal(sends,0);
 });
+
+test('Reviewer packet byte cap leaves room for full output before remote admission',()=>{assert.doesNotThrow(()=>assertT05ReviewerRequestFits('x'.repeat(13000)));assert.throws(()=>assertT05ReviewerRequestFits('x'.repeat(13883)));assert.throws(()=>assertT05ReviewerRequestFits('x'.repeat(13001)));});
