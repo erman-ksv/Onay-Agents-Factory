@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "status": "qualified-correction-single-successor-mock-verified",
+  "sourceSha": "8de5ff932e8789873b60254d3cd14ff2db4a54a8",
+  "sourceCi": {
+    "runId": 40225613892,
+    "conclusion": "success",
+    "jobId": 121266202288,
+    "typecheck": "passed",
+    "tests": {
+      "total": 2358,
+      "passed": 2358,
+      "failed": 0
+    }
+  },
+  "local": {
+    "tests": 292,
+    "passed": 292,
+    "failed": 0,
+    "newRegressionTests": 6,
+    "dependenciesInstalled": false,
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "verified": {
+    "originalFailureAndChargesNotRewritten": true,
+    "originalAndCorrectionArtifactsDigestBound": true,
+    "stableCorrectionReceiptIdentityRequired": true,
+    "allRolesAndHostChecksRequired": true,
+    "freshPinnedCandidateCiRequired": true,
+    "jsonCloneCannotProvideCapability": true,
+    "ordinaryAncestryBlobHostChecksRetained": true,
+    "allReceiptsAndLocksRecheckedAfterFinalAwait": true,
+    "ciRegressionAndRemoteLossStopSelection": true,
+    "failedCapabilityCannotRevive": true,
+    "afterCiDispatchesExactNextTaskOnce": true,
+    "duplicateEventDoesNotDispatchAgain": true,
+    "runtimeRechecksBeforeModelHttp": true
+  },
+  "integration": {
+    "externalTransportAndTools": "mock",
+    "originalFailureBytesUnchanged": true,
+    "selectionAfterQualifiedCorrection": true,
+    "nextTaskMockDispatches": 1,
+    "nextTaskMockStoppedBeforeHttp": true,
+    "realNextTaskExecution": false,
+    "unboundedProjectLoop": false
+  },
+  "capabilityScope": "Exact corrected candidate at current head; not portable to a later commit",
+  "productionWorkflowConfigured": false,
+  "liveRecoveryOrSuccessorRun": false,
+  "realModelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "mainChanged": false,
+  "applicationSourceChanged": false,
+  "previousPilotReplayed": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Production workflow authenticates private evidence and supplies actual remote and CI/test host tools",
+    "Requalification/integration across later heads is not verified by this bounded transition",
+    "Owner-approved allowance and complete-history initialization before live execution"
+  ]
+}
