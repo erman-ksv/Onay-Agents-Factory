@@ -17,7 +17,10 @@
     "maxRepairs": 1,
     "freeTierConfirmed": true
   },
-  "executionRuntimeSha": "4dc0a28eae7c2950234a8466edb28d4ed8fa74cc",
-  "executionSourceCiRunId": 40145614273,
-  "preflightFix": "bounded-host-source-groups-zero-model-cost"
+  "executionRuntimeSha": "bb639188f2454cf20bc68d30bc59913c515c292f",
+  "executionSourceCiRunId": 40146290169,
+  "preflightFix": "bounded-host-source-groups-zero-model-cost",
+  "correctionSourceRunId": 40145732417,
+  "correctionSourceArtifactId": 12580346942,
+  "scope": "one-saved-draft-correction-plus-three-fresh-reviews-within-original-T04-allowance"
 }

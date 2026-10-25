@@ -198,11 +198,11 @@ jobs:
           import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
           const r=JSON.parse(readFileSync('request/.factory/calculator-t03-publication-reconciliation.json'));
           assert.deepEqual(r.ownerT04Allowance,{id:'owner-t04-eight-free-calls-48000-20261024',taskId:'calculator-pilot-step7-v1-34ee03-t04',maxRequests:8,maxReservedTokens:48000,maxRepairs:1,freeTierConfirmed:true});
-          assert.equal(r.executionRuntimeSha,'4dc0a28eae7c2950234a8466edb28d4ed8fa74cc');assert.equal(r.executionSourceCiRunId,40145614273);
+          assert.equal(r.executionRuntimeSha,'bb639188f2454cf20bc68d30bc59913c515c292f');assert.equal(r.executionSourceCiRunId,40146290169);
           JS
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 4dc0a28eae7c2950234a8466edb28d4ed8fa74cc
+          ref: bb639188f2454cf20bc68d30bc59913c515c292f
           path: runtime
           persist-credentials: false
       - name: Download exact current CI reconciliation
@@ -233,19 +233,28 @@ jobs:
         run: |
           docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
           docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Download exact rejected T04 draft without re-executing its author
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580346942'
+          run-id: '40145732417'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-rejected
+          merge-multiple: true
       - name: Execute exactly queued T04 with at most one agent correction
         working-directory: runtime
         env:
+          T04_REJECTED_DIRECTORY: ${{ runner.temp }}/t04-rejected
           T04_PARENT_DIRECTORY: ${{ runner.temp }}/t04-parent
           T04_ORIGIN_DIRECTORY: ${{ runner.temp }}/t04-origin
           T04_PARENT_ARTIFACT_ID: ${{ needs.inspect.outputs.evidence_id }}
           T04_PARENT_ARTIFACT_DIGEST: ${{ needs.inspect.outputs.evidence_digest }}
-          FACTORY_RUNTIME_SHA: 4dc0a28eae7c2950234a8466edb28d4ed8fa74cc
-          FACTORY_SOURCE_CI_RUN: '40145614273'
+          FACTORY_RUNTIME_SHA: bb639188f2454cf20bc68d30bc59913c515c292f
+          FACTORY_SOURCE_CI_RUN: '40146290169'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          CALCULATOR_QUEUED_T04_APPROVED: OWNER_EIGHT_FREE_CALLS_48000_ONE_REPAIR
+          CALCULATOR_QUEUED_T04_APPROVED: CONTINUE_ONE_SAVED_DRAFT_CORRECTION_WITHIN_ORIGINAL_ALLOWANCE
           CALCULATOR_EXECUTION_LIVE_APPROVED: RUN_ONE_FREE_CALCULATOR_TASK
           CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
           ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
@@ -255,13 +264,13 @@ jobs:
           AGENT_FACTORY_LEGAL_ENABLED: 'false'
           AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
           AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
-        run: pnpm exec tsx scripts/calculator-t04-queued-execution.mjs
+        run: pnpm exec tsx scripts/calculator-t04-draft-correction.mjs
       - name: Preserve private task and cost evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: calculator-t04-queued-execution-${{ github.run_id }}
-          path: ${{ runner.temp }}/calculator-t04-execution/
+          name: calculator-t04-draft-correction-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-t04-draft-correction/
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 14
@@ -275,7 +284,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 4dc0a28eae7c2950234a8466edb28d4ed8fa74cc
+          ref: bb639188f2454cf20bc68d30bc59913c515c292f
           persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
@@ -290,7 +299,7 @@ jobs:
         run: |
           cat > scripts/calculator-t04-replay-check.mjs <<'JS'
           import assert from 'node:assert/strict';import {writeFileSync} from 'node:fs';import {createCalculatorLiveBarrier} from '../orchestration/calculatorLiveBarrier.js';
-          assert.equal(process.env.GROQ_API_KEY,undefined);const barrier=createCalculatorLiveBarrier({runtimeSha:'4dc0a28eae7c2950234a8466edb28d4ed8fa74cc',sourceCiRunId:40145614273,planFingerprint:'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2',previousTaskId:'calculator-pilot-step7-v1-34ee03-t03-t04-exec',candidateSha:'10b4dddb9fd8881030155336a07a12b2cf739993'},process.env);
+          assert.equal(process.env.GROQ_API_KEY,undefined);const barrier=createCalculatorLiveBarrier({runtimeSha:'bb639188f2454cf20bc68d30bc59913c515c292f',sourceCiRunId:40146290169,planFingerprint:'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2',previousTaskId:'calculator-pilot-step7-v1-34ee03-t03-t04-fix1',candidateSha:'10b4dddb9fd8881030155336a07a12b2cf739993'},process.env);
           assert.equal(await barrier.inspectAbsent(),false);const report={version:1,status:'duplicate-execution-refused-on-fresh-worker',executionBarrier:barrier.ref,newModelCalls:0,taskStarted:false,legalEnabled:false};writeFileSync(process.env.RUNNER_TEMP+'/t04-replay-proof.json',JSON.stringify(report)+'\n');console.log(JSON.stringify(report));
           JS
           pnpm exec tsx scripts/calculator-t04-replay-check.mjs
