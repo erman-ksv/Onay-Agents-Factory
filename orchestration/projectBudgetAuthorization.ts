@@ -34,12 +34,12 @@ export function projectBudgetApprovalDigest(input:unknown):string{return hash(ca
 export type ProjectOwnerDecision=Readonly<{issueNumber:number;commentId:number;bodySha256:string}>;
 declare const scopeBrand:unique symbol;
 export type AuthorizedProjectTaskScope=Readonly<{[scopeBrand]:true}>;
-type RecordScope={identity:ProjectBudgetIdentity;taskId:string;executionId:string;ledger:ProjectModelBudget;assertAuthorized:()=>Promise<void>;used:boolean};
+type RecordScope={identity:ProjectBudgetIdentity;taskId:string;executionId:string;ledger:ProjectModelBudget;assertAuthorized:()=>Promise<void>;operationMode:'development'|'read-only-review';used:boolean};
 const scopes=new WeakMap<AuthorizedProjectTaskScope,RecordScope>();
 /** Host-only, not an SDK tool. JSON cloning and reuse cannot recreate a scope. */
 export function consumeAuthorizedProjectTaskScope(scope:unknown,expected:Readonly<{projectId:string;repository:string;ownerFingerprint:string}>){
  const value=scopes.get(scope as AuthorizedProjectTaskScope);if(!value||value.used||value.identity.projectId!==expected.projectId||value.identity.repository!==expected.repository||value.identity.ownerFingerprint!==expected.ownerFingerprint)return refuse();value.used=true;
- return Object.freeze({planFingerprint:value.identity.planFingerprint,taskId:value.taskId,projectBudget:Object.freeze({ledger:value.ledger,taskId:value.taskId,executionId:value.executionId,provider:'groq' as const}),assertAuthorized:value.assertAuthorized});
+ return Object.freeze({planFingerprint:value.identity.planFingerprint,taskId:value.taskId,operationMode:value.operationMode,projectBudget:Object.freeze({ledger:value.ledger,taskId:value.taskId,executionId:value.executionId,provider:'groq' as const}),assertAuthorized:value.assertAuthorized});
 }
 /** Only a native authenticated OWNER comment on Factory may authorize a grant.
  * Caller pins its ID and exact body digest; arbitrary JSON/env is not approval.
@@ -48,15 +48,15 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
  try{
   const identity=Object.freeze({...options.identity,taskIds:Object.freeze([...options.identity.taskIds])}),decision=Object.freeze({...options.decision}),transport=options.transport??fetch,clock=options.now??Date.now,token=options.token;
   if(!safeId(identity.projectId)||identity.repository!=='erman-ksv/Onay-Factory-Calculator'||!SHA.test(identity.planFingerprint)||!SHA.test(identity.ownerFingerprint)||identity.taskIds.length<1||identity.taskIds.length>64||identity.taskIds.some(id=>!safeId(id))||new Set(identity.taskIds).size!==identity.taskIds.length||!Number.isSafeInteger(decision.issueNumber)||decision.issueNumber<1||!Number.isSafeInteger(decision.commentId)||decision.commentId<1||!SHA.test(decision.bodySha256)||!token)return refuse();
-  const history=reconcileProjectBudgetHistory(options.history,identity);let lastTime=clock();if(!Number.isFinite(lastTime))return refuse();let expectedDocument:string|undefined;
+  const history=reconcileProjectBudgetHistory(options.history,identity);let lastTime=clock();if(!Number.isFinite(lastTime))return refuse();let expectedDocument:string|undefined;let operationMode:'development'|'read-only-review'|undefined;
   async function readApproval(){
    lastTime=Math.max(lastTime,clock());if(!Number.isFinite(lastTime))return refuse();
    const r=await transport('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/comments/'+decision.commentId,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'}});
    if(r.status!==200||!r.body){void r.body?.cancel().catch(()=>undefined);return refuse();}const reader=r.body.getReader(),parts:Uint8Array[]=[];let size=0;try{for(;;){const p=await reader.read();if(p.done)break;size+=p.value.byteLength;if(size>32768){await reader.cancel();return refuse();}parts.push(p.value);}}finally{reader.releaseLock();}
    const c=JSON.parse(Buffer.concat(parts).toString('utf8')),base='https://github.com/erman-ksv/Onay-Agents-Factory/';
    if(c.id!==decision.commentId||c.user?.login!=='erman-ksv'||c.user?.type!=='User'||c.author_association!=='OWNER'||c.issue_url!=='https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/'+decision.issueNumber||![base+'issues/'+decision.issueNumber+'#issuecomment-'+decision.commentId,base+'pull/'+decision.issueNumber+'#issuecomment-'+decision.commentId].includes(c.html_url)||typeof c.created_at!=='string'||c.created_at!==c.updated_at||!Number.isFinite(Date.parse(c.created_at))||Date.parse(c.created_at)>lastTime+300000||typeof c.body!=='string'||Buffer.byteLength(c.body)>16000)return refuse();
-   const document:unknown=JSON.parse(c.body);if(!plain(document)||!exact(document,['version','kind','grant','expiresAt'])||document.version!==1||document.kind!=='authorize-project-model-budget'||typeof document.expiresAt!=='string'||!Number.isFinite(Date.parse(document.expiresAt))||Date.parse(document.expiresAt)<=lastTime||Date.parse(document.expiresAt)>lastTime+7*86400000||projectBudgetApprovalDigest(document)!==decision.bodySha256)return refuse();
-   const text=canonical(document);if(expectedDocument!==undefined&&text!==expectedDocument)return refuse();expectedDocument=text;
+   const document:unknown=JSON.parse(c.body);if(!plain(document)||!exact(document,['version','kind','mode','grant','expiresAt'])||document.version!==1||document.kind!=='authorize-project-model-budget'||typeof document.mode!=='string'||!['development','read-only-review'].includes(document.mode)||typeof document.expiresAt!=='string'||!Number.isFinite(Date.parse(document.expiresAt))||Date.parse(document.expiresAt)<=lastTime||Date.parse(document.expiresAt)>lastTime+7*86400000||projectBudgetApprovalDigest(document)!==decision.bodySha256)return refuse();
+   const text=canonical(document);if(expectedDocument!==undefined&&text!==expectedDocument)return refuse();expectedDocument=text;operationMode=document.mode as 'development'|'read-only-review';
    const grant=parseProjectModelGrant(document.grant);if(grant.projectId!==identity.projectId||grant.repository!==identity.repository||grant.planFingerprint!==identity.planFingerprint||grant.historicalEvidenceSha256!==history.digest||canonical(grant.historical)!==canonical(history.charge))return refuse();return grant;
   }
   const grant=await readApproval(),ledger=openProjectModelBudget(grant,options.store),issued=new Set<string>();
@@ -68,7 +68,7 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
    inspect:ledger.inspect,
    async taskScope(taskId:string,executionId:string):Promise<AuthorizedProjectTaskScope>{
     if(!['planning',...identity.taskIds].includes(taskId)||!safeId(executionId)||executionId.length>96||issued.has(executionId))return refuse();await assertAuthorized();issued.add(executionId);
-    const scope=Object.freeze({}) as AuthorizedProjectTaskScope;scopes.set(scope,{identity,taskId,executionId,ledger,assertAuthorized,used:false});return scope;
+    const scope=Object.freeze({}) as AuthorizedProjectTaskScope;scopes.set(scope,{identity,taskId,executionId,ledger,assertAuthorized,operationMode:operationMode!,used:false});return scope;
    },
   });
  }catch{return refuse();}

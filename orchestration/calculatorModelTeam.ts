@@ -276,6 +276,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   }
   async function propose(plan: CalculatorPlan, taskId: string, snapshot: CalculatorSnapshot, repair?: CalculatorRepairRequest): Promise<PreparedCalculatorChanges> {
     try {
+      if(authorizedProject?.operationMode==='read-only-review')return refuse();
       const task = taskIn(plan, taskId);
       const savedRepair = repair ? repairFeedback.get(repair) : undefined;
       if (stopped || (restored.size && !(repairOnly && repair && savedRepair)) ||
@@ -353,7 +354,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
   }
   return Object.freeze({
     async plan(): Promise<CalculatorPlan> {
-      if(authorizedProject&&authorizedProject.taskId!=='planning')return refuse();
+      if(authorizedProject&&(authorizedProject.taskId!=='planning'||authorizedProject.operationMode==='read-only-review'))return refuse();
       try {
         if (planned || stopped || repairOnly) return refuse(); planned = true;
         const result=createCalculatorPlan(requestOwner, await call(buildCalculatorPlanningInstructions(requestOwner), {
