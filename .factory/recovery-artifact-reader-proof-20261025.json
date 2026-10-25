@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "status": "native-artifact-zip-and-selected-files-verified",
+  "sourceSha": "5d0801884483af5290f6344c3170388cc79bcf04",
+  "sourceCi": {
+    "runId": 40227769306,
+    "jobId": 121272718895,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2373,
+      "passed": 2373,
+      "failed": 0
+    }
+  },
+  "local": {
+    "relatedTestsBeforeTypeOnlyFix": 307,
+    "relatedPassed": 307,
+    "artifactTestsAfterTypeOnlyFix": 7,
+    "artifactPassed": 7,
+    "newTests": 7,
+    "dependenciesInstalled": false,
+    "scriptSyntax": "passed",
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "nativeAudit": {
+    "runId": 40227911953,
+    "jobId": 121273168379,
+    "eventSha": "f9a0c2890a1fee01126a52111014e1c04d22ee01",
+    "conclusion": "success",
+    "readOnly": true,
+    "inputArtifactId": 12610938973,
+    "inputZipBytes": 492,
+    "inputZipSha256Recomputed": "7e9fc55edd989d9b331af589e38fe99dc446f623b70eb3f18909e5bfe3e59236",
+    "selectedFileBytes": 603,
+    "selectedFileSha256Recomputed": "2c0516cc9f5d62a0a6bb69935f98215006e6852807f12db4b5522381dc0d00c2",
+    "githubReads": 8,
+    "storageReads": 1,
+    "githubWriteRequests": 0,
+    "tokenForwardedToStorage": false,
+    "sourceArtifactSyntheticOnly": true,
+    "realPrivateRecoverySourceValidated": false,
+    "reportArtifactId": 12612485726,
+    "githubReportedReportArtifactDigest": "28f800ae556db73995fab2ca9ef70b0bdedeb6c6d924e4e43f674e10ec1d2ba4",
+    "reportArtifactZipRehashed": false
+  },
+  "verified": {
+    "noExtractionOrExecution": true,
+    "boundedZipAndSelectedFiles": true,
+    "archiveAndFileDigestsActuallyChecked": true,
+    "unsafePathsDuplicatesSymlinksRefused": true,
+    "remoteLossLatchesRefusal": true,
+    "nativeArtifactCapabilitySuppliesSourceAssertion": true,
+    "jsonCopyNotACapability": true
+  },
+  "realModelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "mainChanged": false,
+  "applicationSourceChanged": false,
+  "previousPilotReplayed": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Select authentic protected source checkpoint/receipt and reviewed pins/identity for an eligible task",
+    "Compose production workflow with real host checks, source and claim adapters, required runtime",
+    "Owner-approved allowance and explicit complete-history initialization before live HTTP"
+  ]
+}
