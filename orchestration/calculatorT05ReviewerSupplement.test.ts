@@ -25,5 +25,5 @@ test('changed proposal or missing exact parser evidence refuses a supplement',()
 test('exhausted Reviewer context budget refuses before HTTP and never retries',async()=>{
  let sends=0;const context=createProviderContextBudget({maxRunTokens:1201,reservedOutputTokens:1200});
  const send=createGroqBudgetedFetch(context,async()=>{sends++;return new Response('{}');});
- await assert.rejects(()=>send('https://api.groq.com/openai/v1/chat/completions',{method:'POST',body:JSON.stringify({model:'openai/gpt-oss-120b',max_completion_tokens:1200,messages:[{role:'user',content:'Bounded review'}]})}));assert.equal(sends,0);
+ const response=await send('https://api.groq.com/openai/v1/chat/completions',{method:'POST',body:JSON.stringify({model:'openai/gpt-oss-120b',max_completion_tokens:1200,messages:[{role:'user',content:'Bounded review'}]})});assert.equal(response.ok,false);assert.equal((await response.json()).error.providerFailure.code,'run_budget_exceeded');assert.equal(sends,0);
 });
