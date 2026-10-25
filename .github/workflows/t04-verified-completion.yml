@@ -1,0 +1,187 @@
+name: Verify T04 completion and deliver exact CI without model replay
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/t04-verified-completion.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      artifact_id: ${{ steps.audit.outputs.artifact-id }}
+      artifact_digest: ${{ steps.audit.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 227f287ff2f6dfdd035a587689536ccf10ddced9
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580874431'
+          run-id: '40147390593'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-final-source
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580346942'
+          run-id: '40145732417'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-original-source
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Authenticate exact bytes, roles, tests, CI and consumed execution claims
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/t04-final-source
+          ORIGINAL_ROOT: ${{ runner.temp }}/t04-original-source
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/t04-verified-completion.mjs <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,readdirSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';import {parseCalculatorExecutionCheckpointBytes} from '../orchestration/calculatorExecutionCheckpoint.js';import {calculatorProposalDigest} from '../orchestration/calculatorExecutionEvidence.js';import {createCalculatorSnapshotReader,loadCalculatorSnapshot,calculatorSources} from '../github/calculatorSnapshot.js';import {createCalculatorCiReader} from '../github/calculatorCi.js';import {verifyCalculatorAfterCiCandidateCi} from '../orchestration/calculatorAfterCi.js';import {createCalculatorLiveBarrier} from '../orchestration/calculatorLiveBarrier.js';import {CALCULATOR_NARROW_BROWSER_SCENARIOS,CALCULATOR_NARROW_DOM_SELECTORS} from '../orchestration/calculatorAssessmentEvidence.js';
+          const FACTORY='erman-ksv/Onay-Agents-Factory',REPO='erman-ksv/Onay-Factory-Calculator',TASK='calculator-pilot-step7-v1-34ee03-t04',BASE='10b4dddb9fd8881030155336a07a12b2cf739993',CANDIDATE='eac625e5830612c64fb8dafbd3d239c72adbeafd',DIGEST='f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf',KEY='0655b242bae1a4be2da6952c517e100afb9d7549254b999ba21d78bfc9409b2c',sha=b=>createHash('sha256').update(b).digest('hex');
+          assert.equal(process.env.GROQ_API_KEY,undefined);assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');
+          async function get(repo,path){const token=repo===FACTORY?process.env.FACTORY_STATE_TOKEN:process.env.GITHUB_TOKEN;const r=await fetch('https://api.github.com/repos/'+repo+path,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'},redirect:'error',signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);const b=await r.text();assert.ok(Buffer.byteLength(b)<1048576);return JSON.parse(b);}
+          const artifact=await get(FACTORY,'/actions/artifacts/12580874431');assert.equal(artifact.workflow_run.id,40147390593);assert.equal(artifact.digest,'sha256:2435e59e7f6b84aa2f446cdc5920f8bd41a5c417c2a984470a200401bb957139');assert.equal(artifact.expired,false);
+          const run=await get(FACTORY,'/actions/runs/40147390593');assert.equal(run.head_sha,'8fa1d2242c16025722271c572ccc2faee7a8c462');assert.equal(run.run_attempt,1);assert.equal(run.conclusion,'failure');
+          const root=process.env.SOURCE_ROOT,report=JSON.parse(readFileSync(root+'/report.json'));assert.equal(report.newModelCalls,3);assert.equal(report.execution.reasonCode,'publication_or_ci_uncertain_inspect_no_replay');assert.equal(report.frozenProposalDigest,DIGEST);assert.equal(report.correctionConsumed,true);assert.equal(report.applicationCodeChangedByHost,false);assert.deepEqual(report.currentCharge,{attemptedRequests:8,totalRequestBytes:58775,reservedRunTokens:24994,elapsedMs:283356});
+          const fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal),bytes=readFileSync(root+'/execution-private/'+TASK+'.execution.json'),identity={repository:REPO,goalId:plan.owner.id,ownerFingerprint:plan.owner.ownerFingerprint,planFingerprint:plan.fingerprint,taskId:TASK,branch:plan.branch,baseSha:BASE,bootstrapSha:plan.owner.baseSha,runtimeConfigDigest:sha(JSON.stringify({runtimeSha:'227f287ff2f6dfdd035a587689536ccf10ddced9',runId:'40147390593',preset:'calculator-frontend-2048-four-roles',ownerAllowance:'owner-t04-eight-free-calls-48000-20261024',eventKey:KEY,phase:'three-fresh-reviews-actual-dom-evidence'}))};
+          const data=parseCalculatorExecutionCheckpointBytes(bytes,identity,sha(bytes)).data,p=data.payload;assert.equal(data.proposalDigest,DIGEST);assert.equal(calculatorProposalDigest(p.proposal),DIGEST);assert.equal(p.stage,'publish_candidate');assert.equal(p.status,'blocked');assert.equal(p.publicationStarted,true);assert.equal(p.httpInFlight,false);assert.equal(p.assessments.length,3);assert.ok(p.assessments.every((a,i)=>a.role===['security','reviewer','tester'][i]&&a.ready&&!a.findings.some(f=>['high','blocker'].includes(f.severity))&&a.testsExecuted===false&&a.publicationAuthorized===false));
+          const browser=JSON.parse(readFileSync(root+'/browser-'+DIGEST+'.json')),node=JSON.parse(readFileSync(root+'/checks-'+DIGEST+'.json'));for(const proof of [browser,node]){assert.equal(proof.repository,REPO);assert.equal(proof.taskId,TASK);assert.equal(proof.baseSha,BASE);assert.equal(proof.proposalDigest,DIGEST);assert.equal(proof.status,'passed');assert.equal(proof.testsExecuted,true);}assert.deepEqual(node.failures,[]);assert.equal(browser.sandboxDisabled,false);assert.equal(browser.pageErrors,0);assert.equal(browser.blockedRequests,0);assert.deepEqual(browser.scenarios,CALCULATOR_NARROW_BROWSER_SCENARIOS);assert.deepEqual(browser.domSelectors.map(f=>f.selector),CALCULATOR_NARROW_DOM_SELECTORS);assert.ok(browser.domSelectors.every(f=>Number.isSafeInteger(f.matches)&&f.matches>0));
+          const reader=createCalculatorSnapshotReader();assert.equal(await reader.getHead(plan.branch),CANDIDATE);assert.equal(await reader.getHead(plan.owner.baseRef),plan.owner.baseSha);const commit=await get(REPO,'/git/commits/'+CANDIDATE);assert.deepEqual(commit.parents.map(p=>p.sha),[BASE]);const beforeCommit=await reader.readCommit(BASE),before=await reader.readTree(beforeCommit.treeSha),after=await reader.readTree(commit.tree.sha);assert.equal(before.truncated,false);assert.equal(after.truncated,false);const b=new Map(before.tree.filter(x=>x.type!=='tree').map(x=>[x.path,x.sha])),a=new Map(after.tree.filter(x=>x.type!=='tree').map(x=>[x.path,x.sha]));const changed=[...new Set([...b.keys(),...a.keys()])].filter(p=>b.get(p)!==a.get(p)).sort();assert.deepEqual(changed,['styles.css']);assert.deepEqual(p.proposal.files.map(f=>f.path),changed);
+          const snap=await loadCalculatorSnapshot({repository:REPO,baseRef:plan.branch,baseSha:CANDIDATE,changePaths:changed},reader),sources=calculatorSources(snap);assert.equal(sources.get('styles.css'),p.proposal.files[0].content);assert.equal(sha(sources.get('styles.css')),'d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f');
+          const pr=await get(REPO,'/pulls/1');assert.equal(pr.head.sha,CANDIDATE);assert.equal(pr.head.ref,plan.branch);assert.equal(pr.base.sha,plan.owner.baseSha);assert.equal(pr.base.ref,plan.owner.baseRef);assert.equal(pr.state,'open');assert.equal(pr.draft,true);
+          const path='.github/workflows/calculator-task-ci.yml',initial=await get(REPO,'/contents/'+path+'?ref='+plan.owner.baseSha);assert.equal(a.get(path),initial.sha);assert.equal(b.get(path),initial.sha);const ci=createCalculatorCiReader({trustedWorkflows:[{id:390241255,path,blobSha:initial.sha}]}),proof=await ci({repository:REPO,branch:plan.branch,candidateSha:CANDIDATE});assert.ok(verifyCalculatorAfterCiCandidateCi(proof,REPO,plan.branch,CANDIDATE));assert.ok(proof.provenance.verifiedRunIds.includes(40147661281));
+          const oldState=process.env.ORIGINAL_ROOT+'/state',compared=[];for(const path of readdirSync(oldState).filter(p=>p.endsWith('.json'))){assert.equal(sha(readFileSync(root+'/state/'+path)),sha(readFileSync(oldState+'/'+path)));compared.push(path);}assert.ok(compared.length>=6);
+          const replay=[];for(const [suffix,runtimeSha,sourceCiRunId]of [['-t04-exec','4dc0a28eae7c2950234a8466edb28d4ed8fa74cc',40145614273],['-t04-fix1','bb639188f2454cf20bc68d30bc59913c515c292f',40146290169],['-t04-dom3','227f287ff2f6dfdd035a587689536ccf10ddced9',40147202434]]){const barrier=createCalculatorLiveBarrier({runtimeSha,sourceCiRunId,planFingerprint:plan.fingerprint,previousTaskId:plan.tasks[2].id+suffix,candidateSha:BASE},process.env);assert.equal(await barrier.inspectAbsent(),false);replay.push({ref:barrier.ref,status:'duplicate-refused-before-model',modelCalls:0});}
+          assert.equal(await reader.getHead(plan.branch),CANDIDATE);const result={version:1,status:'t04-candidate-verified-after-readonly-reconciliation',taskId:TASK,planFingerprint:plan.fingerprint,candidateSha:CANDIDATE,parentSha:BASE,proposalDigest:DIGEST,publishedCssSha256:sha(sources.get('styles.css')),sourceRunId:40147390593,sourceArtifactId:12580874431,sourceCapsuleSha256:sha(bytes),verifiedCiRunId:40147661281,changedPaths:changed,nodeChecks:node,browserChecks:browser,assessments:p.assessments,priorReviewerFindingPreserved:report.previousAssessmentsPreserved[1],historicalReceiptsCompared:compared,executionReplay:replay,charge:report.currentCharge,ownerRequestSlotsRemaining:0,ownerReservedTokensRemaining:23006,modelCalls:0,writes:0,sourceReceiptPreserved:true,wholeCalculatorCompleted:false,legalEnabled:false};
+          writeFileSync(process.env.RUNNER_TEMP+'/t04-verified-completion.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
+          JS
+          pnpm exec tsx scripts/t04-verified-completion.mjs
+      - uses: actions/upload-artifact@v4
+        id: audit
+        if: always()
+        with:
+          name: t04-verified-completion-${{ github.run_id }}
+          path: ${{ runner.temp }}/t04-verified-completion.json
+          if-no-files-found: ignore
+          retention-days: 14
+  deliver:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 227f287ff2f6dfdd035a587689536ccf10ddced9
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-completion-proof
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Automatically receive exact T04 CI and queue next saved-plan task with zero model authorization
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/t04-completion-proof
+          AUDIT_ARTIFACT_ID: ${{ needs.verify.outputs.artifact_id }}
+          AUDIT_ARTIFACT_DIGEST: ${{ needs.verify.outputs.artifact_digest }}
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/t04-after-ci-inbox.mjs <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';import {deliverCalculatorCompletedCi} from '../orchestration/calculatorCiDelivery.js';import {createCalculatorCiDeliveryStore} from '../github/calculatorCiDeliveryStore.js';import {createCalculatorSnapshotReader} from '../github/calculatorSnapshot.js';import {createCalculatorCiReader} from '../github/calculatorCi.js';import {verifyCalculatorAfterCiCandidateCi} from '../orchestration/calculatorAfterCi.js';
+          const REPO='erman-ksv/Onay-Factory-Calculator',FACTORY='erman-ksv/Onay-Agents-Factory',CANDIDATE='eac625e5830612c64fb8dafbd3d239c72adbeafd';assert.equal(process.env.GROQ_API_KEY,undefined);assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');
+          async function get(repo,path){const r=await fetch('https://api.github.com/repos/'+repo+path,{headers:{Authorization:'Bearer '+(repo===FACTORY?process.env.FACTORY_STATE_TOKEN:process.env.GITHUB_TOKEN)},redirect:'error',signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);return r.json();}
+          const a=await get(FACTORY,'/actions/artifacts/'+process.env.AUDIT_ARTIFACT_ID);assert.equal(a.workflow_run.id,Number(process.env.GITHUB_RUN_ID));assert.equal(a.workflow_run.head_sha,process.env.GITHUB_SHA);assert.equal(a.digest,'sha256:'+process.env.AUDIT_ARTIFACT_DIGEST.replace(/^sha256:/,''));assert.equal(a.expired,false);
+          const bytes=readFileSync(process.env.SOURCE_ROOT+'/t04-verified-completion.json'),audit=JSON.parse(bytes),fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal);assert.equal(audit.status,'t04-candidate-verified-after-readonly-reconciliation');assert.equal(audit.taskId,plan.tasks[3].id);assert.equal(audit.candidateSha,CANDIDATE);assert.equal(audit.verifiedCiRunId,40147661281);assert.equal(audit.charge.attemptedRequests,8);assert.ok(audit.assessments.every(a=>a.ready));assert.equal(audit.modelCalls,0);
+          const request={version:1,repository:REPO,planFingerprint:plan.fingerprint,taskId:plan.tasks[3].id,candidateSha:CANDIDATE,ciRunId:40147661281},reader=createCalculatorSnapshotReader(),wf='.github/workflows/calculator-task-ci.yml',initial=await get(REPO,'/contents/'+wf+'?ref='+plan.owner.baseSha),ci=createCalculatorCiReader({trustedWorkflows:[{id:390241255,path:wf,blobSha:initial.sha}]});let verified=0;
+          const host={store:createCalculatorCiDeliveryStore(process.env.FACTORY_STATE_TOKEN),getCurrentHead:ref=>reader.getHead(ref),verify:async r=>{verified++;const proof=await ci({repository:REPO,branch:plan.branch,candidateSha:CANDIDATE});assert.ok(verifyCalculatorAfterCiCandidateCi(proof,REPO,plan.branch,CANDIDATE));assert.ok(proof.provenance.verifiedRunIds.includes(r.ciRunId));return {repository:REPO,planFingerprint:plan.fingerprint,taskId:r.taskId,candidateSha:r.candidateSha,ciRunId:r.ciRunId,verifiedTaskIds:plan.tasks.slice(0,4).map(t=>t.id),evidenceSha256:createHash('sha256').update(bytes).digest('hex')};}};
+          const first=await deliverCalculatorCompletedCi(plan,request,host);assert.ok(['queued','duplicate'].includes(first.status));assert.equal(first.record.nextTaskId,plan.tasks[4].id);assert.equal(first.record.modelRequestsAuthorized,0);const again=await deliverCalculatorCompletedCi(plan,request,{...host,store:createCalculatorCiDeliveryStore(process.env.FACTORY_STATE_TOKEN),verify:async()=>{throw Error('Duplicate must not execute');}});assert.equal(again.status,'duplicate');assert.deepEqual(again.record,first.record);
+          const out={version:1,status:'t04-ci-delivered-t05-queued-no-execution',candidateSha:CANDIDATE,firstDelivery:first.status,repeatDelivery:again.status,eventKey:first.key,record:first.record,verificationCalls:verified,modelCalls:0,taskStarted:false,legalEnabled:false};writeFileSync(process.env.RUNNER_TEMP+'/t04-after-ci-inbox.json',JSON.stringify(out,null,2)+'\n');console.log(JSON.stringify(out));
+          JS
+          pnpm exec tsx scripts/t04-after-ci-inbox.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t04-after-ci-inbox-${{ github.run_id }}
+          path: ${{ runner.temp }}/t04-after-ci-inbox.json
+          if-no-files-found: ignore
+          retention-days: 14
+  redeliver:
+    needs: [verify, deliver]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 227f287ff2f6dfdd035a587689536ccf10ddced9
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t04-completion-proof
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Automatically receive exact T04 CI and queue next saved-plan task with zero model authorization
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/t04-completion-proof
+          AUDIT_ARTIFACT_ID: ${{ needs.verify.outputs.artifact_id }}
+          AUDIT_ARTIFACT_DIGEST: ${{ needs.verify.outputs.artifact_digest }}
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/t04-after-ci-inbox.mjs <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';import {deliverCalculatorCompletedCi} from '../orchestration/calculatorCiDelivery.js';import {createCalculatorCiDeliveryStore} from '../github/calculatorCiDeliveryStore.js';import {createCalculatorSnapshotReader} from '../github/calculatorSnapshot.js';import {createCalculatorCiReader} from '../github/calculatorCi.js';import {verifyCalculatorAfterCiCandidateCi} from '../orchestration/calculatorAfterCi.js';
+          const REPO='erman-ksv/Onay-Factory-Calculator',FACTORY='erman-ksv/Onay-Agents-Factory',CANDIDATE='eac625e5830612c64fb8dafbd3d239c72adbeafd';assert.equal(process.env.GROQ_API_KEY,undefined);assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');
+          async function get(repo,path){const r=await fetch('https://api.github.com/repos/'+repo+path,{headers:{Authorization:'Bearer '+(repo===FACTORY?process.env.FACTORY_STATE_TOKEN:process.env.GITHUB_TOKEN)},redirect:'error',signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);return r.json();}
+          const a=await get(FACTORY,'/actions/artifacts/'+process.env.AUDIT_ARTIFACT_ID);assert.equal(a.workflow_run.id,Number(process.env.GITHUB_RUN_ID));assert.equal(a.workflow_run.head_sha,process.env.GITHUB_SHA);assert.equal(a.digest,'sha256:'+process.env.AUDIT_ARTIFACT_DIGEST.replace(/^sha256:/,''));assert.equal(a.expired,false);
+          const bytes=readFileSync(process.env.SOURCE_ROOT+'/t04-verified-completion.json'),audit=JSON.parse(bytes),fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal);assert.equal(audit.status,'t04-candidate-verified-after-readonly-reconciliation');assert.equal(audit.taskId,plan.tasks[3].id);assert.equal(audit.candidateSha,CANDIDATE);assert.equal(audit.verifiedCiRunId,40147661281);assert.equal(audit.charge.attemptedRequests,8);assert.ok(audit.assessments.every(a=>a.ready));assert.equal(audit.modelCalls,0);
+          const request={version:1,repository:REPO,planFingerprint:plan.fingerprint,taskId:plan.tasks[3].id,candidateSha:CANDIDATE,ciRunId:40147661281},reader=createCalculatorSnapshotReader(),wf='.github/workflows/calculator-task-ci.yml',initial=await get(REPO,'/contents/'+wf+'?ref='+plan.owner.baseSha),ci=createCalculatorCiReader({trustedWorkflows:[{id:390241255,path:wf,blobSha:initial.sha}]});let verified=0;
+          const host={store:createCalculatorCiDeliveryStore(process.env.FACTORY_STATE_TOKEN),getCurrentHead:ref=>reader.getHead(ref),verify:async r=>{verified++;const proof=await ci({repository:REPO,branch:plan.branch,candidateSha:CANDIDATE});assert.ok(verifyCalculatorAfterCiCandidateCi(proof,REPO,plan.branch,CANDIDATE));assert.ok(proof.provenance.verifiedRunIds.includes(r.ciRunId));return {repository:REPO,planFingerprint:plan.fingerprint,taskId:r.taskId,candidateSha:r.candidateSha,ciRunId:r.ciRunId,verifiedTaskIds:plan.tasks.slice(0,4).map(t=>t.id),evidenceSha256:createHash('sha256').update(bytes).digest('hex')};}};
+          const first=await deliverCalculatorCompletedCi(plan,request,host);assert.ok(['queued','duplicate'].includes(first.status));assert.equal(first.record.nextTaskId,plan.tasks[4].id);assert.equal(first.record.modelRequestsAuthorized,0);const again=await deliverCalculatorCompletedCi(plan,request,{...host,store:createCalculatorCiDeliveryStore(process.env.FACTORY_STATE_TOKEN),verify:async()=>{throw Error('Duplicate must not execute');}});assert.equal(again.status,'duplicate');assert.deepEqual(again.record,first.record);
+          const out={version:1,status:'t04-ci-delivered-t05-queued-no-execution',candidateSha:CANDIDATE,firstDelivery:first.status,repeatDelivery:again.status,eventKey:first.key,record:first.record,verificationCalls:verified,modelCalls:0,taskStarted:false,legalEnabled:false};writeFileSync(process.env.RUNNER_TEMP+'/t04-after-ci-inbox.json',JSON.stringify(out,null,2)+'\n');console.log(JSON.stringify(out));
+          JS
+          pnpm exec tsx scripts/t04-after-ci-inbox.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t04-after-ci-redelivery-${{ github.run_id }}
+          path: ${{ runner.temp }}/t04-after-ci-inbox.json
+          if-no-files-found: ignore
+          retention-days: 14
