@@ -1,3 +1,4 @@
+import {calculatorDraftPublication,confirmCalculatorDraftPublication} from './calculatorPrConfirmation.js';
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -50,7 +51,8 @@ export const runCalculatorGit: CalculatorGitRunner = request => new Promise((res
 });
 
 /** Independent host-only publisher. Offline process/HTTP injection is not a model
- * tool and does not weaken live authorization. No network operation is retried. */
+ * tool and does not weaken live authorization. No write or failed HTTP is retried.
+ * Only successful stale PR-detail reads have bounded confirmation polling. */
 export function createCalculatorPublisher(options: {
   plan: CalculatorPlan; reader: CalculatorSnapshotReader; env: NodeJS.ProcessEnv;
   transport?: typeof fetch; runGit?: CalculatorGitRunner;
@@ -158,12 +160,7 @@ export function createCalculatorPublisher(options: {
     } catch { return refuse(); }
   }
   function publication(value: unknown, candidate: string): TeamTaskPublication {
-    const pr = value as { number: number; html_url: string; state: string; draft: boolean;
-      head: { ref: string; sha: string; repo: { full_name: string } }; base: { ref: string; sha: string; repo: { full_name: string } } };
-    if (!pr || !Number.isSafeInteger(pr.number) || pr.number < 1 || pr.html_url !== "https://github.com/" + plan.owner.repository + "/pull/" + pr.number ||
-        pr.state !== "open" || pr.draft !== true || pr.head?.repo?.full_name !== plan.owner.repository || pr.base?.repo?.full_name !== plan.owner.repository ||
-        pr.head.ref !== plan.branch || pr.head.sha !== candidate || pr.base.ref !== plan.owner.baseRef || pr.base.sha !== plan.owner.baseSha) return refuse();
-    return { branch: plan.branch, headSha: candidate, number: pr.number, url: pr.html_url };
+    return calculatorDraftPublication({repository:plan.owner.repository,branch:plan.branch,baseRef:plan.owner.baseRef,baseSha:plan.owner.baseSha},value,candidate);
   }
   return Object.freeze({
     async bootstrapProjectBranch(): Promise<{ branch: string; headSha: string; created: boolean }> {
@@ -230,7 +227,9 @@ export function createCalculatorPublisher(options: {
           // the fresh detail response must prove the exact new candidate.
           existingNumber = publication(list[0], listed.head.sha).number;
         }
-        phase=existingNumber?"pr_detail":"pr_create";const pr = existingNumber ? publication(await readJson("/pulls/" + existingNumber), candidate) : publication(await readJson("/pulls", "POST", {
+        phase=existingNumber?"pr_detail":"pr_create";const pr = existingNumber ? await confirmCalculatorDraftPublication({repository:plan.owner.repository,branch:plan.branch,baseRef:plan.owner.baseRef,baseSha:plan.owner.baseSha},candidate,input.expectedSha,existingNumber,{
+          readDetail:()=>readJson("/pulls/"+existingNumber),assertCurrent:async()=>{if(await reader.getHead(plan.branch)!==candidate)return refuse();await baseCurrent();},
+        }) : publication(await readJson("/pulls", "POST", {
           title: "Calculator pilot: " + plan.owner.id, head: plan.branch, base: plan.owner.baseRef, draft: true, maintainer_can_modify: false,
           body: "Bounded calculator task " + task.id + ".\n\nPlan fingerprint: " + plan.fingerprint + "\nCandidate: " + candidate +
             "\n\nDraft only. Exact-candidate task/final CI and independent acceptance remain mandatory. No merge, deployment or legal approval.",

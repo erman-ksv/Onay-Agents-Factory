@@ -284,3 +284,18 @@ test("uncertain or no-op push never becomes an acknowledged publication diagnost
  for(const mode of ["lost-ack","up-to-date"]){const f=await fixture();let failure:unknown;const git=async(request:CalculatorGitRequest)=>{const result=await f.git(request);if(command(request)==="push"){if(mode==="lost-ack")throw Error("PRIVATE_UPSTREAM_BODY "+authorized.GITHUB_TOKEN);return {status:0,stdout:"=\t"+C+":refs/heads/"+plan.branch+"\t[up to date]\n"};}return result;};
  try{await createCalculatorPublisher({...f.options,runGit:git}).publish(f.input);}catch(error){failure=error;}assert.ok(refuse(failure));const d=calculatorPublicationDiagnostic(failure)!;assert.equal(d.phase,"git_push");assert.equal(d.writeAttempted,true);assert.equal(d.pushAcknowledged,false);assert.equal(f.http.length,0);assert.equal(f.requests.filter(r=>command(r)==="push").length,1);}
 });
+
+test('stale PR detail converges through reads without a second push, POST or model replay',async()=>{
+ const f=await fixture();let details=0,posts=0;const transport:typeof fetch=async(url,init)=>{
+  if(init?.method==='POST')posts++;if(String(url).includes('/pulls?'))return Response.json([f.pr()]);
+  const value=f.pr();if(++details<3)value.head.sha=A;return Response.json(value);
+ };const publisher=createCalculatorPublisher({...f.options,transport});assert.equal((await publisher.publish(f.input)).headSha,C);
+ assert.equal(details,3);assert.equal(posts,0);assert.equal(f.requests.filter(r=>command(r)==='push').length,1);
+ const count=f.requests.length;await assert.rejects(()=>publisher.publish(f.input),refuse);assert.equal(f.requests.length,count);assert.equal(details,3);
+});
+test('PR detail HTTP 429 after stale data is terminal and acknowledged push never repeats',async()=>{
+ const f=await fixture();let details=0;const transport:typeof fetch=async url=>{if(String(url).includes('/pulls?'))return Response.json([f.pr()]);if(++details===1){const value=f.pr();value.head.sha=A;return Response.json(value);}return new Response('PRIVATE_UPSTREAM_BODY',{status:429});};
+ const publisher=createCalculatorPublisher({...f.options,transport});let diagnostic:ReturnType<typeof calculatorPublicationDiagnostic>;
+ await assert.rejects(()=>publisher.publish(f.input),e=>{diagnostic=calculatorPublicationDiagnostic(e);return refuse(e)&&!String(e).includes('PRIVATE_UPSTREAM_BODY');});assert.equal(details,2);assert.equal(diagnostic?.phase,'pr_detail');assert.equal(diagnostic?.httpStatus,429);assert.equal(diagnostic?.pushAcknowledged,true);assert.equal(f.requests.filter(r=>command(r)==='push').length,1);
+ await assert.rejects(()=>publisher.publish(f.input),refuse);assert.equal(details,2);
+});
