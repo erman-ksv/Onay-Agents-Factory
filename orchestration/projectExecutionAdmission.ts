@@ -24,7 +24,7 @@ export function createProjectExecutionAdmission(plan:PreparedProjectPlan,control
    async prepare(taskId:string):Promise<ProjectExecutionAdmission>{
     try{active();if(busy)return refuse();busy=true;const task=plan.tasks.find(t=>t.id===taskId);if(!task)return refuse();assertProjectTargetScope(target,{repository:plan.repository,branch:plan.branch,changePaths:task.paths});await current(task);
      const budget=await controller.inspect();active();if(budget.remaining.requests<4||budget.remaining.requestBytes<1||budget.remaining.reservedTokens<1)return refuse();
-     const executionId='project-task-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,taskId])).digest('hex').slice(0,32),scope=await controller.taskScope(taskId,executionId);await current(task);active();
+     const executionId='project-run-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,taskId])).digest('hex').slice(0,32),scope=await controller.taskScope(taskId,executionId);await current(task);active();
      const admission=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(admission,{plan,taskId,scope,assertCurrent:()=>current(task),consumed:false});return admission;
     }catch{stopped=true;return refuse();}finally{busy=false;}
    },
