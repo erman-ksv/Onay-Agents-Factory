@@ -7,7 +7,7 @@ import {parseTeamTaskSnapshotBytes} from './teamTaskStore.js';
 export const CALCULATOR_RECOVERY_STATE_ERROR='Authenticated recovery state restoration refused; preserve existing state. No execution is authorized.';
 const refuse=():never=>{throw Error(CALCULATOR_RECOVERY_STATE_ERROR);};
 export type CalculatorRecoveryStateMapping=Readonly<{
- planPath:string;planningReceiptPath:string;taskId:string;
+ planPath:string;planningReceiptPath:string;checkpointPath:string;taskId:string;
  receipts:readonly Readonly<{taskId:string;path:string}>[];
 }>;
 /** Restore only authenticated metadata into a NEW private directory. Original
@@ -21,11 +21,11 @@ export async function restoreCalculatorRecoveryState(artifact:CalculatorRecovery
   if(!isCalculatorRecoveryArtifact(artifact))return refuse();
   // Snapshot plain JSON configuration before the first asynchronous boundary.
   const plainData=(v:unknown,keys:string[])=>{if(!planObject(v)||!planKeys(v,keys)||Object.values(Object.getOwnPropertyDescriptors(v)).some(d=>!Object.hasOwn(d,'value')))return refuse();};
-  plainData(mapping,['planPath','planningReceiptPath','taskId','receipts']);
+  plainData(mapping,['planPath','planningReceiptPath','checkpointPath','taskId','receipts']);
   if(!Array.isArray(mapping.receipts)||mapping.receipts.length>8)return refuse();
   for(const entry of mapping.receipts)plainData(entry,['taskId','path']);
   const copy=JSON.parse(JSON.stringify(mapping)) as CalculatorRecoveryStateMapping;
-  if(!planObject(copy)||!planKeys(copy,['planPath','planningReceiptPath','taskId','receipts'])||!Array.isArray(copy.receipts))return refuse();
+  if(!planObject(copy)||!planKeys(copy,['planPath','planningReceiptPath','checkpointPath','taskId','receipts'])||!Array.isArray(copy.receipts))return refuse();
   const planBytes=artifact.readPrivateFile(copy.planPath),document:unknown=JSON.parse(planBytes.toString('utf8'));
   if(!planObject(document)||!planKeys(document,['version','request','proposal','fingerprint'])||document.version!==1)return refuse();
   const plan=createCalculatorPlan(ownerRequest,document.proposal),archived=createCalculatorPlan(document.request,document.proposal);
@@ -38,7 +38,7 @@ export async function restoreCalculatorRecoveryState(artifact:CalculatorRecovery
   if(marker.status!=='needs-review'||marker.reasonCode!=='plan_saved_not_execution'||marker.publication||marker.stages.length!==3||
    marker.stages.some(s=>s.status!=='passed')||marker.stages[0]?.stage!=='save_plan'||marker.stages[1]?.stage!=='digest_a_'+plan.fingerprint.slice(0,32)||marker.stages[2]?.stage!=='digest_b_'+plan.fingerprint.slice(32))return refuse();
   files.set(markerName+'.json',markerBytes);
-  const sourcePaths=[copy.planPath,copy.planningReceiptPath];
+  const sourcePaths=[copy.planPath,copy.planningReceiptPath,copy.checkpointPath];
   for(const [i,entry] of copy.receipts.entries()){
    if(!planObject(entry)||!planKeys(entry,['taskId','path'])||typeof entry.path!=='string'||entry.taskId!==plan.tasks[i]?.id)return refuse();
    sourcePaths.push(entry.path);const bytes=artifact.readPrivateFile(entry.path);
@@ -50,6 +50,9 @@ export async function restoreCalculatorRecoveryState(artifact:CalculatorRecovery
    files.set('calc-'+entry.taskId+'.json',bytes);
   }
   if(new Set(sourcePaths).size!==sourcePaths.length||!isAbsolute(directory)||resolve(directory)!==directory)return refuse();
+  // Verify the complete authenticated ZIP inventory, including unselected entries.
+  // This proves archive coverage, not that its producer captured every live file.
+  artifact.assertExactFiles(sourcePaths);
   const parent=dirname(directory);if(realpathSync(parent)!==parent)return refuse();
   const before=lstatSync(parent);if(!before.isDirectory()||before.isSymbolicLink()||(before.mode&0o777)!==0o700||(process.getuid&&before.uid!==process.getuid()))return refuse();
   parentFd=openSync(parent,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);

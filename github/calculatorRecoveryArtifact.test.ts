@@ -51,3 +51,14 @@ test('a real artifact capability supplies runtime source assertion while a JSON 
  const host=createCalculatorRecoveryArtifactHost(cap,mapping,operations),binding={checkpointSha256:host.expectedSha256,receiptSha256:host.receiptSha256,taskId:host.identity.taskId,baseSha:host.identity.baseSha,executionId:'rejected-'+'f'.repeat(64)};
  identity.taskId='mutated-after-creation';await host.assertSourceRemote(binding);assert.equal(claims,0);await assert.rejects(()=>host.assertSourceRemote({...binding,receiptSha256:'b'.repeat(64)}));f.expire();await assert.rejects(()=>host.assertSourceRemote(binding));
 });
+
+test('exact archive coverage refuses omitted unselected entries without exposing their contents',async()=>{
+ const f=fixture('recovery'),pin={...f.pin,files:[f.pin.files[0]!]},cap=await loadCalculatorRecoveryArtifact(pin,env,f.transport);
+ assert.throws(()=>cap.assertExactFiles([pin.files[0]!.path]),error);assert.ok(!JSON.stringify(cap).includes('PRIVATE_SOURCE_MARKER'));
+ const all=await loadCalculatorRecoveryArtifact(f.pin,env,f.transport);all.assertExactFiles(f.pin.files.map(file=>file.path));
+ for(const paths of [[],[f.pin.files[0]!.path,f.pin.files[0]!.path],['../escape'],['missing.json']])assert.throws(()=>all.assertExactFiles(paths),error);
+});
+test('exact inventory refuses lazy arrays and refuses again after provenance is lost',async()=>{
+ const f=fixture(),cap=await loadCalculatorRecoveryArtifact(f.pin,env,f.transport);let evaluations=0;const paths=['checkpoint.json'];Object.defineProperty(paths,'0',{get(){evaluations++;return 'checkpoint.json';}});assert.throws(()=>cap.assertExactFiles(paths),error);assert.equal(evaluations,0);
+ cap.assertExactFiles(['checkpoint.json']);f.expire();await assert.rejects(()=>cap.assertRemote(),error);assert.throws(()=>cap.assertExactFiles(['checkpoint.json']),error);
+});

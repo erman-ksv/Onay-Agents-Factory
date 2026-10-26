@@ -31,7 +31,7 @@ export async function restoreCalculatorRecoveryArtifactHost(artifact:CalculatorR
  operations:Pick<CalculatorRuntimeRecoveryHost,'verifyDependencies'|'claimRecovery'|'assertRecovery'>){
  try{
  const host=createCalculatorRecoveryArtifactHost(artifact,source,operations);
- if(state.taskId!==host.identity.taskId||!state.receipts.some(r=>r.taskId===host.identity.taskId&&r.path===source.receiptPath))
+ if(state.checkpointPath!==source.checkpointPath||state.taskId!==host.identity.taskId||!state.receipts.some(r=>r.taskId===host.identity.taskId&&r.path===source.receiptPath))
   throw Error('Authenticated recovery source and state do not match.');
  const archived=JSON.parse(artifact.readPrivateFile(state.planPath).toString('utf8')),plan=createCalculatorPlan(ownerRequest,archived.proposal);
  if(plan.fingerprint!==host.identity.planFingerprint||plan.owner.ownerFingerprint!==host.identity.ownerFingerprint||plan.owner.id!==host.identity.goalId||plan.owner.baseSha!==host.identity.bootstrapSha||plan.branch!==host.identity.branch)throw Error('Authenticated recovery source and plan do not match.');

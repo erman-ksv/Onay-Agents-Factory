@@ -24,7 +24,7 @@ function crc(b:Buffer){let n=0xffffffff;for(const v of b)n=crcTable[(n^v)&255]!^
 /** Bounded ZIP reader: stored/deflate, UTF-8/ASCII, optional data descriptors.
  * Nothing is written or executed. All names/types/ranges are checked, including
  * unselected entries; only independently pinned files are decompressed. */
-function readZip(zip:Buffer,pin:CalculatorRecoveryArtifactPin):ReadonlyMap<string,Buffer>{
+function readZip(zip:Buffer,pin:CalculatorRecoveryArtifactPin){
  let end=-1;for(let i=zip.length-22;i>=Math.max(0,zip.length-65557);i--)if(zip.readUInt32LE(i)===0x06054b50&&i+22+zip.readUInt16LE(i+20)===zip.length){end=i;break;}
  if(end<0||zip.readUInt16LE(end+4)||zip.readUInt16LE(end+6))return refuse();const count=zip.readUInt16LE(end+10),directory=zip.readUInt32LE(end+16),directorySize=zip.readUInt32LE(end+12);
  if(!count||count>2048||zip.readUInt16LE(end+8)!==count||directory+directorySize!==end)return refuse();
@@ -48,9 +48,9 @@ function readZip(zip:Buffer,pin:CalculatorRecoveryArtifactPin):ReadonlyMap<strin
  }
  if(cursor!==end||result.size!==selected.size)return refuse();ranges.sort((a,b)=>a[0]-b[0]);for(let i=1;i<ranges.length;i++)if(ranges[i]![0]<ranges[i-1]![1])return refuse();
  for(const name of names.keys()){const parts=name.split('/');for(let i=1;i<parts.length;i++)if(names.get(parts.slice(0,i).join('/'))===false)return refuse();}
- return result;
+ return {files:result,names};
 }
-export type CalculatorRecoveryArtifact=Readonly<{metadata:CalculatorRecoveryArtifactPin;readPrivateFile:(path:string)=>Buffer;assertRemote:()=>Promise<void>}>;
+export type CalculatorRecoveryArtifact=Readonly<{metadata:CalculatorRecoveryArtifactPin;readPrivateFile:(path:string)=>Buffer;assertExactFiles:(paths:readonly string[])=>void;assertRemote:()=>Promise<void>}>;
 const artifacts=new WeakSet<object>();
 export function isCalculatorRecoveryArtifact(v:unknown):v is CalculatorRecoveryArtifact{return !!v&&typeof v==='object'&&artifacts.has(v);}
 /** Host pins must be reviewed outside the downloaded archive. Native run and
@@ -67,7 +67,17 @@ export async function loadCalculatorRecoveryArtifact(input:CalculatorRecoveryArt
   }catch{stopped=true;return refuse();}}
   await assertRemote();let response=await get('/actions/artifacts/'+pin.artifactId+'/zip',false) as Response;
   if(response.status===302){const location=response.headers.get('location');void response.body?.cancel().catch(()=>undefined);if(!location)return refuse();const url=new URL(location);if(url.protocol!=='https:'||url.username||url.password||url.port||!['.blob.core.windows.net','.actions.githubusercontent.com'].some(s=>url.hostname.endsWith(s)))return refuse();if(++requests>64)return refuse();response=await transport(url.toString(),{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000)});}
-  if(response.status!==200){void response.body?.cancel().catch(()=>undefined);return refuse();}const zip=await body(response,MAX_ZIP);if(zip.length!==pin.size||hash(zip)!==pin.sha256)return refuse();const files=readZip(zip,pin);await assertRemote();
-  const cap=Object.freeze({metadata:pin,readPrivateFile:(name:string)=>{if(stopped||!files.has(name))return refuse();return Buffer.from(files.get(name)!);},assertRemote});artifacts.add(cap);return cap;
+  if(response.status!==200){void response.body?.cancel().catch(()=>undefined);return refuse();}const zip=await body(response,MAX_ZIP);if(zip.length!==pin.size||hash(zip)!==pin.sha256)return refuse();const {files,names}=readZip(zip,pin);await assertRemote();
+  const assertExactFiles=(expected:readonly string[])=>{
+   try{
+    if(stopped||!Array.isArray(expected)||expected.length<1||expected.length>16)return refuse();
+    const descriptors=Object.getOwnPropertyDescriptors(expected);
+    if(Reflect.ownKeys(expected).length!==expected.length+1||Array.from({length:expected.length},(_,i)=>i).some(i=>!Object.hasOwn(descriptors[String(i)]??{},'value')))return refuse();
+    const paths=Array.from(expected);if(paths.some(p=>!path(p))||new Set(paths).size!==paths.length||paths.length!==files.size||paths.some(p=>!files.has(p)))return refuse();
+    const allowed=new Set(paths);
+    for(const [name,isDirectory]of names){if(isDirectory?!paths.some(p=>p.startsWith(name+'/')):!allowed.has(name))return refuse();}
+   }catch{return refuse();}
+  };
+  const cap=Object.freeze({metadata:pin,assertExactFiles,readPrivateFile:(name:string)=>{if(stopped||!files.has(name))return refuse();return Buffer.from(files.get(name)!);},assertRemote});artifacts.add(cap);return cap;
  }catch{return refuse();}
 }
