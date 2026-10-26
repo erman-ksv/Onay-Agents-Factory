@@ -166,8 +166,8 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "generic-plan-admission-complete-model-pipeline-not-wired",
-    "goal": "bounded planning allowance and profile-bound source/model/review/test/CI composition",
+    "status": "generic-model-transport-complete-source-and-proposal-gates-pending",
+    "goal": "authentic source/context and validated proposal, then author/correction/reviews/host/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
   },
@@ -208,5 +208,19 @@
       "newTaskRequired": true,
       "agentDispatched": false
     }
-  ]
+  ],
+  "genericModelTransport": {
+    "status": "tested-no-live-run",
+    "sourceSha": "e1e86a58055fceaf1dc3694ebf55e420b1ae70b3",
+    "sourceCiRunId": 40337212062,
+    "tests": 2460,
+    "passed": 2460,
+    "localRelatedTests": 185,
+    "newTests": 15,
+    "connectedToGenuineAdmission": true,
+    "genericFullPipelineWired": false,
+    "realModelCalls": 0,
+    "realBudgetWrites": 0,
+    "proof": ".factory/project-model-transport-proof-20261026.json"
+  }
 }

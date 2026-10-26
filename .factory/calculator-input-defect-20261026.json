@@ -70,5 +70,17 @@
   "newModelCalls": 0,
   "applicationChanged": false,
   "existingT05MustNotBeReplayed": true,
-  "legalEnabled": false
+  "legalEnabled": false,
+  "additionalObservedDefects": [
+    {
+      "id": "leading-zero-input",
+      "actual": "00005",
+      "expected": "5",
+      "verification": "owner screenshot and original handlers with mocked DOM",
+      "regressionToPreserve": {
+        "input": "0.05",
+        "expected": "0.05"
+      }
+    }
+  ]
 }

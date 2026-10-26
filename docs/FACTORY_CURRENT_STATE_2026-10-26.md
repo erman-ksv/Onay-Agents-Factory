@@ -32,3 +32,7 @@ Source e405075: цель/критерии владельца, host-derived IDs/b
 ## Новый дефект Calculator от владельца
 
 Повторные операторы6**2/6*+2 воспроизведены на original handlers (mock DOM): строка принимает их, равно выдаёт ошибку. Это новая незакрытая продуктовая задача; прежние11 критериев не включали этот случай. T05 не повторять. [Диагностика и задача](CALCULATOR_INPUT_DEFECT_2026-10-26.md). Агент не запущен, квота0, source unchanged. Нужны отдельный task/development allowance и полная проверка исправления; generic execution pipeline ещё не подключён.
+
+## Этап10.4: общий транспорт модели проверен
+
+Source e1e86a5, CI40337212062: TypeScript/2460tests PASS; local185/185,15 новых. Native-branded admission→shared reserve→hash-only checkpoint→mock Groq HTTP, terminal429/truncation/failure, fresh-controller replay отказ. Починен generic ID project-task→project-run, scanner не ослаблен.0 live models/real budget writes/app changes. [Отчёт](STEP_10_04_GENERIC_MODEL_TRANSPORT_2026-10-26.md). Actual generic source/context/proposal validator и полный author/correction/role/host/CI pipeline ещё не подключены. Квота0, новый проект не запускался. Новый input defect Calculator включает и leading zeros; repair не запускать без нового task/development allowance.
