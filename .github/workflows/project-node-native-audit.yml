@@ -1,0 +1,45 @@
+name: Verify generic host tests in actual Docker
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/project-node-audit-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: generic-node-native-readonly-audit
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout immutable tested implementation
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'f0ecc1d9c2c6f2effb7dbc4e86785669451ff729'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform trusted modules without dependency installation
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Prepare the same pinned Node image used by the existing pilot
+        run: docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Verify authentic isolated contracts and fail-closed cases
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: 'f0ecc1d9c2c6f2effb7dbc4e86785669451ff729'
+          FACTORY_SOURCE_CI_RUN: '40376173448'
+        run: node scripts/project-node-native-audit.mjs
+      - name: Upload source-free native evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-node-native-proof
+          path: project-node-native-proof.json
+          if-no-files-found: error
