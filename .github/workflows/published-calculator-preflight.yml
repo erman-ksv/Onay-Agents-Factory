@@ -1,0 +1,68 @@
+name: Verify existing Calculator candidate without models
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/published-calculator-preflight-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: published-calculator-readonly-checks
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/published-calculator-preflight-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate exact candidate and zero model allowance
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.deepEqual(JSON.parse(readFileSync('request/.factory/published-calculator-preflight-request.json','utf8')),{version:1,operation:'verify-published-candidate',candidateSha:'558993981c9bbb7c6100c8335860ac5668768314',modelCallsAuthorized:0});
+          JS
+      - name: Checkout immutable tested host checker
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '4d026be8330750e69401dad64b813be060f5d03c'
+          path: runtime
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform host modules without installing packages
+        working-directory: runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Fetch the same approved immutable host images
+        run: |
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Verify unchanged published bytes, Draft PR, CI, Node and sandboxed Chrome
+        working-directory: runtime
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: '4d026be8330750e69401dad64b813be060f5d03c'
+          FACTORY_SOURCE_CI_RUN: '40291553011'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/calculator-published-candidate-preflight.mjs
+      - name: Preserve metadata only, never original source or restored app files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-calculator-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/published-calculator-preflight/result.json
+          if-no-files-found: warn
+          retention-days: 7

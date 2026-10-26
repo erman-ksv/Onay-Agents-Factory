@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "operation": "verify-published-candidate",
+  "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "modelCallsAuthorized": 0
+}
