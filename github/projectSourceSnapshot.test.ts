@@ -5,6 +5,11 @@ import {createProjectTargetRegistry,type ProjectTargetDefinition} from '../orche
 import {prepareProjectGoal,createProjectPlan,projectPlanTaskId} from '../orchestration/projectPlan.js';
 import {loadProjectTaskSnapshot,loadGitHubProjectTaskSnapshot,projectSnapshotSources,verifyProjectSnapshot,createProjectSnapshotSourceGuard,PROJECT_SOURCE_ERROR,type ProjectSnapshotReader} from './projectSourceSnapshot.js';
 import {prepareProjectChanges,projectChangesFiles,verifyProjectChanges,PROJECT_CHANGES_ERROR} from '../commander/projectChanges.js';
+import {prepareProjectModelContext,projectContextRequestBody,createProjectContextGuard,createContextBoundProjectTransport,PROJECT_CONTEXT_ERROR} from '../orchestration/projectModelContext.js';
+import {createProjectExecutionAdmission} from '../orchestration/projectExecutionAdmission.js';
+import {authorizeProjectBudget,reconcileProjectBudgetHistory,projectBudgetApprovalDigest,type ProjectBudgetHistory} from '../orchestration/projectBudgetAuthorization.js';
+import {createProjectModelBudgetFileStore} from '../orchestration/projectModelBudgetFileStore.js';
+import {mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const blob=(s:string)=>createHash('sha1').update(Buffer.from('blob '+Buffer.byteLength(s)+'\0'+s)).digest('hex');
@@ -76,4 +81,64 @@ test('proposal getters refuse without evaluation and caller mutation cannot chan
 });
 test('stale source invalidates proposal validation and previously prepared private output',async()=>{
  const f=fixture(),s=await f.load(),c=await prepareProjectChanges(f.plan,f.taskId,s,f.patch());f.state.root='f'.repeat(40);await assert.rejects(()=>verifyProjectChanges(c),changesRefusal);assert.throws(()=>projectChangesFiles(c),changesRefusal);await assert.rejects(()=>prepareProjectChanges(f.plan,f.taskId,s,f.patch()),changesRefusal);
+});
+
+const contextRefusal=(e:unknown)=>e instanceof Error&&e.message===PROJECT_CONTEXT_ERROR;
+const model='openai/gpt-oss-120b';
+const range=(f:ReturnType<typeof fixture>,text='value = 1',version:'base'|'proposed'='base')=>{const content=version==='base'?f.files.get('src/app.mjs')!:f.files.get('src/app.mjs')!.replace('value = 1','value = 2');const start=content.indexOf(text);return {path:'src/app.mjs',version,start,end:start+text.length};};
+const contextPayload=(packet:Awaited<ReturnType<typeof prepareProjectModelContext>>)=>JSON.parse(JSON.parse(projectContextRequestBody(packet)).messages[1].content);
+
+test('context exposes selected authentic excerpt and exact unshown ranges; default metadata hides text',async()=>{
+ const f=fixture(),s=await f.load(),selection=range(f,'PRIVATE_MARKER'),p=await prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[selection]}),payload=contextPayload(p);assert.equal(payload.fragments[0].text,'PRIVATE_MARKER');assert.equal(JSON.stringify(p).includes('PRIVATE_MARKER'),false);assert.ok(p.unshownSource.some(r=>r.path==='index.html'&&r.start===0));assert.ok(p.unshownSource.some(r=>r.path==='src/app.mjs'&&r.start===0&&r.end===selection.start));assert.ok(p.requestBytes<=12000);assert.ok(p.estimatedReservedTokens<=6000);assert.equal(payload.hostChecks.testsExecuted,false);assert.equal(p.publicationAuthorized,false);await createProjectContextGuard(p)(projectContextRequestBody(p));
+});
+test('full original source, split full-source copy and cross-version budget widening refuse',async()=>{
+ const f=fixture(),s=await f.load(),source=f.files.get('src/app.mjs')!,c=await prepareProjectChanges(f.plan,f.taskId,s,f.patch());
+ await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[{path:'src/app.mjs',version:'base',start:0,end:source.length}]}),contextRefusal);
+ await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[{path:'src/app.mjs',version:'base',start:0,end:20},{path:'src/app.mjs',version:'base',start:20,end:source.length}]}),contextRefusal);
+ await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'reviewer',model,changes:c,selections:[{path:'src/app.mjs',version:'base',start:0,end:20},{path:'src/app.mjs',version:'proposed',start:20,end:source.length}]}),contextRefusal);
+});
+test('review roles require genuine proposal from same snapshot and disclose host tests as unverified',async()=>{
+ const f=fixture(),s=await f.load(),c=await prepareProjectChanges(f.plan,f.taskId,s,f.patch());for(const role of ['security','reviewer','tester'] as const){const p=await prepareProjectModelContext(f.plan,f.taskId,s,{role,model,changes:c,selections:[range(f),range(f,'value = 2','proposed')]}),payload=contextPayload(p);assert.equal(p.proposalDigest,c.digest);assert.equal(payload.hostChecks.status,'unverified');assert.equal(payload.proposal.gates.independentReview,'required');assert.ok(p.unverifiedAreas.length>0);}
+ await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'reviewer',model,selections:[range(f)]}),contextRefusal);await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'reviewer',model,changes:{...c},selections:[range(f,'value = 2','proposed')]}),contextRefusal);
+ const other=await f.load();await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,other,{role:'reviewer',model,changes:c,selections:[range(f,'value = 2','proposed')]}),contextRefusal);
+});
+test('no review packet can hide a changed file or pretend supplied test verdicts',async()=>{
+ const f=fixture(),s=await f.load(),c=await prepareProjectChanges(f.plan,f.taskId,s,f.patch());await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'reviewer',model,changes:c,selections:[range(f)]}),contextRefusal);await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'tester',model,changes:c,selections:[range(f,'value = 2','proposed')],hostChecks:{status:'passed'}} as any),contextRefusal);
+});
+test('new absence-proven generated file may be shown within cap, original source copied into it cannot',async()=>{
+ const f=fixture();f.files.delete('test/app.test.mjs');const s=await f.load();
+ for(const copy of [false,true]){const content=copy?f.files.get('src/app.mjs')!:'export const test = true;\n',c=await prepareProjectChanges(f.plan,f.taskId,s,{summary:'Create independent test fixture.',changes:[{operation:'create',path:'test/app.test.mjs',content,message:'Create test.'}]}),options={role:'reviewer' as const,model,changes:c,selections:[{path:'test/app.test.mjs',version:'proposed' as const,start:0,end:content.length}]};if(copy)await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,options),contextRefusal);else{const p=await prepareProjectModelContext(f.plan,f.taskId,s,options);assert.equal(contextPayload(p).fragments[0].text,content);}}
+});
+test('invalid paths, ranges, overlap, fake source text and empty existing-source author packet refuse',async()=>{
+ const f=fixture(),s=await f.load();for(const selections of [[],[{...range(f),path:'.env'}],[{...range(f),start:-1}],[{...range(f),end:999}],[{...range(f),start:0.5}],[range(f),range(f)],[{...range(f),text:'invented code'}]])await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections}),contextRefusal);
+});
+test('context selectors/accessors cannot evaluate getters or mutate prepared packet bytes',async()=>{
+ const f=fixture(),s=await f.load();let reads=0;const selection=range(f);Object.defineProperty(selection,'start',{enumerable:true,get(){reads++;return 0;}});await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[selection]}),contextRefusal);assert.equal(reads,0);
+ const selected=range(f),pending=prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[selected]});selected.end=selected.start+1;const p=await pending;assert.equal(contextPayload(p).fragments[0].text,'value = 1');
+});
+test('copied packet and message/history/model/output widening fail and latch across guard recreation',async()=>{
+ const f=fixture(),s=await f.load();for(const mode of ['message','history','model','output']){const p=await prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[range(f)]}),body=projectContextRequestBody(p),r=JSON.parse(body);if(mode==='message')r.messages[1].content+=' EXTRA';if(mode==='history')r.messages.push({role:'assistant',content:'Unapproved history'});if(mode==='model')r.model='other/model';if(mode==='output')r.max_completion_tokens=2048;const guard=createProjectContextGuard(p);await assert.rejects(()=>guard(JSON.stringify(r)),contextRefusal);await assert.rejects(()=>guard(body),contextRefusal);assert.throws(()=>createProjectContextGuard(p),contextRefusal);assert.throws(()=>projectContextRequestBody({...p}),contextRefusal);}
+});
+test('source change stops prepared context and cannot be reversed by restoring the ref',async()=>{
+ const f=fixture(),s=await f.load(),p=await prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[range(f)]}),guard=createProjectContextGuard(p),body=projectContextRequestBody(p);f.state.root='f'.repeat(40);await assert.rejects(()=>guard(body),contextRefusal);f.state.root=f.plan.request.baseSha;await assert.rejects(()=>guard(body),contextRefusal);await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,s,{role:'author',model,selections:[range(f)]}),contextRefusal);
+});
+test('oversized owner requirements stop packet preparation rather than hiding criteria',async()=>{
+ const f=fixture(),goal=prepareProjectGoal(f.target,{version:1,id:'large-goal',goal:'G'.repeat(1000),baseRef:f.plan.request.baseRef,baseSha:f.plan.request.baseSha,provider:'groq',acceptance:Array.from({length:32},(_,i)=>({id:'criterion-'+String(i).padStart(2,'0'),scenario:'"'.repeat(120)+'S'.repeat(120)})),requiredPaths:[...f.files.keys()]}),id=projectPlanTaskId(goal,1),plan=createProjectPlan(goal,{tasks:[{id,role:'coder',goal:'Implement all explicitly requested requirements.',paths:[...f.files.keys()],acceptanceIds:goal.request.acceptance.map(a=>a.id),dependsOn:[]}],blockers:[],unverifiedAreas:[]}),s=await loadProjectTaskSnapshot(plan,id,f.reader);await assert.rejects(()=>prepareProjectModelContext(plan,id,s,{role:'author',model,selections:[range(f)]}),contextRefusal);
+});
+
+async function contextWireFixture(){
+ const f=fixture(),snapshot=await f.load(),identity={projectId:f.plan.request.id,repository:f.plan.repository,planFingerprint:f.plan.fingerprint,ownerFingerprint:f.plan.ownerFingerprint,taskIds:f.plan.tasks.map(t=>t.id)},history:ProjectBudgetHistory={version:1,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,observations:['planning',...identity.taskIds].map(scopeId=>({scopeId,kind:'cumulative-scope-total',charge:{requests:0,requestBytes:0,reservedTokens:0},evidenceSha256:'c'.repeat(64)}))},h=reconcileProjectBudgetHistory(history,identity),doc={version:1,kind:'authorize-project-model-budget',mode:'development',expiresAt:'2026-10-27T12:00:00Z',targetProfileSha256:f.plan.targetProfileSha256,grant:{version:1,projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,grantId:'offline-context-only',maxRequests:8,maxRequestBytes:24000,maxTotalRequestBytes:192000,maxReservedTokens:48000,historical:h.charge,historicalEvidenceSha256:h.digest,provider:'groq',freeTierConfirmed:true,legalEnabled:false}};
+ const root=mkdtempSync(join(tmpdir(),'context-bound-test-')),store=createProjectModelBudgetFileStore(root),comment={id:321,user:{login:'erman-ksv',type:'User'},author_association:'OWNER',issue_url:'https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/75',html_url:'https://github.com/erman-ksv/Onay-Agents-Factory/pull/75#issuecomment-321',created_at:'2026-10-26T11:00:00Z',updated_at:'2026-10-26T11:00:00Z',body:JSON.stringify(doc)};
+ const controller=await authorizeProjectBudget({identity,history,decision:{issueNumber:75,commentId:321,bodySha256:projectBudgetApprovalDigest(doc)},targetProfile:f.target,token:'offline-owner-token',store,now:()=>Date.parse('2026-10-26T12:00:00Z'),transport:async()=>Response.json(comment)});await controller.initialize();const admission=await createProjectExecutionAdmission(f.plan,controller,{assertSource:createProjectSnapshotSourceGuard(snapshot),assertDependencies:async()=>{}}).prepare(f.taskId);
+ let calls=0;const options={plan:f.plan,taskId:f.taskId,snapshot,admission,env:{AGENT_FACTORY_PROVIDER:'groq',GROQ_API_KEY:'offline-context-token',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_PROJECT_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',AGENT_FACTORY_LEGAL_ENABLED:'false'},checkpoint:async()=>{},transport:(async()=>{calls++;return Response.json({choices:[{finish_reason:'stop',message:{role:'assistant',content:'{"unverified":true}'}}]});}) as typeof fetch};
+ return{...f,snapshot,store,controller,options,calls:()=>calls,cleanup:()=>rmSync(root,{recursive:true,force:true})};
+}
+test('context-bound production transport sends only genuine packet through the admitted project budget',async()=>{
+ const f=await contextWireFixture();try{const p=await prepareProjectModelContext(f.plan,f.taskId,f.snapshot,{role:'author',model,selections:[range(f)]}),wire=createContextBoundProjectTransport(f.options),r=await wire.request(p);assert.equal(f.calls(),1);assert.equal((await f.controller.inspect()).used.requests,1);assert.equal(r.proposalVerified,false);assert.equal(wire.snapshot().contextBound,true);assert.equal(wire.snapshot().independentAssessmentsVerified,false);}finally{f.cleanup();}
+});
+test('foreign plan, snapshot and copied context cannot use another task budget',async()=>{
+ for(const mode of ['plan','snapshot','copy']){const f=await contextWireFixture();try{let snapshot=f.snapshot,plan=f.plan;if(mode==='plan'){const g=fixture();plan=g.plan;snapshot=await g.load();}if(mode==='snapshot')snapshot=await f.load();const p=await prepareProjectModelContext(plan,f.taskId,snapshot,{role:'author',model,selections:[range(f)]}),wire=createContextBoundProjectTransport(f.options);await assert.rejects(()=>wire.request(mode==='copy'?{...p}:p),contextRefusal);assert.equal(f.calls(),0);assert.equal((await f.controller.inspect()).used.requests,0);assert.equal(wire.snapshot().stopped,true);}finally{f.cleanup();}}
+});
+test('caller cannot replace production context guard and concurrent packet sends stop without duplicate calls',async()=>{
+ const f=await contextWireFixture();try{assert.throws(()=>createContextBoundProjectTransport({...f.options,assertRequestContext:async()=>{}} as any),contextRefusal);const p=await prepareProjectModelContext(f.plan,f.taskId,f.snapshot,{role:'author',model,selections:[range(f)]}),wire=createContextBoundProjectTransport(f.options),first=wire.request(p);await assert.rejects(()=>wire.request(p),contextRefusal);await assert.rejects(()=>first,contextRefusal);assert.equal(f.calls(),0);assert.equal((await f.controller.inspect()).used.requests,0);}finally{f.cleanup();}
 });

@@ -46,3 +46,4 @@ function record(changes:PreparedProjectChanges){const r=prepared.get(changes);if
 /** HOST ONLY. Default serialization of PreparedProjectChanges is metadata only. */
 export function projectChangesFiles(changes:PreparedProjectChanges){try{const r=record(changes);projectSnapshotSources(r.snapshot);return Object.freeze(r.files.map(f=>Object.freeze({...f})));}catch{return refuse();}}
 export async function verifyProjectChanges(changes:PreparedProjectChanges){try{await verifyProjectSnapshot(record(changes).snapshot);}catch{return refuse();}}
+export function assertProjectChangesSnapshot(changes:PreparedProjectChanges,snapshot:ProjectSourceSnapshot){if(record(changes).snapshot!==snapshot)return refuse();return changes;}
