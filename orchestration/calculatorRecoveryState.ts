@@ -40,7 +40,7 @@ export async function restoreCalculatorRecoveryState(artifact:CalculatorRecovery
   files.set(markerName+'.json',markerBytes);
   const sourcePaths=[copy.planPath,copy.planningReceiptPath];
   for(const [i,entry] of copy.receipts.entries()){
-   if(!planObject(entry)||!planKeys(entry,['taskId','path'])||entry.taskId!==plan.tasks[i]?.id)return refuse();
+   if(!planObject(entry)||!planKeys(entry,['taskId','path'])||typeof entry.path!=='string'||entry.taskId!==plan.tasks[i]?.id)return refuse();
    sourcePaths.push(entry.path);const bytes=artifact.readPrivateFile(entry.path);
    const receipt=parseTeamTaskSnapshotBytes(bytes,{id:'calc-'+entry.taskId,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:entry.taskId})});
    if(receipt.status==='running')return refuse();
