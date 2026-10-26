@@ -36,3 +36,7 @@ Source e405075: цель/критерии владельца, host-derived IDs/b
 ## Этап10.4: общий транспорт модели проверен
 
 Source e1e86a5, CI40337212062: TypeScript/2460tests PASS; local185/185,15 новых. Native-branded admission→shared reserve→hash-only checkpoint→mock Groq HTTP, terminal429/truncation/failure, fresh-controller replay отказ. Починен generic ID project-task→project-run, scanner не ослаблен.0 live models/real budget writes/app changes. [Отчёт](STEP_10_04_GENERIC_MODEL_TRANSPORT_2026-10-26.md). Actual generic source/context/proposal validator и полный author/correction/role/host/CI pipeline ещё не подключены. Квота0, новый проект не запускался. Новый input defect Calculator включает и leading zeros; repair не запускать без нового task/development allowance.
+
+## Этап10.5: source snapshot и proposal gates проверены
+
+Source7ad340f, CI40341767562: TypeScript/2476tests PASS; local201/201,16 новых. Реальный native40342235253:6 Calculator source blobs/11284bytes verified, absence из полного tree, copied snapshot/foreign workflow proposal отказ,22GET/0write/0model. Полные source/proposal bytes остаются private; metadata only по умолчанию. [Отчёт](STEP_10_05_SOURCE_PROPOSAL_GATES_2026-10-26.md). Далее selected context packet binding и общий независимый role/correction/host/CI pipeline. Actual repair Calculator/второй проект не запускались, квота0.

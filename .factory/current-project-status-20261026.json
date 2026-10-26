@@ -166,8 +166,8 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "generic-model-transport-complete-source-and-proposal-gates-pending",
-    "goal": "authentic source/context and validated proposal, then author/correction/reviews/host/CI composition",
+    "status": "source-and-proposal-gates-complete-context-and-role-pipeline-pending",
+    "goal": "selected context packet binding, independent role and bounded correction orchestration, actual host/CI delivery",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
   },
@@ -222,5 +222,21 @@
     "realModelCalls": 0,
     "realBudgetWrites": 0,
     "proof": ".factory/project-model-transport-proof-20261026.json"
+  },
+  "genericSourceAndProposal": {
+    "status": "tested-native-readonly-source-verified",
+    "sourceSha": "7ad340f064454a869d4933d365c26a54dae2a1d5",
+    "sourceCiRunId": 40341767562,
+    "tests": 2476,
+    "passed": 2476,
+    "localRelatedTests": 201,
+    "newTests": 16,
+    "nativeAuditRunId": 40342235253,
+    "nativeGithubReads": 22,
+    "modelCalls": 0,
+    "applicationWrites": 0,
+    "budgetWrites": 0,
+    "genericFullPipelineWired": false,
+    "proof": ".factory/project-source-gates-proof-20261026.json"
   }
 }
