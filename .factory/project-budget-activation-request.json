@@ -1,6 +1,10 @@
 {
   "version": 1,
-  "operation": "inspect",
+  "operation": "initialize",
   "historyDigest": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
-  "ownerDecision": null
+  "ownerDecision": {
+    "issueNumber": 75,
+    "commentId": 6412067757,
+    "bodySha256": "afaf23c899abbd5349787e912e6249092a5e6690d66abc1f3eb5d1adbc8318b6"
+  }
 }
