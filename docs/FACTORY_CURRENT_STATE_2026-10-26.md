@@ -11,7 +11,7 @@
 - Полный used65/626530/263359; remaining.requests0. Никакого reset/refund/retry или нового бюджета без отдельного решения.
 - Typecheck и2414/2414 tests PASS. Main и приложение неизменны; без merge/deployment. Legal disabled.
 
-Текущий инженерный этап10.9: genuine failure handoff и bounded correction context готовы; допуск/исполнение исправления, durable restart и generic candidate/CI ещё нужны. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
+Текущий инженерный этап10.10: допуск и исполнение одного ограниченного исправления готовы; authenticated durable restart и generic candidate/CI ещё нужны. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
 
 ## Исторические результаты
 
@@ -59,3 +59,8 @@ Source f0ecc1d9c2c6f2effb7dbc4e86785669451ff729, CI40376173448: TypeScript/2513t
 ## Этап10.9: подготовка одного genuine correction handoff
 
 Source7b589b887209161e87d13223f921de8876976560, CI40378694175: TypeScript/2525tests PASS;local189/189,12 новых. Genuine actionable review или executed native failed test→одно приватное задание и original/rejected bounded context. Блокируются fake/ready/blocked/неполные/stale/reused данные, изменения критериев и implicit budget reset; ordinary first-attempt scope не может отправить correction packet. Native40378985837 проверил6 synthetic Docker outcomes и native failed-receipt/policy path mapping.0 моделей/бюджетных writes/app изменений. **Исправление ещё не исполнено:** нужны qualified correction admission, отдельные стабильные reservations внутри того же ledger, durable restoration и повторные reviews/tests. Затем publication/exact-CI delivery и отдельный live allowance. [Отчёт](STEP_10_09_CORRECTION_HANDOFF_2026-10-26.md). Main/app/ledger preserved, legal false.
+
+
+## Этап10.10: qualified single correction
+
+Source90427ef4784baefd4347d37048cbc232166c074d; CI40381213998 TypeScript/2537tests PASS;local201/201,12 новых. Same project ledger, stable correction-1 ID, one-use genuine admission with4-request/context headroom, own correction packet, fresh independent roles, no content-identical resubmission or third attempt. TPM cooldown60s before first repair send (virtual in tests), checkpoint/owner/source/429 guards preserve charges. Native40381534393 actual Docker: first failed→one correction→passed against unchanged host oracle,8 MOCK model replies,temporary ledger4→8,no reset.0 real model/budget/app writes/newrealgrant; actualremaining0. [Отчёт](STEP_10_10_QUALIFIED_CORRECTION_2026-10-26.md). Далее authenticated durable correction restore, publication/exact-CI delivery и отдельный real allowance. Browser/Expo/device/full real autonomous project не подтверждены.

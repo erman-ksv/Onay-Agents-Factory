@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "correction-handoff-ready-qualified-attempt-admission-and-durable-restoration-pending",
+    "status": "qualified-single-correction-wired-authenticated-durable-restoration-and-publication-ci-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -310,5 +310,29 @@
     "realBudgetWrites": 0,
     "applicationWrites": 0,
     "proof": ".factory/project-correction-handoff-proof-20261026.json"
+  },
+  "genericQualifiedCorrection": {
+    "status": "qualified-single-correction-tested-mocked-model-native-docker-cycle-verified",
+    "sourceSha": "90427ef4784baefd4347d37048cbc232166c074d",
+    "sourceCiRunId": 40381213998,
+    "tests": 2537,
+    "passed": 2537,
+    "localRelatedTests": 201,
+    "newTests": 12,
+    "nativeRunId": 40381534393,
+    "nativeDockerChecks": 2,
+    "mockedModelCalls": 8,
+    "sameTemporaryLedgerUsedRequests": [
+      4,
+      8
+    ],
+    "correctionAdmissionWired": true,
+    "correctionExecutionWired": true,
+    "correctionRestorationWired": false,
+    "realModelCorrectionExecuted": false,
+    "realModelCalls": 0,
+    "realBudgetWrites": 0,
+    "applicationWrites": 0,
+    "proof": ".factory/project-correction-attempt-proof-20261026.json"
   }
 }
