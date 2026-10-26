@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.9",
+  "status": "genuine-failure-correction-handoff-tested-no-correction-execution-authorized",
+  "sourceSha": "7b589b887209161e87d13223f921de8876976560",
+  "sourceCi": {
+    "runId": 40378694175,
+    "jobId": 121768694063,
+    "typecheck": "passed",
+    "tests": 2525,
+    "passed": 2525,
+    "failed": 0
+  },
+  "local": {
+    "relatedTests": 189,
+    "passed": 189,
+    "sourceContextReplyNodeTests": 65,
+    "newRegressionTests": 12,
+    "sourcesAndModels": "synthetic fixtures and fake provider/owner with real temporary file ledger"
+  },
+  "native": {
+    "runId": 40378985837,
+    "jobId": 121769748791,
+    "status": "success",
+    "eventSha": "4eed04ed0db0e8d42c4dc566d934cbf0f3509487",
+    "failedNativeReceiptVerifierPassed": true,
+    "failureCodesMappedThroughGenuinePolicy": true,
+    "fixtureOutcomeCount": 6,
+    "source": "synthetic fixture, actual isolated Docker",
+    "proof": {
+      "version": 1,
+      "status": "native-docker-contracts-verified",
+      "runtimeSha": "7b589b887209161e87d13223f921de8876976560",
+      "sourceCiRunId": 40378694175,
+      "image": "node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392",
+      "source": "synthetic host fixture; no native application commit is claimed",
+      "cases": [
+        {
+          "id": "passing",
+          "status": "passed",
+          "testsExecuted": true,
+          "proposalDigest": "ed0cb5b6420d617fc5f905375d39c058bc88ab37c2f87caf16675abc4f7bdcef",
+          "fileSetSha256": "6c0713d9a86bc684b148320ffaf8343ce788dcec25448f3fdeba2f27748ec9cf",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": []
+        },
+        {
+          "id": "wrong-result",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "9df93611c6f4b3808ff16f592a6bb0bad3f2f27298958f219fe78e35f137b9f5",
+          "fileSetSha256": "8c0cd6125c8371a136d3da16a9646cb5c19ea03558d348fc5d2b7a91eb8a62d8",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "early-exit",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "e02b7412d02a87809eb06a06cc6b7d0fbd1fa96de5219c91563ce92a3a10da80",
+          "fileSetSha256": "432ba7f281c16e80fd4ebb9c3baa00eaad90f12ad2dbaaa7c10e9c94dd9a763d",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "forged-project-output",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "50cb193e3fb8a76e0940e079bb6d941eafd325e419fd8ee59bfe654304b02562",
+          "fileSetSha256": "f6170e2fc36b38ff1bf72bba01878c465a062b03fc7766e5a79232e917239f50",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "outside-app-read",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "fe842fabd7e98493045ba653e080e4541dc14b89318a3795068b8a5cc18022e9",
+          "fileSetSha256": "2168c93521f16b95149bc86cb08b3d0617aab1b6078169d103ec3171eed70912",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "timeout",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "6e8f35df751bb5d418d04aa49374fffcd6510f3f1401e4fb4f6bb21f74b5ec62",
+          "fileSetSha256": "5538474d6ca50fe80012165df403cc4985c7f17827d1fbe5ed8ea572fa6e122a",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        }
+      ],
+      "realModelCalls": 0,
+      "applicationWrites": 0,
+      "budgetWrites": 0,
+      "publicationAuthorized": false,
+      "wholeAppCompleted": false,
+      "legalEnabled": false,
+      "auditRunId": 40378985837,
+      "auditJobId": 121769748791
+    },
+    "limit": "No complete native review-to-correction model loop or independent wall-time deadline proof is claimed."
+  },
+  "implemented": [
+    "Single genuine correction handoff per authored proposal",
+    "Actionable changes-requested verdict or exact executed native test failure only",
+    "Real policy maps contract failures to source paths; out-of-scope repair refuses",
+    "Private failure details and original/rejected source excerpts with unchanged disclosure caps",
+    "One-shot context preparation, concurrency/stale/forged/refusal latches",
+    "Ordinary admission refuses correction packet before another reserve/HTTP; existing charges preserved"
+  ],
+  "maxAdditionalAttemptsProposed": 1,
+  "modelCallsAuthorized": 0,
+  "correctionAdmissionWired": false,
+  "correctionExecuted": false,
+  "correctionRestorationWired": false,
+  "budgetResetAuthorized": false,
+  "publicationAuthorized": false,
+  "genericFullPipelineWired": false,
+  "wholeAppCompleted": false,
+  "realModelCalls": 0,
+  "realBudgetWrites": 0,
+  "applicationChanges": 0,
+  "legalEnabled": false,
+  "remainingRequests": 0,
+  "preservedRefs": {
+    "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "projectBudgetLedger": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "remaining": [
+    "Qualified bounded correction admission and distinct stable reservations within existing project ledger",
+    "Durable authenticated correction state/restoration and repeated independent reviews/tests",
+    "Generic publication/exact-candidate CI delivery/deduplication",
+    "Separate native planning/live allowance and a real composed run"
+  ],
+  "report": "docs/STEP_10_09_CORRECTION_HANDOFF_2026-10-26.md",
+  "diffCheck": "passed"
+}

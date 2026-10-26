@@ -11,7 +11,7 @@
 - Полный used65/626530/263359; remaining.requests0. Никакого reset/refund/retry или нового бюджета без отдельного решения.
 - Typecheck и2414/2414 tests PASS. Main и приложение неизменны; без merge/deployment. Legal disabled.
 
-Текущий инженерный этап10.8: genuine ответы/порядок специалистов и native Node host-test receipts готовы; нужны bounded correction/restart и generic candidate/CI. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
+Текущий инженерный этап10.9: genuine failure handoff и bounded correction context готовы; допуск/исполнение исправления, durable restart и generic candidate/CI ещё нужны. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
 
 ## Исторические результаты
 
@@ -54,3 +54,8 @@ Source b1be5a9e8a8662fe37c8ec2d951d2c2bc45aafe7, CI40374169083: TypeScript и250
 ## Этап10.8: native Node host-test receipts
 
 Source f0ecc1d9c2c6f2effb7dbc4e86785669451ff729, CI40376173448: TypeScript/2513tests PASS. Local177/177;12 новых regression tests. Host-only immutable policy, exact source overlay/file-set SHA, pinned non-root offline Docker, fixed supervisor и source-free genuine receipts. Simulated/copied/foreign/stale proof не может разрешить тесты. Production role pipeline принимает только native passed receipt собственного предложения после всех reviews; browser/CI/publication/wholeApp остаются unverified. Native40376621059 реально проверил6 исходов synthetic fixture, copy/foreign/stale/replay refusal;0 model/budget/app writes. Отдельная native wall-time timeout проверка не заявлена. [Отчёт](STEP_10_08_HOST_NODE_TESTS_2026-10-26.md). Далее bounded correction/restart, generic candidate/exact-CI delivery и отдельная квота. Для Expo/браузера/устройств нужны отдельные политики; полного автономного второго проекта пока нет.
+
+
+## Этап10.9: подготовка одного genuine correction handoff
+
+Source7b589b887209161e87d13223f921de8876976560, CI40378694175: TypeScript/2525tests PASS;local189/189,12 новых. Genuine actionable review или executed native failed test→одно приватное задание и original/rejected bounded context. Блокируются fake/ready/blocked/неполные/stale/reused данные, изменения критериев и implicit budget reset; ordinary first-attempt scope не может отправить correction packet. Native40378985837 проверил6 synthetic Docker outcomes и native failed-receipt/policy path mapping.0 моделей/бюджетных writes/app изменений. **Исправление ещё не исполнено:** нужны qualified correction admission, отдельные стабильные reservations внутри того же ledger, durable restoration и повторные reviews/tests. Затем publication/exact-CI delivery и отдельный live allowance. [Отчёт](STEP_10_09_CORRECTION_HANDOFF_2026-10-26.md). Main/app/ledger preserved, legal false.
