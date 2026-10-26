@@ -1,0 +1,43 @@
+name: Verify consumed project review cannot replay in a fresh worker
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/published-review-replay-check-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: consumed-project-review-readonly-proof
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '0cc520245e3db9e0b922a9a2336271574c5533d7'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Compile immutable tested modules without package installation
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Native owner controller must refuse spent budget before source tools or model transport
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/published-project-review-replay-check.mjs
+      - name: Preserve source-free replay proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-review-replay-${{ github.run_id }}
+          path: ${{ runner.temp }}/published-project-review-replay/result.json
+          if-no-files-found: warn
+          retention-days: 7
