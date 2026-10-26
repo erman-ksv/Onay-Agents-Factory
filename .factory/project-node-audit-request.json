@@ -1,1 +1,1 @@
-{"version":1,"operation":"verify-fixed-synthetic-node-contracts-in-docker","runtimeSha":"f0ecc1d9c2c6f2effb7dbc4e86785669451ff729","sourceCiRunId":40376173448,"modelCallsAuthorized":0,"applicationWritesAuthorized":0}
+{"version":1,"operation":"verify-fixed-native-failed-receipts-and-policy-path-mapping","runtimeSha":"7b589b887209161e87d13223f921de8876976560","sourceCiRunId":40378694175,"modelCallsAuthorized":0,"applicationWritesAuthorized":0}
