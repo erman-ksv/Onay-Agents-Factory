@@ -11,7 +11,7 @@
 - Полный used65/626530/263359; remaining.requests0. Никакого reset/refund/retry или нового бюджета без отдельного решения.
 - Typecheck и2414/2414 tests PASS. Main и приложение неизменны; без merge/deployment. Legal disabled.
 
-Следующий шаг пока не начат: отдельная финальная приёмка Calculator/переносимость на новый небольшой проект по согласованной цели. Onay — отдельное приложение; его дизайн/код здесь не менялись.
+Текущий инженерный этап10.7: genuine ответы специалистов и порядок независимых вердиктов готовы; нужны реальные host tests, bounded correction и generic candidate/CI. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
 
 ## Исторические результаты
 
@@ -44,3 +44,8 @@ Source7ad340f, CI40341767562: TypeScript/2476tests PASS; local201/201,16 нов�
 ## Этап10.6: selective context и запрос связаны
 
 Sourceb597f4d, CI40350249664: TypeScript/2489tests PASS; local214/214,13 новых. Private packet→genuine plan/task/snapshot budget binding, exact body guard, explicit unshown ranges, overflow/full-source/message injection отказ. Native40350695171: request3538bytes/6unshown ranges, altered body отказ,28GET/0write/0model. [Отчёт](STEP_10_06_CONTEXT_BINDING_2026-10-26.md). Role verdict/phase ordering, actual host-test proof/correction и полный generic pipeline ещё не подключены. Реальных моделей/нового allowance0; Calculator repair не запускался.
+
+
+## Этап10.7: genuine ответы и порядок специалистов
+
+Source b1be5a9e8a8662fe37c8ec2d951d2c2bc45aafe7, CI40374169083: TypeScript и2501/2501 tests PASS. Local165/165;12 новых regression tests. Raw reply приватен; hashes связывают задачу/source/request/роль. Только ответ автора создаёт предложение; Security→Reviewer→Tester требуют то же genuine предложение и положительный разобранный предыдущий verdict. Подмена/повтор/пропуск/неразобранный verdict/stale source останавливают без повтора и refund. Модельное одобрение не означает реальные тесты/CI: эти gates остаются false. [Полный отчёт](STEP_10_07_SPECIALIST_REPLIES_2026-10-26.md). Далее host test receipt, bounded correction/restart, generic candidate/CI delivery и отдельный native allowance.0 real models/budget/app writes; main/app/ledger сохранены, legal disabled.

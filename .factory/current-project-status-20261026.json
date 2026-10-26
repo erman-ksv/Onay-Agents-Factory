@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "context-packets-and-request-binding-complete-verdict-and-correction-pipeline-pending",
+    "status": "specialist-reply-binding-and-order-complete-host-tests-correction-and-candidate-ci-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -255,5 +255,22 @@
     "genericFullPipelineWired": false,
     "independentAssessmentsVerified": false,
     "proof": ".factory/project-context-binding-proof-20261026.json"
+  },
+  "genericSpecialistReplies": {
+    "status": "ordered-authentic-specialist-replies-tested-no-live-model-run",
+    "sourceSha": "b1be5a9e8a8662fe37c8ec2d951d2c2bc45aafe7",
+    "sourceCiRunId": 40374169083,
+    "tests": 2501,
+    "passed": 2501,
+    "localRelatedTests": 165,
+    "newTests": 12,
+    "contextAndReplyBound": true,
+    "orderedIndependentVerdicts": true,
+    "genericFullPipelineWired": false,
+    "realModelCalls": 0,
+    "realBudgetWrites": 0,
+    "applicationWrites": 0,
+    "runtimeTestsVerified": false,
+    "proof": ".factory/project-specialist-replies-proof-20261026.json"
   }
 }
