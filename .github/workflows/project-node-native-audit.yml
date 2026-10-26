@@ -1,4 +1,4 @@
-name: Verify generic host tests in actual Docker
+name: Verify bounded correction with mocked model and native Docker
 on:
   push:
     branches: ['feat/calculator-t02-charge-reconcile-20261022']
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout immutable tested implementation
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '7b589b887209161e87d13223f921de8876976560'
+          ref: '90427ef4784baefd4347d37048cbc232166c074d'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -31,12 +31,12 @@ jobs:
           JS
       - name: Prepare the same pinned Node image used by the existing pilot
         run: docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
-      - name: Verify authentic isolated contracts and fail-closed cases
+      - name: Verify mocked correction with unchanged real host tests
         env:
           FACTORY_READ_TOKEN: ${{ github.token }}
-          FACTORY_RUNTIME_SHA: '7b589b887209161e87d13223f921de8876976560'
-          FACTORY_SOURCE_CI_RUN: '40378694175'
-        run: node scripts/project-node-native-audit.mjs
+          FACTORY_RUNTIME_SHA: '90427ef4784baefd4347d37048cbc232166c074d'
+          FACTORY_SOURCE_CI_RUN: '40381213998'
+        run: node scripts/project-correction-native-audit.mjs
       - name: Upload source-free native evidence
         uses: actions/upload-artifact@v4
         with:
