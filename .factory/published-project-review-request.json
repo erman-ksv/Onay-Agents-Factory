@@ -1,6 +1,10 @@
 {
   "version": 1,
-  "operation": "inspect",
+  "operation": "review",
   "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
-  "ownerDecision": null
+  "ownerDecision": {
+    "issueNumber": 75,
+    "commentId": 6412067757,
+    "bodySha256": "afaf23c899abbd5349787e912e6249092a5e6690d66abc1f3eb5d1adbc8318b6"
+  }
 }
