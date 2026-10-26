@@ -108,5 +108,19 @@
     "nativeReplayRunId": 40298681929,
     "nativeReplayModelCalls": 0,
     "proof": ".factory/step9-owner-live-proof-20261026.json"
+  },
+  "budgetExtension": {
+    "status": "prepared-inspected-awaiting-new-owner-decision",
+    "active": false,
+    "newModelCallsAuthorized": 0,
+    "sourceSha": "b1d7f906517fdedf959b23f8f8503294a626b9dd",
+    "sourceCiRunId": 40303983534,
+    "testsPassed": 2414,
+    "nativeInspectRunId": 40304937816,
+    "stateWrites": 0,
+    "modelCalls": 0,
+    "reservationsPreserved": 3,
+    "proposedAdditionalRequests": 3,
+    "proof": ".factory/project-budget-extension-proof-20261026.json"
   }
 }
