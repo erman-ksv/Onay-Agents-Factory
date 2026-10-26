@@ -42,6 +42,8 @@ export function createProjectTargetRegistry(definitions:readonly unknown[]){
 export function projectTargetProfile(target:unknown,repository:string):ProjectTargetProfile{
  const profile=targets.get(target as ApprovedProjectTarget);if(!profile||profile.repository!==repository)return refuse();return profile;
 }
+/** Host-only lookup when the repository must be derived from a capability. */
+export function registeredProjectTargetProfile(target:unknown):ProjectTargetProfile{const profile=targets.get(target as ApprovedProjectTarget);if(!profile)return refuse();return profile;}
 /** Authorization DATA for tools after budget/native owner gates. The capability
  * remains in host memory; its JSON representation confers no authority. */
 export function assertProjectTargetScope(target:unknown,input:Readonly<{repository:string;branch:string;changePaths:readonly string[]}>){
