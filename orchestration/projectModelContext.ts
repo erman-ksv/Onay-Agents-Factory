@@ -1,11 +1,12 @@
 import {createHash} from 'node:crypto';
 import {projectPlanTarget,type PreparedProjectPlan} from './projectPlan.js';
 import {projectTargetProfile} from './projectTargetRegistry.js';
-import {assertProjectSnapshotIdentity,projectSnapshotSources,verifyProjectSnapshot,projectSourceContainsSecrets,type ProjectSourceSnapshot} from '../github/projectSourceSnapshot.js';
+import {assertProjectSnapshotIdentity,projectSnapshotSources,verifyProjectSnapshot,verifyProjectSnapshotRoot,projectSourceContainsSecrets,type ProjectSourceSnapshot} from '../github/projectSourceSnapshot.js';
 import {prepareProjectChanges,projectChangesFiles,verifyProjectChanges,assertProjectChangesSnapshot,type PreparedProjectChanges} from '../commander/projectChanges.js';
 import {createProjectTaskModelTransport} from './projectTaskModelTransport.js';
 import {projectExecutionAdmissionBinding,type ProjectExecutionAdmission} from './projectExecutionAdmission.js';
-import {verifyProjectNodeTestReceipt,verifyFailedProjectNodeTestReceipt,projectNodeFailureIssues,type ProjectNodeTestReceipt,type ProjectNodeTestPolicy} from './projectNodeTests.js';
+import {verifyProjectNodeTestReceipt,verifyFailedProjectNodeTestReceipt,verifySimulatedProjectNodeTestReceipt,projectNodeFailureIssues,type ProjectNodeTestReceipt,type ProjectNodeTestPolicy} from './projectNodeTests.js';
+import type {AuthorizedProjectBudgetController} from './projectBudgetAuthorization.js';
 import {consumeProjectCorrectionCheckpoint,type VerifiedProjectCorrectionCheckpoint} from './projectCorrectionCheckpoint.js';
 
 export const PROJECT_CONTEXT_ERROR='Project model context is unverified, stale, over budget or outside the admitted task. No request or retry is authorized.';
@@ -26,6 +27,11 @@ export type PreparedProjectCorrection=Readonly<{repository:string;planFingerprin
 type CorrectionRecord={plan:PreparedProjectPlan;taskId:string;snapshot:ProjectSourceSnapshot;changes:PreparedProjectChanges;issues:readonly Readonly<{path:string;detail:string}>[];budget:{projectKey:string;grantSha256:string;used:{requests:number;requestBytes:number;reservedTokens:number}};claimed:boolean;failed:boolean;packet?:PreparedProjectContext;admitted?:boolean;saved?:boolean};
 const corrections=new WeakMap<PreparedProjectCorrection,CorrectionRecord>(),issuedCorrections=new WeakSet<PreparedProjectChanges>();
 const authoredInputs=new WeakMap<PreparedProjectChanges,string>();
+export type ProjectPublicationApproval=Readonly<{repository:string;planFingerprint:string;taskId:string;baseSha:string;proposalDigest:string;provenance:'native-host-tests'|'simulated';requiresExactCandidateCi:true;mergeAuthorized:false;wholeAppCompleted:false}>;
+type PublicationRecord={plan:PreparedProjectPlan;taskId:string;snapshot:ProjectSourceSnapshot;changes:PreparedProjectChanges;controller:AuthorizedProjectBudgetController;before:()=>Promise<void>;after:()=>Promise<void>;consumed:boolean};
+const publicationApprovals=new WeakMap<ProjectPublicationApproval,PublicationRecord>();
+/** HOST ONLY. Simulation can never be consumed by the native writer. */
+export function consumeProjectPublicationApproval(value:ProjectPublicationApproval,mode:'native'|'simulated'){const r=publicationApprovals.get(value);if(!r||r.consumed||mode==='native'&&value.provenance!=='native-host-tests')return refuse();r.consumed=true;return r;}
 const correctionRefusal=():never=>{throw Error(PROJECT_CORRECTION_ERROR);};
 function correctionRecord(value:PreparedProjectCorrection){const r=corrections.get(value);if(!r||r.failed)return correctionRefusal();return r;}
 /** Data preparation only. The ordinary first-attempt transport must refuse
@@ -124,9 +130,14 @@ type TransportOptions=Parameters<typeof createProjectTaskModelTransport>[0];
  * bounded correction/restart and exact-candidate CI remain separate gates. */
 export function createContextBoundProjectTransport(options:Readonly<{plan:PreparedProjectPlan;taskId:string;snapshot:ProjectSourceSnapshot;admission:ProjectExecutionAdmission;env:NodeJS.ProcessEnv;checkpoint:TransportOptions['checkpoint'];transport?:typeof fetch;timing?:TransportOptions['timing']}>){
  try{
-  if(Object.hasOwn(options,'assertRequestContext'))return refuse();const {plan,taskId,snapshot}=options;assertProjectSnapshotIdentity(snapshot,plan,taskId);const binding=projectExecutionAdmissionBinding(options.admission,plan,taskId);let guard:((body:string)=>Promise<void>)|undefined,busy=false,stopped=false,last:PreparedProjectReply|undefined,proposal:PreparedProjectChanges|undefined,runtimeTestsVerified=false,correctionRequested=false;const order:ProjectContextRole[]=['author','security','reviewer','tester'];let count=0;
+  if(Object.hasOwn(options,'assertRequestContext'))return refuse();const {plan,taskId,snapshot}=options;assertProjectSnapshotIdentity(snapshot,plan,taskId);const binding=projectExecutionAdmissionBinding(options.admission,plan,taskId);let guard:((body:string)=>Promise<void>)|undefined,busy=false,stopped=false,last:PreparedProjectReply|undefined,proposal:PreparedProjectChanges|undefined,runtimeTestsVerified=false,correctionRequested=false,publicationIssued=false;const order:ProjectContextRole[]=['author','security','reviewer','tester'];let count=0;
   const wire=createProjectTaskModelTransport({plan,taskId,admission:options.admission,env:options.env,checkpoint:options.checkpoint,transport:options.transport,timing:options.timing,assertRequestContext:async body=>{if(!guard||stopped)return refuse();await guard(body);}});
   const stop=()=>{stopped=true;wire.stop();};
+  async function publication(simulation?:Readonly<{receipt:ProjectNodeTestReceipt;policy:ProjectNodeTestPolicy}>):Promise<ProjectPublicationApproval>{try{
+   if(stopped||busy||publicationIssued||count!==4||!last||replyRecord(last).assessment?.decision!=='ready'||!proposal||!simulation&&!runtimeTestsVerified)return refuse();busy=true;publicationIssued=true;const changes=proposal;if(simulation)await verifySimulatedProjectNodeTestReceipt(simulation.receipt,plan,taskId,snapshot,changes,simulation.policy);await binding.controller.assertAuthorized();await verifyProjectChanges(changes);
+   const ready=()=>{if(stopped||busy||count!==4||!last||replyRecord(last).assessment?.decision!=='ready'||(!simulation&&!runtimeTestsVerified))return refuse();};
+   const cap:ProjectPublicationApproval=Object.freeze({repository:plan.repository,planFingerprint:plan.fingerprint,taskId,baseSha:snapshot.baseSha,proposalDigest:changes.digest,provenance:simulation?'simulated':'native-host-tests',requiresExactCandidateCi:true,mergeAuthorized:false,wholeAppCompleted:false});publicationApprovals.set(cap,{plan,taskId,snapshot,changes,controller:binding.controller,consumed:false,before:async()=>{ready();await binding.controller.assertAuthorized();await verifyProjectChanges(changes);ready();},after:async()=>{ready();await binding.controller.assertAuthorized();await verifyProjectSnapshotRoot(snapshot);ready();}});return cap;
+  }catch{stop();return refuse();}finally{busy=false;}}
   return Object.freeze({async request(packet:PreparedProjectContext){try{
    if(stopped||busy)return refuse();const r=record(packet);if(r.plan!==plan||r.taskId!==taskId||r.snapshot!==snapshot||packet.role!==order[count]||(count===0?r.correction!==binding.correction:!!r.correction))return refuse();
    if(last){const prior=replyRecord(last);if(last.role==='author'){proposal=prior.changes;if(!proposal)return refuse();}else if(prior.assessment?.decision!=='ready')return refuse();if(r.changes!==proposal)return refuse();}
@@ -145,6 +156,6 @@ export function createContextBoundProjectTransport(options:Readonly<{plan:Prepar
    const data={repository:plan.repository,planFingerprint:plan.fingerprint,taskId,baseSha:snapshot.baseSha,previousProposalDigest:proposal.digest,evidenceKind:kind,evidenceSha256};const ticket:PreparedProjectCorrection=Object.freeze({...data,id:'project-fix-'+hash(JSON.stringify(data)).slice(0,32),issueCount:issues.length,maxAdditionalAttempts:1,status:'needs-qualified-correction-admission',modelCallsAuthorized:0,budgetResetAuthorized:false,publicationAuthorized:false});corrections.set(ticket,{plan,taskId,snapshot,changes:proposal,issues,budget,claimed:false,failed:false});return ticket;
   }catch{stop();return correctionRefusal();}finally{busy=false;}},async verifyRuntimeTests(receipt:ProjectNodeTestReceipt,policy:ProjectNodeTestPolicy){try{
    if(stopped||busy||runtimeTestsVerified||count!==4||!last||replyRecord(last).assessment?.decision!=='ready'||!proposal)return refuse();busy=true;await verifyProjectNodeTestReceipt(receipt,plan,taskId,snapshot,proposal,policy);if(stopped)return refuse();runtimeTestsVerified=true;
-  }catch{stop();return refuse();}finally{busy=false;}},snapshot:()=>Object.freeze({...wire.snapshot(),attempt:binding.attempt,...(binding.correction?{correctionId:binding.correction.id}:{}),contextBound:true as const,repliesBound:true as const,nextRole:order[count]??null,independentAssessmentsVerified:!stopped&&count===4&&!!last&&replyRecord(last).assessment?.decision==='ready',runtimeTestsVerified:!stopped&&runtimeTestsVerified,runtimeCoverage:'host-selected-node-contracts-only' as const,browserTestsVerified:false as const,ciVerified:false as const})});
+  }catch{stop();return refuse();}finally{busy=false;}},preparePublication:()=>publication(),preparePublicationForTests:(e:Readonly<{receipt:ProjectNodeTestReceipt;policy:ProjectNodeTestPolicy}>)=>publication(e),snapshot:()=>Object.freeze({...wire.snapshot(),attempt:binding.attempt,...(binding.correction?{correctionId:binding.correction.id}:{}),contextBound:true as const,repliesBound:true as const,nextRole:order[count]??null,independentAssessmentsVerified:!stopped&&count===4&&!!last&&replyRecord(last).assessment?.decision==='ready',runtimeTestsVerified:!stopped&&runtimeTestsVerified,runtimeCoverage:'host-selected-node-contracts-only' as const,browserTestsVerified:false as const,ciVerified:false as const})});
  }catch{return refuse();}
 }

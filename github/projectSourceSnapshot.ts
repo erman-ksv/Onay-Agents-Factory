@@ -53,6 +53,9 @@ function record(snapshot:ProjectSourceSnapshot){const r=records.get(snapshot);if
 export function projectSnapshotSources(snapshot:ProjectSourceSnapshot){return new Map(record(snapshot).sources);}
 export function assertProjectSnapshotIdentity(snapshot:ProjectSourceSnapshot,plan:PreparedProjectPlan,taskId:string){const r=record(snapshot);if(r.plan!==plan||snapshot.taskId!==taskId)return refuse();return snapshot;}
 export async function verifyProjectSnapshot(snapshot:ProjectSourceSnapshot){const r=record(snapshot);try{if(await r.reader.getHead(r.plan.request.baseRef)!==r.plan.request.baseSha||await r.reader.getHead(snapshot.baseRef)!==snapshot.baseSha)return refuse();}catch{r.stopped=true;return refuse();}}
+/** After an acknowledged feature-ref update, the old anchor is expected to
+ * move. The immutable owner root still must match; publisher verifies new head. */
+export async function verifyProjectSnapshotRoot(snapshot:ProjectSourceSnapshot){const r=record(snapshot);try{if(await r.reader.getHead(r.plan.request.baseRef)!==r.plan.request.baseSha)return refuse();}catch{r.stopped=true;return refuse();}}
 /** Supplies the real source callback required by generic task admission. */
 export function createProjectSnapshotSourceGuard(snapshot:ProjectSourceSnapshot){const r=record(snapshot);return async(plan:PreparedProjectPlan,task:ProjectPlanTask)=>{if(plan!==r.plan||plan.tasks.find(t=>t.id===snapshot.taskId)!==task)return refuse();await verifyProjectSnapshot(snapshot);};}
 

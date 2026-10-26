@@ -347,3 +347,9 @@ test('oversized encrypted recovery files refuse before processing plaintext',asy
 test('checkpoint does not silently provision a secret or initialize a missing ledger',async()=>{
  const f=await correctionAttemptFixture();try{const path=join(f.privateRoot,'missing-key.json');await assert.rejects(()=>saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,f.controller,{} as any,path),checkpointRefusal);assert.equal(existsSync(path),false);assert.equal((await f.controller.inspect()).used.requests,2);}finally{f.cleanup();}
 });
+test('model opinions without native host execution cannot authorize publication',async()=>{
+ const f=await specialistFixture();try{const {changes}=await f.proposal();for(const role of ['security','reviewer','tester'] as const)await prepareProjectReplyAssessment(await f.wire.request(await f.packet(role,changes)));await assert.rejects(()=>f.wire.preparePublication(),contextRefusal);assert.equal((await f.controller.inspect()).used.requests,4);assert.equal(f.calls(),4);}finally{f.cleanup();}
+});
+test('publication cannot skip the required independent review phases',async()=>{
+ const f=await specialistFixture();try{await f.proposal();await assert.rejects(()=>f.wire.preparePublication(),contextRefusal);assert.equal((await f.controller.inspect()).used.requests,1);assert.equal(f.calls(),1);}finally{f.cleanup();}
+});
