@@ -1,0 +1,271 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "ownerDecision": {
+    "issueNumber": 75,
+    "commentId": 6413719353,
+    "bodySha256": "c258f075d6f0d5aabd81ed272a9cfd5a7d5b7cbd768ab9179e0e60585773a916"
+  },
+  "extension": {
+    "runId": 40307264999,
+    "jobId": 121519397939,
+    "eventSha": "20ce26150bb714ca56e6dc0a18de138d20855c0b",
+    "result": {
+      "version": 1,
+      "status": "extended-with-all-reservations-preserved",
+      "modelCalls": 0,
+      "sourceChanged": false,
+      "legalEnabled": false,
+      "projectKey": "30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+      "previousRevision": "cb9126fbd4fb648a4a6580d1be1d9fa3a04e9cd6f498e2fb8ffe426c53b677d5",
+      "priorStateSha256": "3a775f3a0edb6270c7f346b61d4e59ca6711d2e44637f35253112956205295ca",
+      "previousGrantSha256": "cd317be0675c6660d080e0ac8c7f85f178d9f62805734de93b20741a8ad52cb9",
+      "proposedGrantSha256": "1b3fd6d70279e3fd03bfeb0efbb7ea627de9eec88d18adeb897031f922bc622a",
+      "reservationsPreserved": 3,
+      "resets": 0,
+      "refunds": 0,
+      "ownerApprovalVerified": true,
+      "revision": "a97a64cceb8358cfd2ae6d47a616e74e5541bbbff6c42981c58703810bd9f11b",
+      "used": {
+        "requests": 62,
+        "requestBytes": 590219,
+        "reservedTokens": 246886
+      },
+      "remaining": {
+        "requests": 3,
+        "requestBytes": 72000,
+        "reservedTokens": 18000
+      },
+      "stateWrites": 1,
+      "additionalRequestsAuthorized": 3,
+      "runtimeSha": "b1d7f906517fdedf959b23f8f8503294a626b9dd",
+      "sourceCiRunId": 40303983534,
+      "githubReads": 35,
+      "githubApiMutationRequests": 4
+    }
+  },
+  "liveReview": {
+    "runId": 40307399306,
+    "jobId": 121519847360,
+    "eventSha": "4a00fca29d333388b3bd2eb0d2af7cb26e1667ce",
+    "result": {
+      "version": 1,
+      "status": "published-project-three-reviews-passed",
+      "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+      "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+      "historicalT05CandidateVerified": true,
+      "executionAuthorized": false,
+      "modelCalls": 3,
+      "githubApiMutationRequests": 12,
+      "wholeAppCompleted": false,
+      "projectBudgetActivated": true,
+      "legalEnabled": false,
+      "ownerApprovalVerified": true,
+      "projectReview": {
+        "status": "published-candidate-project-reviews-passed",
+        "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+        "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+        "executionId": "published-review-1c0dd8bdaf96c94a0d2dec12",
+        "modelCalls": 3,
+        "projectBudgetRequired": true,
+        "newReservations": 3,
+        "used": {
+          "requests": 65,
+          "requestBytes": 626530,
+          "reservedTokens": 263359
+        },
+        "remaining": {
+          "requests": 0,
+          "requestBytes": 35689,
+          "reservedTokens": 1527
+        },
+        "roles": [
+          {
+            "role": "security",
+            "ready": true
+          },
+          {
+            "role": "reviewer",
+            "ready": true
+          },
+          {
+            "role": "tester",
+            "ready": true
+          }
+        ],
+        "publicationAuthorized": false,
+        "applicationChanged": false,
+        "wholeAppCompleted": false
+      },
+      "runtimeSha": "b1d7f906517fdedf959b23f8f8503294a626b9dd",
+      "sourceCiRunId": 40303983534,
+      "parentSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+      "changedPaths": [
+        "test/ui.test.mjs"
+      ],
+      "fileSha256": "5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930",
+      "fileBytes": 5464,
+      "pullRequest": "https://github.com/erman-ksv/Onay-Factory-Calculator/pull/1",
+      "reviewPacketDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+      "originalProposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+      "reviewPacketIsHistoricalCapsule": false,
+      "originalReceiptRewritten": false,
+      "taskCiRunIds": [
+        40178095158
+      ],
+      "node": {
+        "repository": "erman-ksv/Onay-Factory-Calculator",
+        "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+        "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+        "proposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+        "status": "passed",
+        "testsExecuted": true,
+        "failures": []
+      },
+      "browser": {
+        "repository": "erman-ksv/Onay-Factory-Calculator",
+        "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+        "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+        "proposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+        "dependencySha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+        "status": "passed",
+        "testsExecuted": true,
+        "browser": "Chrome/141.0.7390.37",
+        "sandboxDisabled": false,
+        "pageErrors": 0,
+        "blockedRequests": 0,
+        "scenarios": [
+          "Entering 123 then deleting the last digit displays 12",
+          "Clear permits a new calculation after input",
+          "Clear permits a new calculation after a result",
+          "Keyboard and button calculations give the same result",
+          "At 360px controls and result work without horizontal scrolling"
+        ],
+        "domSelectors": [
+          {
+            "selector": ".calculator",
+            "matches": 1
+          },
+          {
+            "selector": ".display",
+            "matches": 1
+          },
+          {
+            "selector": ".keys",
+            "matches": 1
+          },
+          {
+            "selector": ".key",
+            "matches": 18
+          }
+        ]
+      },
+      "hostEvidence": {
+        "evidenceId": "host-checks@f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+        "proposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+        "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+        "dependencyContract": {
+          "path": "src/calculator.mjs",
+          "blobSha": "e80e4cf99b5f2f892a60af61e0b82293c33445b1",
+          "sourceSha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+          "signature": "calculate(left, operator, right)"
+        },
+        "proposalChecks": {
+          "status": "passed",
+          "testsExecuted": true,
+          "failures": []
+        },
+        "browserChecks": {
+          "status": "passed",
+          "testsExecuted": true,
+          "browser": "Chrome/141.0.7390.37",
+          "sandboxDisabled": false,
+          "pageErrors": 0,
+          "blockedRequests": 0,
+          "scenarios": [
+            "Entering 123 then deleting the last digit displays 12",
+            "Clear permits a new calculation after input",
+            "Clear permits a new calculation after a result",
+            "Keyboard and button calculations give the same result",
+            "At 360px controls and result work without horizontal scrolling"
+          ],
+          "domSelectors": [
+            {
+              "selector": ".calculator",
+              "matches": 1
+            },
+            {
+              "selector": ".display",
+              "matches": 1
+            },
+            {
+              "selector": ".keys",
+              "matches": 1
+            },
+            {
+              "selector": ".key",
+              "matches": 18
+            }
+          ]
+        },
+        "unverifiedAreas": [
+          "Unshown unchanged source beyond the verified arithmetic export signature",
+          "Other viewport widths, browsers, physical phones and accessibility beyond the supplied scenarios",
+          "Independent model verdicts, publication, exact-candidate CI and overall completion"
+        ],
+        "publicationAuthorized": false
+      },
+      "sourceChanged": false,
+      "githubReads": 237
+    }
+  },
+  "legalEnabled": false,
+  "step9Closed": true,
+  "status": "owner-extended-native-three-reviews-and-fresh-worker-refusal-verified",
+  "freshWorkerReplay": {
+    "runId": 40308016882,
+    "jobId": 121521862855,
+    "eventSha": "ae5b898d461ac6347ffa83c9b6c9787eab49041e",
+    "result": {
+      "version": 1,
+      "status": "fresh-native-controller-replay-refused-before-source-and-model",
+      "modelCalls": 0,
+      "githubApiMutationRequests": 0,
+      "executionAuthorized": false,
+      "legalEnabled": false,
+      "ownerApprovalVerified": true,
+      "used": {
+        "requests": 65,
+        "requestBytes": 626530,
+        "reservedTokens": 263359
+      },
+      "remaining": {
+        "requests": 0,
+        "requestBytes": 35689,
+        "reservedTokens": 1527
+      },
+      "ledgerUnchanged": true,
+      "sourceCalls": 0,
+      "githubReads": 14
+    }
+  },
+  "ci": {
+    "runId": 40307399135,
+    "jobId": 121519786306,
+    "typecheck": "passed",
+    "tests": 2414,
+    "passed": 2414,
+    "failed": 0
+  },
+  "integrity": {
+    "budgetCommit": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+    "oldThreeReservationsPreserved": true,
+    "totalReservations": 6,
+    "mainUnchanged": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculatorUnchanged": "558993981c9bbb7c6100c8335860ac5668768314"
+  },
+  "closureScope": "owner authorization, complete-history shared budget, three real read-only reviews and native exhausted-budget replay refusal",
+  "wholeAppCompleted": false,
+  "generalProjectAutonomyVerified": false,
+  "newModelCallsAuthorized": 0
+}

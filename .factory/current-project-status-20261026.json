@@ -76,42 +76,59 @@
     }
   },
   "step9": {
-    "closed": false,
+    "closed": true,
     "9.1": "completed-in-documented-scope",
     "9.2": "completed-in-documented-scope",
     "9.3": "completed-native-owner-approved-ledger-initialized",
-    "9.4": "live-run-stopped-after-two-provider-sends-three-reservations-context-fixed-no-live-retry",
+    "9.4": "completed-real-security-reviewer-tester-node-chrome-ci-and-native-replay-refusal",
     "ownerDecision": {
       "issueNumber": 75,
-      "commentId": 6412067757,
-      "bodySha256": "afaf23c899abbd5349787e912e6249092a5e6690d66abc1f3eb5d1adbc8318b6"
+      "commentId": 6413719353,
+      "bodySha256": "c258f075d6f0d5aabd81ed272a9cfd5a7d5b7cbd768ab9179e0e60585773a916"
     },
     "actualLedgerInitialized": true,
-    "ownerApprovalCommentsObservedInPr75": 1,
+    "ownerApprovalCommentsObservedInPr75": 2,
     "newModelCallsAuthorized": 0
   },
   "currentCandidateRecoveryRequired": false,
   "genericRecoveryMechanismIsSeparate": true,
   "legalEnabled": false,
   "latestProjectReview": {
-    "runId": 40296325671,
-    "status": "unverified",
-    "providerCallsSent": 2,
-    "ledgerReservations": 3,
-    "usedRequests": 62,
+    "runId": 40307399306,
+    "status": "verified-in-read-only-scope",
+    "providerCallsSent": 3,
+    "newLedgerReservations": 3,
+    "totalLedgerReservations": 6,
+    "usedRequests": 65,
+    "usedRequestBytes": 626530,
+    "usedReservedTokens": 263359,
     "remainingRequests": 0,
-    "allThreeReviewsVerified": false,
-    "fixSourceSha": "0cc520245e3db9e0b922a9a2336271574c5533d7",
-    "fixCiRunId": 40298235602,
-    "tests": 2402,
-    "passed": 2402,
-    "nativeReplayRunId": 40298681929,
+    "allThreeReviewsVerified": true,
+    "roles": [
+      {
+        "role": "security",
+        "ready": true
+      },
+      {
+        "role": "reviewer",
+        "ready": true
+      },
+      {
+        "role": "tester",
+        "ready": true
+      }
+    ],
+    "runtimeSha": "b1d7f906517fdedf959b23f8f8503294a626b9dd",
+    "sourceCiRunId": 40303983534,
+    "tests": 2414,
+    "passed": 2414,
+    "nativeReplayRunId": 40308016882,
     "nativeReplayModelCalls": 0,
-    "proof": ".factory/step9-owner-live-proof-20261026.json"
+    "proof": ".factory/step9-extended-live-proof-20261026.json"
   },
   "budgetExtension": {
-    "status": "prepared-inspected-awaiting-new-owner-decision",
-    "active": false,
+    "status": "owner-approved-applied-and-three-requests-consumed",
+    "active": true,
     "newModelCallsAuthorized": 0,
     "sourceSha": "b1d7f906517fdedf959b23f8f8503294a626b9dd",
     "sourceCiRunId": 40303983534,
@@ -121,6 +138,18 @@
     "modelCalls": 0,
     "reservationsPreserved": 3,
     "proposedAdditionalRequests": 3,
-    "proof": ".factory/project-budget-extension-proof-20261026.json"
-  }
+    "proof": ".factory/step9-extended-live-proof-20261026.json",
+    "ownerDecision": {
+      "issueNumber": 75,
+      "commentId": 6413719353,
+      "bodySha256": "c258f075d6f0d5aabd81ed272a9cfd5a7d5b7cbd768ab9179e0e60585773a916"
+    },
+    "activationRunId": 40307264999,
+    "activationStateWrites": 1,
+    "actualReviewRunId": 40307399306,
+    "actualReviewModelCalls": 3,
+    "oldReservationsPreserved": 3
+  },
+  "wholeAppCompleted": false,
+  "generalProjectAutonomyVerified": false
 }
