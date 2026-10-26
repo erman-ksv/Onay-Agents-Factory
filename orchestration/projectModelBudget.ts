@@ -48,6 +48,7 @@ const ledgers=new WeakSet<object>();
 export type ProjectModelBudget=Readonly<{
  initialize:()=>Promise<void>;reserve:(input:ProjectModelReservation)=>Promise<void>;
  inspect:()=>Promise<Readonly<{grantSha256:string;used:ProjectModelCharge;remaining:ProjectModelCharge}>>;
+ inspectExecution:(taskId:string,executionId:string)=>Promise<Readonly<{requests:number}>>;
 }>;
 export function isProjectModelBudget(value:unknown):value is ProjectModelBudget{return !!value&&typeof value==='object'&&ledgers.has(value);}
 export function openProjectModelBudget(input:ProjectModelGrant,store:ProjectModelBudgetStore):ProjectModelBudget{
@@ -74,5 +75,6 @@ export function openProjectModelBudget(input:ProjectModelGrant,store:ProjectMode
    }catch{return refuse();}
   },
   async inspect(){const current=await read(),used=totals(current.state);return Object.freeze({grantSha256:digest,used,remaining:Object.freeze({requests:g.maxRequests-used.requests,requestBytes:g.maxTotalRequestBytes-used.requestBytes,reservedTokens:g.maxReservedTokens-used.reservedTokens})});},
+  async inspectExecution(taskId:string,executionId:string){if(!id(taskId)||!id(executionId))return refuse();const current=await read(),entries=current.state.reservations.filter(r=>r.reservationId.startsWith(executionId+':r'));if(entries.some(r=>r.taskId!==taskId))return refuse();return Object.freeze({requests:entries.length});},
  });ledgers.add(ledger);return ledger;
 }

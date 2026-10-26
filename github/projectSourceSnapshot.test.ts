@@ -1,16 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
+import {createHash,randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
 import {createProjectTargetRegistry,type ProjectTargetDefinition} from '../orchestration/projectTargetRegistry.js';
 import {prepareProjectGoal,createProjectPlan,projectPlanTaskId} from '../orchestration/projectPlan.js';
 import {loadProjectTaskSnapshot,loadGitHubProjectTaskSnapshot,projectSnapshotSources,verifyProjectSnapshot,createProjectSnapshotSourceGuard,PROJECT_SOURCE_ERROR,type ProjectSnapshotReader} from './projectSourceSnapshot.js';
 import {prepareProjectChanges,projectChangesFiles,verifyProjectChanges,PROJECT_CHANGES_ERROR} from '../commander/projectChanges.js';
 import {prepareProjectModelContext,projectContextRequestBody,createProjectContextGuard,createContextBoundProjectTransport,projectReplyContent,prepareProjectReplyChanges,prepareProjectReplyAssessment,PROJECT_REPLY_ERROR,prepareProjectCorrectionContext,PROJECT_CORRECTION_ERROR,PROJECT_CONTEXT_ERROR} from '../orchestration/projectModelContext.js';
 import {createProjectExecutionAdmission} from '../orchestration/projectExecutionAdmission.js';
+import {createProjectCorrectionRecoveryKey,destroyProjectCorrectionRecoveryKey,saveProjectCorrectionCheckpoint,restoreProjectCorrectionCheckpoint,PROJECT_CORRECTION_CHECKPOINT_ERROR} from '../orchestration/projectCorrectionCheckpoint.js';
 import {authorizeProjectBudget,reconcileProjectBudgetHistory,projectBudgetApprovalDigest,type ProjectBudgetHistory} from '../orchestration/projectBudgetAuthorization.js';
 import {createProjectModelBudgetFileStore} from '../orchestration/projectModelBudgetFileStore.js';
 import {prepareProjectNodeTestPolicy,createProjectNodeSandboxForTests} from '../orchestration/projectNodeTests.js';
-import {mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
+import {mkdtempSync,rmSync,readFileSync,writeFileSync,chmodSync,linkSync,symlinkSync,existsSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const blob=(s:string)=>createHash('sha1').update(Buffer.from('blob '+Buffer.byteLength(s)+'\0'+s)).digest('hex');
@@ -133,7 +134,7 @@ async function contextWireFixture(responder?:(body:string,call:number)=>string,g
  const root=mkdtempSync(join(tmpdir(),'context-bound-test-')),store=createProjectModelBudgetFileStore(root),comment={id:321,user:{login:'erman-ksv',type:'User'},author_association:'OWNER',issue_url:'https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/75',html_url:'https://github.com/erman-ksv/Onay-Agents-Factory/pull/75#issuecomment-321',created_at:'2026-10-26T11:00:00Z',updated_at:'2026-10-26T11:00:00Z',body:JSON.stringify(doc)};
  const authorization={identity,history,decision:{issueNumber:75,commentId:321,bodySha256:projectBudgetApprovalDigest(doc)},targetProfile:f.target,token:'offline-owner-token',store,now:()=>Date.parse('2026-10-26T12:00:00Z'),transport:async()=>Response.json(comment)};const controller=await authorizeProjectBudget(authorization);await controller.initialize();const admission=await createProjectExecutionAdmission(f.plan,controller,{assertSource:createProjectSnapshotSourceGuard(snapshot),assertDependencies:async()=>{}}).prepare(f.taskId);
  let calls=0,clock=0;const options={plan:f.plan,taskId:f.taskId,snapshot,admission,env:{AGENT_FACTORY_PROVIDER:'groq',GROQ_API_KEY:'offline-context-token',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_PROJECT_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',AGENT_FACTORY_LEGAL_ENABLED:'false'},checkpoint:async()=>{},timing:{now:()=>clock,wait:async(ms:number)=>{clock+=ms;}},transport:(async(_input:unknown,init?:RequestInit)=>{calls++;return Response.json({choices:[{finish_reason:'stop',message:{role:'assistant',content:responder?responder(String(init?.body),calls):'{"unverified":true}'}}]});}) as typeof fetch};
- return{...f,snapshot,store,controller,options,revokeApproval:()=>{comment.author_association='NONE';},reauthorize:async()=>{const c=await authorizeProjectBudget(authorization);await c.inspect();return c;},calls:()=>calls,cleanup:()=>rmSync(root,{recursive:true,force:true})};
+ return{...f,snapshot,store,controller,privateRoot:root,options,revokeApproval:()=>{comment.author_association='NONE';},reauthorize:async()=>{const c=await authorizeProjectBudget(authorization);await c.inspect();return c;},calls:()=>calls,cleanup:()=>rmSync(root,{recursive:true,force:true})};
 }
 test('context-bound production transport sends only genuine packet through the admitted project budget',async()=>{
  const f=await contextWireFixture();try{const p=await prepareProjectModelContext(f.plan,f.taskId,f.snapshot,{role:'author',model,selections:[range(f)]}),wire=createContextBoundProjectTransport(f.options),r=await wire.request(p);assert.equal(f.calls(),1);assert.equal((await f.controller.inspect()).used.requests,1);assert.equal(r.proposalVerified,false);assert.equal(wire.snapshot().contextBound,true);assert.equal(wire.snapshot().independentAssessmentsVerified,false);}finally{f.cleanup();}
@@ -281,4 +282,68 @@ test('uncertain checkpoint after correction reservation prevents HTTP and retain
 });
 test('reused admission cannot start a second correction transport',async()=>{
  const f=await correctionAttemptFixture();try{const admission=await f.session().prepareCorrection(f.ticket);createContextBoundProjectTransport({...f.wireOptions,admission});assert.throws(()=>createContextBoundProjectTransport({...f.wireOptions,admission}),contextRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+const checkpointRefusal=(e:unknown)=>e instanceof Error&&e.message===PROJECT_CORRECTION_CHECKPOINT_ERROR;
+async function sealedFixture(){const f=await correctionAttemptFixture(),secret=randomBytes(32),key=createProjectCorrectionRecoveryKey('host-recovery-v1',secret),path=join(f.privateRoot,'correction-checkpoint.json'),reference=await saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,f.controller,key,path);return{...f,secret,key,path,reference,restore:async()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,await f.reauthorize(),key,path,reference.sha256)};}
+test('checkpoint seals private source and issues without persisting its recovery key',async()=>{
+ const f=await sealedFixture();try{const bytes=readFileSync(f.path),text=bytes.toString('utf8');assert.equal(hash(text),f.reference.sha256);assert.equal(bytes.length,f.reference.bytes);assert.equal(f.reference.modelCallsAuthorized,0);for(const marker of ['PRIVATE_FAILURE_MARKER','value = 2','edits',f.secret.toString('base64')])assert.equal(text.includes(marker),false);assert.equal(JSON.stringify(f.key).includes(f.secret.toString('hex')),false);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+test('fresh native-branded controller restores exact selected context while reading the old ledger',async()=>{
+ const f=await sealedFixture();try{const before=readFileSync(f.path),r=await f.restore();assert.notEqual(r.ticket,f.ticket);assert.equal(r.ticket.id,f.ticket.id);assert.equal(r.packet.requestSha256,f.packet.requestSha256);assert.equal(projectContextRequestBody(r.packet),projectContextRequestBody(f.packet));assert.equal(JSON.stringify(r).includes('PRIVATE_FAILURE_MARKER'),false);assert.deepEqual(readFileSync(f.path),before);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+test('restored correction runs fresh author and all three assessments without replaying the parent',async()=>{
+ const f=await sealedFixture();try{const r=await f.restore(),c=await f.reauthorize(),wire=createContextBoundProjectTransport({...f.wireOptions,admission:await createProjectExecutionAdmission(f.plan,c,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}}).prepareCorrection(r.ticket)}),changes=await prepareProjectReplyChanges(await wire.request(r.packet));for(const role of ['security','reviewer','tester'] as const)await prepareProjectReplyAssessment(await wire.request(await f.reviewPacket(role,changes)));assert.equal(f.calls(),2);assert.equal(f.correctionCalls(),4);assert.equal((await c.inspect()).used.requests,6);assert.equal(wire.snapshot().attempt,2);assert.equal(wire.snapshot().publicationAuthorized,false);}finally{f.cleanup();}
+});
+test('wrong copied destroyed or caller-mutated key cannot compromise the saved host key',async()=>{
+ const f=await sealedFixture();try{const wrong=createProjectCorrectionRecoveryKey('host-recovery-v1',randomBytes(32));for(const key of [wrong,{...f.key}])await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,key,f.path,f.reference.sha256),checkpointRefusal);f.secret.fill(0);await f.restore();destroyProjectCorrectionRecoveryKey(f.key);await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+test('ciphertext tag nonce and authenticated key ID tampering fail even with a fresh outer digest',async()=>{
+ for(const field of ['ciphertext','tag','nonce','keyId']){const f=await sealedFixture();try{const v=JSON.parse(readFileSync(f.path,'utf8'));if(field==='keyId')v.keyId='foreign-key';else{const bytes=Buffer.from(v[field],'base64');bytes[0]=bytes[0]!^1;v[field]=bytes.toString('base64');}const text=JSON.stringify(v);writeFileSync(f.path,text);await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,f.path,hash(text)),checkpointRefusal);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}}
+});
+test('unknown envelope fields, truncation and incorrect host digest never restore authority',async()=>{
+ for(const mode of ['extra','truncated','digest']){const f=await sealedFixture();try{let text=readFileSync(f.path,'utf8');if(mode==='extra')text=JSON.stringify({...JSON.parse(text),testsPassed:true});if(mode==='truncated')text=text.slice(0,20);writeFileSync(f.path,text);await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,f.path,mode==='digest'?'0'.repeat(64):hash(text)),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}}
+});
+test('symlinked or hard-linked checkpoint cannot be imported',async()=>{
+ for(const mode of ['symlink','hardlink']){const f=await sealedFixture();try{const other=join(f.privateRoot,'linked.json');if(mode==='symlink')symlinkSync(f.path,other);else linkSync(f.path,other);await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,other,f.reference.sha256),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}}
+});
+test('permissive checkpoint file or parent permissions refuse restoration',async()=>{
+ for(const mode of ['file','parent']){const f=await sealedFixture();try{chmodSync(mode==='file'?f.path:f.privateRoot,0o755);await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{chmodSync(f.privateRoot,0o700);f.cleanup();}}
+});
+test('relative and traversal paths cannot select an alternative recovery file',async()=>{
+ const f=await sealedFixture();try{for(const path of ['correction-checkpoint.json',f.privateRoot+'/../'+f.privateRoot.split('/').at(-1)+'/correction-checkpoint.json'])await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,path,f.reference.sha256),checkpointRefusal);}finally{f.cleanup();}
+});
+test('revoked owner approval blocks restoration without model calls or ledger reset',async()=>{
+ const f=await sealedFixture();try{f.revokeApproval();await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,f.path,f.reference.sha256),checkpointRefusal);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+test('changed source invalidates encrypted recovery even if the original ref later returns',async()=>{
+ const f=await sealedFixture();try{const old=f.state.root;f.state.root='6'.repeat(40);await assert.rejects(()=>f.restore(),checkpointRefusal);f.state.root=old;await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+test('rolled-back ledger counters cannot satisfy the sealed high-water floor',async()=>{
+ const f=await sealedFixture();try{const path=join(f.privateRoot,'project-model-budget.json'),v=JSON.parse(readFileSync(path,'utf8'));writeFileSync(path,JSON.stringify({...v,reservations:[]}));await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(JSON.parse(readFileSync(path,'utf8')).reservations.length,0);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+test('admitted or already sealed handoff cannot overwrite a checkpoint or save an ambiguous stage',async()=>{
+ const f=await sealedFixture();try{const before=readFileSync(f.path);await assert.rejects(()=>saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,f.controller,f.key,f.path),checkpointRefusal);assert.deepEqual(readFileSync(f.path),before);}finally{f.cleanup();}
+ const g=await correctionAttemptFixture();try{await g.session().prepareCorrection(g.ticket);const path=join(g.privateRoot,'too-late.json'),key=createProjectCorrectionRecoveryKey('host-recovery-v1',randomBytes(32));await assert.rejects(()=>saveProjectCorrectionCheckpoint(g.ticket,g.plan,g.taskId,g.controller,key,path),checkpointRefusal);assert.equal(existsSync(path),false);assert.equal(g.correctionCalls(),0);}finally{g.cleanup();}
+});
+test('a started correction reservation permanently blocks replay from the older checkpoint',async()=>{
+ const f=await sealedFixture();try{const wire=await f.start();await wire.request(f.packet);await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(f.correctionCalls(),1);assert.equal((await f.controller.inspect()).used.requests,3);}finally{f.cleanup();}
+});
+test('uncertain checkpoint after durable reservation refuses recovery even though no HTTP was sent',async()=>{
+ const f=await sealedFixture();try{const wire=createContextBoundProjectTransport({...f.wireOptions,admission:await f.session().prepareCorrection(f.ticket),checkpoint:async()=>{throw Error('PRIVATE_UNCERTAIN_CHECKPOINT');}});await assert.rejects(()=>wire.request(f.packet),contextRefusal);await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(f.correctionCalls(),0);assert.equal((await f.controller.inspect()).used.requests,3);}finally{f.cleanup();}
+});
+test('two recovered workers racing the same correction can send at most one first request',async()=>{
+ const f=await sealedFixture();try{const [a,b]=await Promise.all([f.restore(),f.restore()]),ca=await f.reauthorize(),cb=await f.reauthorize(),make=async(c:typeof ca,r:typeof a)=>createContextBoundProjectTransport({...f.wireOptions,admission:await createProjectExecutionAdmission(f.plan,c,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}}).prepareCorrection(r.ticket)}),wa=await make(ca,a),wb=await make(cb,b);const results=await Promise.allSettled([wa.request(a.packet),wb.request(b.packet)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.correctionCalls(),1);assert.equal((await f.controller.inspect()).used.requests,3);}finally{f.cleanup();}
+});
+test('caller-declared controller or malformed recovery key cannot approve checkpoint persistence',async()=>{
+ const f=await correctionAttemptFixture();try{const key=createProjectCorrectionRecoveryKey('host-recovery-v1',randomBytes(32)),path=join(f.privateRoot,'forged.json');await assert.rejects(()=>saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,{...f.controller},key,path),checkpointRefusal);assert.equal(existsSync(path),false);assert.throws(()=>createProjectCorrectionRecoveryKey('host-recovery-v1',Buffer.alloc(31)),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+function rewriteAuthenticatedFixture(f:Awaited<ReturnType<typeof sealedFixture>>,mutate:(d:any)=>void){const e=JSON.parse(readFileSync(f.path,'utf8')),aad=Buffer.from(JSON.stringify({version:e.version,kind:e.kind,keyId:e.keyId})),dec=createDecipheriv('aes-256-gcm',f.secret,Buffer.from(e.nonce,'base64'));dec.setAAD(aad);dec.setAuthTag(Buffer.from(e.tag,'base64'));const d=JSON.parse(Buffer.concat([dec.update(Buffer.from(e.ciphertext,'base64')),dec.final()]).toString('utf8'));mutate(d);const nonce=randomBytes(12),cipher=createCipheriv('aes-256-gcm',f.secret,nonce);cipher.setAAD(aad);const encrypted=Buffer.concat([cipher.update(JSON.stringify(d)),cipher.final()]),text=JSON.stringify({...e,nonce:nonce.toString('base64'),tag:cipher.getAuthTag().toString('base64'),ciphertext:encrypted.toString('base64')});writeFileSync(f.path,text);return hash(text);}
+test('authenticated but inconsistent stage, identity or request SHA is rejected after decryption',async()=>{
+ for(const mode of ['inflight','stage','owner','request','proposal','scope']){const f=await sealedFixture();try{const digest=rewriteAuthenticatedFixture(f,d=>{if(mode==='inflight')d.httpInFlight=true;if(mode==='stage')d.stage='after-http';if(mode==='owner')d.ownerFingerprint='0'.repeat(64);if(mode==='request')d.requestSha256='0'.repeat(64);if(mode==='proposal')d.ticket.previousProposalDigest='0'.repeat(64);if(mode==='scope')d.issues[0].path='src/foreign.mjs';});await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,f.path,digest),checkpointRefusal);assert.equal(f.correctionCalls(),0);assert.equal((await f.controller.inspect()).used.requests,2);}finally{f.cleanup();}}
+});
+test('oversized encrypted recovery files refuse before processing plaintext',async()=>{
+ const f=await sealedFixture();try{const bytes=Buffer.alloc(262145,65);writeFileSync(f.path,bytes);await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,f.path,createHash('sha256').update(bytes).digest('hex')),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
+});
+test('checkpoint does not silently provision a secret or initialize a missing ledger',async()=>{
+ const f=await correctionAttemptFixture();try{const path=join(f.privateRoot,'missing-key.json');await assert.rejects(()=>saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,f.controller,{} as any,path),checkpointRefusal);assert.equal(existsSync(path),false);assert.equal((await f.controller.inspect()).used.requests,2);}finally{f.cleanup();}
 });

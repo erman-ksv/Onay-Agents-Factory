@@ -77,6 +77,7 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
    historyDigest:history.digest,historicalCharge:history.charge,
    async initialize(){await assertAuthorized();await ledger.initialize();},
    inspect:ledger.inspect,
+   async inspectExecution(taskId:string,executionId:string){if(!identity.taskIds.includes(taskId)||!safeId(executionId))return refuse();await assertAuthorized();return ledger.inspectExecution(taskId,executionId);},
    async taskScope(taskId:string,executionId:string):Promise<AuthorizedProjectTaskScope>{
     if(!['planning',...identity.taskIds].includes(taskId)||!safeId(executionId)||executionId.length>96||issued.has(executionId))return refuse();await assertAuthorized();issued.add(executionId);
     const scope=Object.freeze({}) as AuthorizedProjectTaskScope;scopes.set(scope,{identity,taskId,executionId,ledger,assertAuthorized,assertCurrentTime,operationMode:operationMode!,...(profile?{targetProfile:target}:{}),used:false});return scope;
