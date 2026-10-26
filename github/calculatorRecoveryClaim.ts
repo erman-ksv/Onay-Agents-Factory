@@ -54,6 +54,7 @@ export function createCalculatorRecoveryGitHubClaim(input:Readonly<{planFingerpr
   const blob=await api('/git/blobs/'+blobSha);if(blob.sha!==blobSha||blob.encoding!=='base64'||typeof blob.content!=='string')return refuse();const encoded=blob.content.replace(/\s/g,''),bytes=Buffer.from(encoded,'base64');if(bytes.toString('base64')!==encoded||git('blob',bytes)!==blobSha||bytes.toString('utf8')!==marker)return refuse();
  }
  return Object.freeze({ref,
+  async inspectReady(){if(stopped||attempted)return refuse();try{await sourceCi();return await api(path,'GET',undefined,true)===undefined;}catch{stopped=true;return refuse();}},
   async inspectAbsent(){if(stopped||attempted)return refuse();try{return await api(path,'GET',undefined,true)===undefined;}catch{stopped=true;return refuse();}},
   async claimRecovery(b:Binding){
    if(stopped||attempted)return refuse();attempted=true;
