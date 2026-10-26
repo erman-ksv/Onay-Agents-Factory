@@ -43,7 +43,7 @@ jobs:
       - name: Checkout immutable tested runtime
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
+          ref: 'b1d7f906517fdedf959b23f8f8503294a626b9dd'
           path: runtime
           persist-credentials: false
       - name: Checkout exact event request
@@ -70,8 +70,8 @@ jobs:
         env:
           FACTORY_PROJECT_REVIEW_MODE: 'inspect'
           FACTORY_READ_TOKEN: ${{ github.token }}
-          FACTORY_RUNTIME_SHA: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
-          FACTORY_SOURCE_CI_RUN: '40294407754'
+          FACTORY_RUNTIME_SHA: 'b1d7f906517fdedf959b23f8f8503294a626b9dd'
+          FACTORY_SOURCE_CI_RUN: '40303983534'
           AGENT_FACTORY_TARGET_PROFILE: calculator
           AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
           AGENT_FACTORY_LEGAL_ENABLED: 'false'
@@ -96,7 +96,7 @@ jobs:
       - name: Checkout immutable tested runtime
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
+          ref: 'b1d7f906517fdedf959b23f8f8503294a626b9dd'
           path: runtime
           persist-credentials: false
       - name: Checkout exact event request
@@ -127,8 +127,8 @@ jobs:
         env:
           FACTORY_PROJECT_REVIEW_MODE: 'review'
           FACTORY_READ_TOKEN: ${{ github.token }}
-          FACTORY_RUNTIME_SHA: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
-          FACTORY_SOURCE_CI_RUN: '40294407754'
+          FACTORY_RUNTIME_SHA: 'b1d7f906517fdedf959b23f8f8503294a626b9dd'
+          FACTORY_SOURCE_CI_RUN: '40303983534'
           AGENT_FACTORY_TARGET_PROFILE: calculator
           AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
           AGENT_FACTORY_LEGAL_ENABLED: 'false'

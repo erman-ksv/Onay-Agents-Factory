@@ -6,7 +6,7 @@
     "commentId": 6412067757,
     "bodySha256": "afaf23c899abbd5349787e912e6249092a5e6690d66abc1f3eb5d1adbc8318b6"
   },
-  "ownerDecision": null,
   "expectedRevision": "cb9126fbd4fb648a4a6580d1be1d9fa3a04e9cd6f498e2fb8ffe426c53b677d5",
-  "expectedStateSha256": "3a775f3a0edb6270c7f346b61d4e59ca6711d2e44637f35253112956205295ca"
+  "expectedStateSha256": "3a775f3a0edb6270c7f346b61d4e59ca6711d2e44637f35253112956205295ca",
+  "ownerDecision": null
 }
