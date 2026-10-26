@@ -1,0 +1,145 @@
+name: Published Calculator review through required project budget
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/published-project-review-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: published-calculator-project-review
+  cancel-in-progress: false
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      operation: ${{ steps.validate.outputs.operation }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .factory/published-project-review-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - id: validate
+        name: Select only a fixed inspect or owner-bound review operation
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,appendFileSync} from 'node:fs';const b=readFileSync('.factory/published-project-review-request.json');assert.ok(b.length<=4096);const r=JSON.parse(b);
+          assert.deepEqual(Object.keys(r).sort(),['candidateSha','operation','ownerDecision','version']);assert.equal(r.version,1);assert.equal(r.candidateSha,'558993981c9bbb7c6100c8335860ac5668768314');assert.ok(['inspect','review'].includes(r.operation));
+          if(r.operation==='inspect')assert.equal(r.ownerDecision,null);else{const d=r.ownerDecision;assert.ok(d&&typeof d==='object'&&!Array.isArray(d));assert.deepEqual(Object.keys(d).sort(),['bodySha256','commentId','issueNumber']);assert.equal(d.issueNumber,75);assert.ok(Number.isSafeInteger(d.commentId)&&d.commentId>0);assert.match(d.bodySha256,/^[a-f0-9]{64}$/);}
+          appendFileSync(process.env.GITHUB_OUTPUT,'operation='+r.operation+'\n');
+          JS
+  inspect:
+    needs: request
+    if: needs.request.outputs.operation == 'inspect'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout immutable tested runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
+          path: runtime
+          persist-credentials: false
+      - name: Checkout exact event request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/published-project-review-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform checked modules without installing packages
+        working-directory: runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Inspect absent owner approval without model credentials
+        working-directory: runtime
+        env:
+          FACTORY_PROJECT_REVIEW_MODE: 'inspect'
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
+          FACTORY_SOURCE_CI_RUN: '40294407754'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/calculator-published-candidate-preflight.mjs
+      - name: Preserve source-free outcome only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-project-review-inspect-${{ github.run_id }}
+          path: ${{ runner.temp }}/published-calculator-preflight/result.json
+          if-no-files-found: warn
+          retention-days: 7
+  review:
+    needs: request
+    if: needs.request.outputs.operation == 'review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout immutable tested runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
+          path: runtime
+          persist-credentials: false
+      - name: Checkout exact event request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/published-project-review-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform checked modules without installing packages
+        working-directory: runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Pull approved immutable host images
+        run: |
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Recheck native owner approval and initialized ledger before three reviews
+        working-directory: runtime
+        env:
+          FACTORY_PROJECT_REVIEW_MODE: 'review'
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: '32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee'
+          FACTORY_SOURCE_CI_RUN: '40294407754'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          FACTORY_BUDGET_TOKEN: ${{ github.token }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: node scripts/calculator-published-candidate-preflight.mjs
+      - name: Preserve source-free outcome only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-project-review-review-${{ github.run_id }}
+          path: ${{ runner.temp }}/published-calculator-preflight/result.json
+          if-no-files-found: warn
+          retention-days: 7
