@@ -28,3 +28,7 @@
 ## Этап10.3: общий валидатор плана и допуск готовы
 
 Source e405075: цель/критерии владельца, host-derived IDs/branch/profile, проверка DAG/покрытия, bounded16000 metadata context, одноразовый native budget admission с host source/dependency guards. CI40323482182: TypeScript/2445tests PASS, local140/140. [Отчёт](STEP_10_03_PROJECT_PLAN_ADMISSION_2026-10-26.md). Модельный планировщик/универсальный executor, реальные generic guards и весь generic reviews/tests/publication/CI delivery ещё не подключены. Новых моделей/бюджетов/production targets0, main/app/ledger неизменны. Второй проект не запускался.
+
+## Новый дефект Calculator от владельца
+
+Повторные операторы6**2/6*+2 воспроизведены на original handlers (mock DOM): строка принимает их, равно выдаёт ошибку. Это новая незакрытая продуктовая задача; прежние11 критериев не включали этот случай. T05 не повторять. [Диагностика и задача](CALCULATOR_INPUT_DEFECT_2026-10-26.md). Агент не запущен, квота0, source unchanged. Нужны отдельный task/development allowance и полная проверка исправления; generic execution pipeline ещё не подключён.

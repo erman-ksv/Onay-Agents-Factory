@@ -153,7 +153,7 @@
   "wholeAppCompleted": false,
   "generalProjectAutonomyVerified": false,
   "calculatorAcceptance": {
-    "status": "technical-matrix-verified-in-documented-scope",
+    "status": "technical-matrix-passed-new-owner-input-defect-open",
     "criteriaCovered": 11,
     "criteriaTotal": 11,
     "realBrowserScenarios": 5,
@@ -199,5 +199,14 @@
     "modelCalls": 0,
     "budgetWrites": 0,
     "proof": ".factory/project-plan-admission-proof-20261026.json"
-  }
+  },
+  "reportedCalculatorDefects": [
+    {
+      "id": "calculator-repeated-operators-20261026",
+      "status": "reproduced-repair-not-dispatched",
+      "proof": ".factory/calculator-input-defect-20261026.json",
+      "newTaskRequired": true,
+      "agentDispatched": false
+    }
+  ]
 }
