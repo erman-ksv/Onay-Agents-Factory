@@ -9,6 +9,7 @@ import {prepareProjectModelContext,projectContextRequestBody,createProjectContex
 import {createProjectExecutionAdmission} from '../orchestration/projectExecutionAdmission.js';
 import {authorizeProjectBudget,reconcileProjectBudgetHistory,projectBudgetApprovalDigest,type ProjectBudgetHistory} from '../orchestration/projectBudgetAuthorization.js';
 import {createProjectModelBudgetFileStore} from '../orchestration/projectModelBudgetFileStore.js';
+import {prepareProjectNodeTestPolicy,createProjectNodeSandboxForTests} from '../orchestration/projectNodeTests.js';
 import {mkdtempSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
 
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -186,4 +187,14 @@ test('reusing an old role response or parsing one twice cannot continue the cycl
 });
 test('a model cannot leak a whole private source file through assessment metadata',async()=>{
  const source=fixture().files.get('src/app.mjs')!,f=await specialistFixture((content,call)=>call===1?content:JSON.stringify({...JSON.parse(content),unverifiedAreas:[source]}));try{const {changes}=await f.proposal(),reply=await f.wire.request(await f.packet('security',changes));assert.equal(JSON.stringify(reply).includes('PRIVATE_MARKER'),false);await assert.rejects(()=>prepareProjectReplyAssessment(reply),replyRefusal);assert.equal(f.wire.snapshot().stopped,true);assert.equal(f.calls(),2);}finally{f.cleanup();}
+});
+test('generic role pipeline cannot substitute simulated or modeled host proof after all opinions pass',async()=>{
+ const f=await specialistFixture();try{const {changes}=await f.proposal();for(const role of ['security','reviewer','tester'] as const)await prepareProjectReplyAssessment(await f.wire.request(await f.packet(role,changes)));
+  const policy=prepareProjectNodeTestPolicy(f.plan,f.taskId,{image:'node@sha256:'+'1'.repeat(64),checks:[{id:'contract-value',path:'src/app.mjs',exportName:'value',args:[],expected:2,acceptanceIds:['show-value']}]});
+  const runner=(async(args:readonly string[])=>({code:0,stderr:'',stdout:args.includes('info')?'28.0.0':args.includes('inspect')?JSON.stringify([policy.image]):args.includes('--version')?'v24.0.0':JSON.stringify({version:1,status:'passed',checks:policy.checkIds,failures:[]})}));
+  const receipt=await createProjectNodeSandboxForTests(policy,runner).run(f.snapshot,changes);assert.equal(receipt.status,'passed');await assert.rejects(()=>f.wire.verifyRuntimeTests(receipt,policy),contextRefusal);assert.equal(f.wire.snapshot().runtimeTestsVerified,false);assert.equal(f.wire.snapshot().browserTestsVerified,false);assert.equal(f.wire.snapshot().ciVerified,false);assert.equal(f.wire.snapshot().stopped,true);assert.equal(f.calls(),4);
+ }finally{f.cleanup();}
+});
+test('host-test gate cannot skip independent reviews or accept raw model claims',async()=>{
+ const f=await specialistFixture();try{await f.proposal();await assert.rejects(()=>f.wire.verifyRuntimeTests({status:'passed',testsExecuted:true} as any,{} as any),contextRefusal);assert.equal(f.wire.snapshot().runtimeTestsVerified,false);assert.equal(f.calls(),1);}finally{f.cleanup();}
 });

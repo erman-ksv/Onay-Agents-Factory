@@ -5,6 +5,7 @@ import {assertProjectSnapshotIdentity,projectSnapshotSources,verifyProjectSnapsh
 import {prepareProjectChanges,projectChangesFiles,verifyProjectChanges,assertProjectChangesSnapshot,type PreparedProjectChanges} from '../commander/projectChanges.js';
 import {createProjectTaskModelTransport} from './projectTaskModelTransport.js';
 import type {ProjectExecutionAdmission} from './projectExecutionAdmission.js';
+import {verifyProjectNodeTestReceipt,type ProjectNodeTestReceipt,type ProjectNodeTestPolicy} from './projectNodeTests.js';
 
 export const PROJECT_CONTEXT_ERROR='Project model context is unverified, stale, over budget or outside the admitted task. No request or retry is authorized.';
 const refuse=():never=>{throw Error(PROJECT_CONTEXT_ERROR);};
@@ -91,7 +92,7 @@ type TransportOptions=Parameters<typeof createProjectTaskModelTransport>[0];
  * bounded correction/restart and exact-candidate CI remain separate gates. */
 export function createContextBoundProjectTransport(options:Readonly<{plan:PreparedProjectPlan;taskId:string;snapshot:ProjectSourceSnapshot;admission:ProjectExecutionAdmission;env:NodeJS.ProcessEnv;checkpoint:TransportOptions['checkpoint'];transport?:typeof fetch;timing?:TransportOptions['timing']}>){
  try{
-  if(Object.hasOwn(options,'assertRequestContext'))return refuse();const {plan,taskId,snapshot}=options;assertProjectSnapshotIdentity(snapshot,plan,taskId);let guard:((body:string)=>Promise<void>)|undefined,busy=false,stopped=false,last:PreparedProjectReply|undefined,proposal:PreparedProjectChanges|undefined;const order:ProjectContextRole[]=['author','security','reviewer','tester'];let count=0;
+  if(Object.hasOwn(options,'assertRequestContext'))return refuse();const {plan,taskId,snapshot}=options;assertProjectSnapshotIdentity(snapshot,plan,taskId);let guard:((body:string)=>Promise<void>)|undefined,busy=false,stopped=false,last:PreparedProjectReply|undefined,proposal:PreparedProjectChanges|undefined,runtimeTestsVerified=false;const order:ProjectContextRole[]=['author','security','reviewer','tester'];let count=0;
   const wire=createProjectTaskModelTransport({plan,taskId,admission:options.admission,env:options.env,checkpoint:options.checkpoint,transport:options.transport,timing:options.timing,assertRequestContext:async body=>{if(!guard||stopped)return refuse();await guard(body);}});
   const stop=()=>{stopped=true;wire.stop();};
   return Object.freeze({async request(packet:PreparedProjectContext){try{
@@ -100,6 +101,8 @@ export function createContextBoundProjectTransport(options:Readonly<{plan:Prepar
    busy=true;guard=createProjectContextGuard(packet);const result=await wire.request(r.body);if(stopped)return refuse();
    const reply:PreparedProjectReply=Object.freeze({repository:packet.repository,planFingerprint:packet.planFingerprint,taskId:packet.taskId,baseSha:packet.baseSha,role:packet.role,...(packet.proposalDigest?{proposalDigest:packet.proposalDigest}:{}),requestSha256:packet.requestSha256,responseSha256:hash(result.content),responseBytes:Buffer.byteLength(result.content),model:result.model,proposalVerified:false,publicationAuthorized:false,wholeAppCompleted:false});
    replies.set(reply,{packet,content:result.content,used:false,assertUsable:()=>{if(stopped||last!==reply||busy)return replyRefusal();},stop});last=reply;count++;return reply;
-  }catch{stop();return refuse();}finally{busy=false;guard=undefined;}},snapshot:()=>Object.freeze({...wire.snapshot(),contextBound:true as const,repliesBound:true as const,nextRole:order[count]??null,independentAssessmentsVerified:!stopped&&count===4&&!!last&&replyRecord(last).assessment?.decision==='ready',runtimeTestsVerified:false as const,ciVerified:false as const})});
+  }catch{stop();return refuse();}finally{busy=false;guard=undefined;}},async verifyRuntimeTests(receipt:ProjectNodeTestReceipt,policy:ProjectNodeTestPolicy){try{
+   if(stopped||busy||runtimeTestsVerified||count!==4||!last||replyRecord(last).assessment?.decision!=='ready'||!proposal)return refuse();busy=true;await verifyProjectNodeTestReceipt(receipt,plan,taskId,snapshot,proposal,policy);if(stopped)return refuse();runtimeTestsVerified=true;
+  }catch{stop();return refuse();}finally{busy=false;}},snapshot:()=>Object.freeze({...wire.snapshot(),contextBound:true as const,repliesBound:true as const,nextRole:order[count]??null,independentAssessmentsVerified:!stopped&&count===4&&!!last&&replyRecord(last).assessment?.decision==='ready',runtimeTestsVerified:!stopped&&runtimeTestsVerified,runtimeCoverage:'host-selected-node-contracts-only' as const,browserTestsVerified:false as const,ciVerified:false as const})});
  }catch{return refuse();}
 }
