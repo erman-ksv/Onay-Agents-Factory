@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "specialist-reply-binding-and-order-complete-host-tests-correction-and-candidate-ci-pending",
+    "status": "node-host-test-receipts-complete-correction-restart-publication-and-ci-delivery-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -272,5 +272,24 @@
     "applicationWrites": 0,
     "runtimeTestsVerified": false,
     "proof": ".factory/project-specialist-replies-proof-20261026.json"
+  },
+  "genericNodeHostTests": {
+    "status": "generic-node-receipts-tested-native-docker-verified",
+    "sourceSha": "f0ecc1d9c2c6f2effb7dbc4e86785669451ff729",
+    "sourceCiRunId": 40376173448,
+    "tests": 2513,
+    "passed": 2513,
+    "localRelatedTests": 177,
+    "newTests": 12,
+    "nativeRunId": 40376621059,
+    "nativeCases": 6,
+    "nativeReceiptVerification": true,
+    "syntheticSource": true,
+    "genericFullPipelineWired": false,
+    "realModelCalls": 0,
+    "realBudgetWrites": 0,
+    "applicationWrites": 0,
+    "browserTestsVerified": false,
+    "proof": ".factory/project-node-tests-proof-20261026.json"
   }
 }
