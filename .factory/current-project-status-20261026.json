@@ -166,9 +166,24 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "not-started",
-    "goal": "host-approved target profiles and isolated per-project budget identities",
-    "blocker": "existing production authorization/profile is intentionally Calculator-specific",
-    "newModelAllowance": 0
+    "status": "foundation-complete-execution-wiring-not-started",
+    "goal": "connect host-approved target profile to planning, tools, sandbox and CI adapters",
+    "newModelAllowance": 0,
+    "secondProjectRunVerified": false
+  },
+  "projectProfiles": {
+    "status": "foundation-tested-native-calculator-compatible",
+    "sourceSha": "c393769bba4f8d520ff8aba41b4ba26067eb9039",
+    "sourceCiRunId": 40321529096,
+    "tests": 2428,
+    "passed": 2428,
+    "localRelatedTests": 123,
+    "nativeCompatibilityRunId": 40321794272,
+    "modelCalls": 0,
+    "budgetWrites": 0,
+    "legacyLedgerUnchanged": true,
+    "registeredNewProductionTargets": 0,
+    "genericExecutionWired": false,
+    "proof": ".factory/project-target-profiles-proof-20261026.json"
   }
 }

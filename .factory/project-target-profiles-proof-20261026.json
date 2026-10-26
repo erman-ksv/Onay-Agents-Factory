@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "status": "host-profile-budget-foundation-tested-native-calculator-compatible",
+  "stage": "10.2-host-profile-and-budget-foundation",
+  "scope": [
+    "host-only immutable target registry",
+    "owner document binding to targetProfileSha256",
+    "stable per-project budget namespace across profile revisions",
+    "unchanged legacy Calculator key"
+  ],
+  "localRelatedTests": {
+    "passed": 123,
+    "total": 123
+  },
+  "newProductionTargetsRegistered": 0,
+  "newOwnerGrantsIssued": 0,
+  "modelCalls": 0,
+  "applicationWrites": 0,
+  "wholeAppCompleted": false,
+  "genericExecutionWired": false,
+  "legalEnabled": false,
+  "sourceSha": "c393769bba4f8d520ff8aba41b4ba26067eb9039",
+  "sourceCiRunId": 40321529096,
+  "profileRevisionResetsBudget": false,
+  "sourceCi": {
+    "runId": 40321529096,
+    "jobId": 121567387135,
+    "typecheck": "passed",
+    "tests": 2428,
+    "passed": 2428,
+    "failed": 0
+  },
+  "nativeCompatibility": {
+    "runId": 40321794272,
+    "jobId": 121568294217,
+    "eventSha": "2108d5705f17c9ab39f1d032ce22112ae7b2e361",
+    "runtimeSha": "c393769bba4f8d520ff8aba41b4ba26067eb9039",
+    "result": {
+      "version": 1,
+      "status": "fresh-native-controller-replay-refused-before-source-and-model",
+      "modelCalls": 0,
+      "githubApiMutationRequests": 0,
+      "executionAuthorized": false,
+      "legalEnabled": false,
+      "ownerApprovalVerified": true,
+      "used": {
+        "requests": 65,
+        "requestBytes": 626530,
+        "reservedTokens": 263359
+      },
+      "remaining": {
+        "requests": 0,
+        "requestBytes": 35689,
+        "reservedTokens": 1527
+      },
+      "ledgerUnchanged": true,
+      "sourceCalls": 0,
+      "githubReads": 14
+    }
+  },
+  "legacyLedgerCommitUnchanged": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+  "mainUnchanged": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorUnchanged": "558993981c9bbb7c6100c8335860ac5668768314",
+  "approvalFormat": {
+    "legacyFields": 5,
+    "explicitTargetFields": 6,
+    "additionalSignedField": "targetProfileSha256"
+  },
+  "profileRevisionsPreserveExistingReservations": true,
+  "newTests": 14
+}
