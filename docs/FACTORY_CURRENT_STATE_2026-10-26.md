@@ -11,7 +11,7 @@
 - Полный used65/626530/263359; remaining.requests0. Никакого reset/refund/retry или нового бюджета без отдельного решения.
 - Typecheck и2414/2414 tests PASS. Main и приложение неизменны; без merge/deployment. Legal disabled.
 
-Текущий инженерный этап10.10: допуск и исполнение одного ограниченного исправления готовы; authenticated durable restart и generic candidate/CI ещё нужны. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
+Текущий инженерный этап10.11: encrypted pre-correction restoration готово; generic candidate/CI и production key/storage integration ещё нужны. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
 
 ## Исторические результаты
 
@@ -64,3 +64,8 @@ Source7b589b887209161e87d13223f921de8876976560, CI40378694175: TypeScript/2525te
 ## Этап10.10: qualified single correction
 
 Source90427ef4784baefd4347d37048cbc232166c074d; CI40381213998 TypeScript/2537tests PASS;local201/201,12 новых. Same project ledger, stable correction-1 ID, one-use genuine admission with4-request/context headroom, own correction packet, fresh independent roles, no content-identical resubmission or third attempt. TPM cooldown60s before first repair send (virtual in tests), checkpoint/owner/source/429 guards preserve charges. Native40381534393 actual Docker: first failed→one correction→passed against unchanged host oracle,8 MOCK model replies,temporary ledger4→8,no reset.0 real model/budget/app writes/newrealgrant; actualremaining0. [Отчёт](STEP_10_10_QUALIFIED_CORRECTION_2026-10-26.md). Далее authenticated durable correction restore, publication/exact-CI delivery и отдельный real allowance. Browser/Expo/device/full real autonomous project не подтверждены.
+
+
+## Этап10.11: encrypted pre-correction recovery
+
+Source1502dac7ed6061b62e6d555fa4cee1a3e49c61ce; CI40386189954 TypeScript/2557tests PASS;local221/221,20 новых. AES-256-GCM private exclusive checkpoint, host key отдельно; revalidate owner/source/profile/grant/high-water floor/proposal/exact requestSHA. Любой second-attempt WAL reserve запрещает restore/replay. Native40386663143:4 distinct host processes save→tamper refusal→resume→replay refusal,temporary ledger4→4→8→8;8 MOCK replies,2 real Docker tests failed→passed с неизменным oracle.0 actual models/remote budget/app writes/newrealgrant. [Отчёт](STEP_10_11_ENCRYPTED_CORRECTION_RECOVERY_2026-10-26.md). Только точка перед admission, не произвольный mid-HTTP resume; cross-machine production key/ciphertext storage пока не подтверждены. Далее generic publication/exact-CI delivery и deployment integration, separate real allowance. Main/app/ledger preserved;legal false.

@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.11",
+  "status": "encrypted-pre-correction-restoration-tested-distinct-processes-native-docker-verified",
+  "sourceSha": "1502dac7ed6061b62e6d555fa4cee1a3e49c61ce",
+  "sourceCi": {
+    "runId": 40386189954,
+    "jobId": 121794965871,
+    "typecheck": "passed",
+    "tests": 2557,
+    "passed": 2557,
+    "failed": 0
+  },
+  "local": {
+    "relatedTests": 221,
+    "passed": 221,
+    "sourceContextReplyNodeTests": 97,
+    "newRegressionTests": 20
+  },
+  "native": {
+    "runId": 40386663143,
+    "jobId": 121796630464,
+    "status": "success",
+    "eventSha": "482769a3857095d69ce48f487f1571d5a0bfe69d",
+    "hostProcesses": 4,
+    "temporaryLedgerUsedRequests": [
+      4,
+      4,
+      8,
+      8
+    ],
+    "mockedModelCalls": 8,
+    "actualDockerChecks": 2,
+    "requestShaReproducedExactly": true,
+    "hostOracleUnchanged": true,
+    "tamperAndWrongKeyRefused": true,
+    "postReservationReplayRefused": true,
+    "proof": {
+      "version": 1,
+      "status": "encrypted-correction-cross-process-recovery-verified",
+      "runtimeSha": "1502dac7ed6061b62e6d555fa4cee1a3e49c61ce",
+      "sourceCiRunId": 40386189954,
+      "workers": [
+        {
+          "stage": "save",
+          "savedRequestSha256": "82de2613e11cac4efae72c881dc3a5d54968c6e202642bfc933bd588f1b16fc4",
+          "checkpointSha256": "a59b86b34d4d6650c2ebd2bf270edab9b10b92827b2f1b3a5a3fde483f3979d2",
+          "nativeTest": "failed",
+          "policySha256": "f938ca0313bf39320e08084f87ffdb26b43610c357a899e6e510a68752541534",
+          "usedRequests": 4,
+          "mockedModelCalls": 4,
+          "publicationAuthorized": false
+        },
+        {
+          "stage": "tamper",
+          "tamperRejected": true,
+          "wrongKeyRejected": true,
+          "policySha256": "f938ca0313bf39320e08084f87ffdb26b43610c357a899e6e510a68752541534",
+          "usedRequests": 4,
+          "mockedModelCalls": 0,
+          "publicationAuthorized": false
+        },
+        {
+          "stage": "resume",
+          "restoredRequestSha256": "82de2613e11cac4efae72c881dc3a5d54968c6e202642bfc933bd588f1b16fc4",
+          "nativeTest": "passed",
+          "beforeUsed": 4,
+          "independentAssessmentsVerified": true,
+          "runtimeTestsVerified": true,
+          "policySha256": "f938ca0313bf39320e08084f87ffdb26b43610c357a899e6e510a68752541534",
+          "usedRequests": 8,
+          "mockedModelCalls": 4,
+          "publicationAuthorized": false
+        },
+        {
+          "stage": "blocked",
+          "replayStoppedBeforeModel": true,
+          "policySha256": "f938ca0313bf39320e08084f87ffdb26b43610c357a899e6e510a68752541534",
+          "usedRequests": 8,
+          "mockedModelCalls": 0,
+          "publicationAuthorized": false
+        }
+      ],
+      "distinctHostProcesses": 4,
+      "modelAndOwner": "synthetic/mocked, no real owner allowance",
+      "actualDockerChecks": 2,
+      "encryption": "AES-256-GCM; ephemeral fixture key kept outside checkpoint and app",
+      "checkpointBytes": 3208,
+      "scope": "before-correction-admission; same runner filesystem, not a native cross-machine deployment",
+      "actualModelCalls": 0,
+      "realBudgetWrites": 0,
+      "applicationWrites": 0,
+      "productionRecoveryKeyProvisioned": false,
+      "publicationAuthorized": false,
+      "wholeAppCompleted": false,
+      "legalEnabled": false,
+      "auditRunId": 40386663143,
+      "auditJobId": 121796630464
+    }
+  },
+  "implemented": [
+    "Independent host-key AES-256-GCM checkpoint with exclusive private creation and fsync",
+    "No plaintext code/key or raw responses in checkpoint metadata",
+    "Current owner/profile/plan/source and same-grant high-water floor checked before restoration",
+    "Original bounded proposal and exact model request SHA revalidated in new host process",
+    "Read-only execution reservation inspection; any correction WAL entry refuses recovery",
+    "Stable same-ledger IDs/CAS prevent racing recovered workers from sending duplicate first requests"
+  ],
+  "restorationPoint": "before-correction-admission only",
+  "encryptedCheckpointImplemented": true,
+  "preCorrectionRestorationWired": true,
+  "arbitraryMidHttpResumeAuthorized": false,
+  "crossMachineNativeDeploymentVerified": false,
+  "productionKeyProvisioningVerified": false,
+  "productionDurableStorageVerified": false,
+  "realModelCorrectionExecuted": false,
+  "realModelCalls": 0,
+  "realBudgetWrites": 0,
+  "applicationChanges": 0,
+  "newRealOwnerGrantCreated": false,
+  "realRemainingRequests": 0,
+  "genericFullPipelineWired": false,
+  "browserTestsVerified": false,
+  "candidateCiVerified": false,
+  "publicationAuthorized": false,
+  "wholeAppCompleted": false,
+  "legalEnabled": false,
+  "preservedRefs": {
+    "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "projectBudgetLedger": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "remaining": [
+    "Generic candidate publication/exact-CI delivery/deduplication and safe-state reconciliation",
+    "Persistent independent recovery key and durable ciphertext storage integration",
+    "Separate real planning/live authorization and a real composed run",
+    "Browser/device/Expo policies and app acceptance"
+  ],
+  "report": "docs/STEP_10_11_ENCRYPTED_CORRECTION_RECOVERY_2026-10-26.md",
+  "diffCheck": "passed"
+}

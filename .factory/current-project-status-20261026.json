@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "qualified-single-correction-wired-authenticated-durable-restoration-and-publication-ci-pending",
+    "status": "encrypted-pre-correction-restore-wired-generic-publication-exact-ci-and-durable-deployment-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -334,5 +334,32 @@
     "realBudgetWrites": 0,
     "applicationWrites": 0,
     "proof": ".factory/project-correction-attempt-proof-20261026.json"
+  },
+  "genericEncryptedCorrectionRecovery": {
+    "status": "encrypted-pre-correction-restoration-tested-distinct-processes-native-docker-verified",
+    "sourceSha": "1502dac7ed6061b62e6d555fa4cee1a3e49c61ce",
+    "sourceCiRunId": 40386189954,
+    "tests": 2557,
+    "passed": 2557,
+    "localRelatedTests": 221,
+    "newTests": 20,
+    "nativeRunId": 40386663143,
+    "nativeHostProcesses": 4,
+    "nativeDockerChecks": 2,
+    "mockedModelCalls": 8,
+    "temporaryLedgerUsedRequests": [
+      4,
+      4,
+      8,
+      8
+    ],
+    "preCorrectionRestorationWired": true,
+    "arbitraryMidHttpResumeAuthorized": false,
+    "crossMachineNativeDeploymentVerified": false,
+    "productionKeyProvisioningVerified": false,
+    "realModelCalls": 0,
+    "realBudgetWrites": 0,
+    "applicationWrites": 0,
+    "proof": ".factory/project-correction-recovery-proof-20261026.json"
   }
 }
