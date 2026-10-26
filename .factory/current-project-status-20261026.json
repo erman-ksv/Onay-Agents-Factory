@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "encrypted-pre-correction-restore-wired-generic-publication-exact-ci-and-durable-deployment-pending",
+    "status": "generic-publication-and-exact-ci-wired-durable-publication-recovery-and-ci-delivery-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -361,5 +361,27 @@
     "realBudgetWrites": 0,
     "applicationWrites": 0,
     "proof": ".factory/project-correction-recovery-proof-20261026.json"
+  },
+  "genericPublicationAndCi": {
+    "status": "generic-draft-publication-and-exact-ci-tested-native-readonly-task-ci-verified",
+    "sourceSha": "6a067b57ca4e44f4c7e9ad8c06e4d384509fd2f4",
+    "sourceCiRunId": 40392916653,
+    "tests": 2581,
+    "passed": 2581,
+    "localRelatedTests": 245,
+    "newTests": 24,
+    "nativeRunId": 40393362970,
+    "actualLocalGitPushes": 1,
+    "actualDockerChecks": 1,
+    "mockedModelCalls": 4,
+    "existingCalculatorTaskCiVerifiedReadonly": true,
+    "genericPublisherWired": true,
+    "genericExactCiReaderWired": true,
+    "genericCiDeliveryWired": false,
+    "realApplicationPublicationVerified": false,
+    "realModelCalls": 0,
+    "realBudgetWrites": 0,
+    "applicationWrites": 0,
+    "proof": ".factory/project-publication-ci-proof-20261026.json"
   }
 }

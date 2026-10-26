@@ -11,7 +11,7 @@
 - Полный used65/626530/263359; remaining.requests0. Никакого reset/refund/retry или нового бюджета без отдельного решения.
 - Typecheck и2414/2414 tests PASS. Main и приложение неизменны; без merge/deployment. Legal disabled.
 
-Текущий инженерный этап10.11: encrypted pre-correction restoration готово; generic candidate/CI и production key/storage integration ещё нужны. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
+Текущий инженерный этап10.12: generic Draft publication и exact-candidate CI готовы; durable publication recovery/CI delivery и production key/storage integration ещё нужны. Общая финальная приёмка Calculator и реальный второй проект не завершены. Onay — отдельное приложение; его дизайн/код здесь не менялись.
 
 ## Исторические результаты
 
@@ -69,3 +69,8 @@ Source90427ef4784baefd4347d37048cbc232166c074d; CI40381213998 TypeScript/2537tes
 ## Этап10.11: encrypted pre-correction recovery
 
 Source1502dac7ed6061b62e6d555fa4cee1a3e49c61ce; CI40386189954 TypeScript/2557tests PASS;local221/221,20 новых. AES-256-GCM private exclusive checkpoint, host key отдельно; revalidate owner/source/profile/grant/high-water floor/proposal/exact requestSHA. Любой second-attempt WAL reserve запрещает restore/replay. Native40386663143:4 distinct host processes save→tamper refusal→resume→replay refusal,temporary ledger4→4→8→8;8 MOCK replies,2 real Docker tests failed→passed с неизменным oracle.0 actual models/remote budget/app writes/newrealgrant. [Отчёт](STEP_10_11_ENCRYPTED_CORRECTION_RECOVERY_2026-10-26.md). Только точка перед admission, не произвольный mid-HTTP resume; cross-machine production key/ciphertext storage пока не подтверждены. Далее generic publication/exact-CI delivery и deployment integration, separate real allowance. Main/app/ledger preserved;legal false.
+
+
+## Этап10.12: generic Draft publisher и exact-candidate CI
+
+Source6a067b57ca4e44f4c7e9ad8c06e4d384509fd2f4; CI40392916653 TypeScript/2581tests PASS;local245/245,24 новых. One-use genuine host-test publication gate, simulated proof never native, restricted bare Git with exact lease/parent/path/blobs and fixed target credentials. Unknown push/PR/checkpoint stops without republish. Pinned workflow/run-attempt/job/step CI, same SHA/ref/PR and one-use confirmation. Native40393362970:1 actual Docker,1 actual LOCAL Git push,MOCK owner/model/PR/fixture CI; separately readonly historical Calculator TASK CI40178095158 verified at5589939 using original bootstrap pin.0 actual application publications/models/remote budget/app writes. [Отчёт](STEP_10_12_GENERIC_PUBLICATION_CI_2026-10-26.md). Далее durable publication receipt/reconciliation и automatic CI delivery/next-task dedup; real allowance/key/storage integration и реальный прогон. Полный Calculator release gate/универсальная автономность не подтверждены.
