@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "status": "published-candidate-verified-no-recovery-needed",
+  "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+  "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "parentSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+  "fileSha256": "5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930",
+  "fileBytes": 5464,
+  "changedPaths": [
+    "test/ui.test.mjs"
+  ],
+  "pullRequest": "https://github.com/erman-ksv/Onay-Factory-Calculator/pull/1",
+  "checks": {
+    "runId": 40291832282,
+    "jobId": 121468460406,
+    "runtimeSha": "4d026be8330750e69401dad64b813be060f5d03c",
+    "sourceCiRunId": 40291553011,
+    "node": "passed",
+    "browser": {
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+      "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+      "proposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+      "dependencySha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+      "status": "passed",
+      "testsExecuted": true,
+      "browser": "Chrome/141.0.7390.37",
+      "sandboxDisabled": false,
+      "pageErrors": 0,
+      "blockedRequests": 0,
+      "scenarios": [
+        "Entering 123 then deleting the last digit displays 12",
+        "Clear permits a new calculation after input",
+        "Clear permits a new calculation after a result",
+        "Keyboard and button calculations give the same result",
+        "At 360px controls and result work without horizontal scrolling"
+      ],
+      "domSelectors": [
+        {
+          "selector": ".calculator",
+          "matches": 1
+        },
+        {
+          "selector": ".display",
+          "matches": 1
+        },
+        {
+          "selector": ".keys",
+          "matches": 1
+        },
+        {
+          "selector": ".key",
+          "matches": 18
+        }
+      ]
+    },
+    "taskCiRunIds": [
+      40178095158
+    ],
+    "githubReads": 58,
+    "githubApiMutationRequests": 0,
+    "modelCalls": 0,
+    "sourceChanged": false,
+    "executionAuthorized": false,
+    "wholeAppCompleted": false
+  },
+  "historical": {
+    "proof": ".factory/t05-reviewer-supplement-proof-20261025.json",
+    "T05RequestsUsed": 11,
+    "T05RequestsAllowed": 11,
+    "projectHistory": {
+      "requests": 59,
+      "requestBytes": 553908,
+      "reservedTokens": 230413
+    }
+  },
+  "step9": {
+    "closed": false,
+    "9.1": "completed-in-documented-scope",
+    "9.2": "completed-in-documented-scope",
+    "9.3": "code-ready-owner-decision-and-ledger-initialization-pending",
+    "9.4": "published-candidate-host-checks-passed-required-project-budget-live-run-pending",
+    "ownerDecision": null,
+    "actualLedgerInitialized": false,
+    "ownerApprovalCommentsObservedInPr75": 0,
+    "newModelCallsAuthorized": 0
+  },
+  "currentCandidateRecoveryRequired": false,
+  "genericRecoveryMechanismIsSeparate": true,
+  "legalEnabled": false
+}
