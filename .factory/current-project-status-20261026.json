@@ -80,7 +80,7 @@
     "9.1": "completed-in-documented-scope",
     "9.2": "completed-in-documented-scope",
     "9.3": "code-ready-owner-decision-and-ledger-initialization-pending",
-    "9.4": "published-candidate-host-checks-passed-required-project-budget-live-run-pending",
+    "9.4": "required-project-review-runtime-wired-tests-passed-live-run-pending-owner",
     "ownerDecision": null,
     "actualLedgerInitialized": false,
     "ownerApprovalCommentsObservedInPr75": 0,
@@ -88,5 +88,20 @@
   },
   "currentCandidateRecoveryRequired": false,
   "genericRecoveryMechanismIsSeparate": true,
-  "legalEnabled": false
+  "legalEnabled": false,
+  "latestProjectReview": {
+    "sourceSha": "32bdcfdea5cc8191671b1a85b7a38561f8a7d9ee",
+    "sourceCiRunId": 40294407754,
+    "typecheck": "passed",
+    "tests": 2400,
+    "passed": 2400,
+    "failed": 0,
+    "nativeGateRunId": 40294860705,
+    "nativeGateStatus": "blocked-owner-approval-missing",
+    "reviewJobConclusion": "skipped",
+    "githubReads": 1,
+    "githubApiMutationRequests": 0,
+    "modelCalls": 0,
+    "actualThreeReviewsVerified": false
+  }
 }
