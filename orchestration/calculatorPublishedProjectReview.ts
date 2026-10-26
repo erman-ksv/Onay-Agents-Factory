@@ -27,11 +27,11 @@ export async function runPublishedCalculatorProjectReview(options:Options){
   if(!isAuthorizedProjectBudgetController(options.controller)||typeof options.assertPublished!=='function'||typeof options.checkpoint!=='function'||typeof options.runners?.checkProposal!=='function'||typeof options.runners?.checkBrowser!=='function'||!/^[a-f0-9]{40}$/.test(options.candidateSha))return refuse();
   const {controller,original,dependencies,assertPublished,checkpoint,runners,candidateSha}=options,env={...options.env},plan=createCalculatorPlan(options.plan.request,options.plan.proposal),task=plan.tasks.find(t=>t.id===options.taskId);
   if(!task||!isCalculatorIntegrationTask(task)||plan.fingerprint!==options.plan.fingerprint||controller.identity.planFingerprint!==plan.fingerprint||controller.identity.ownerFingerprint!==plan.owner.ownerFingerprint)return refuse();
-  const executionId='published-review-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,task.id,candidateSha])).digest('hex').slice(0,24);
+  const executionId='published-review-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,task.id,candidateSha,controller.grantSha256])).digest('hex').slice(0,24);
   const scope=consumeAuthorizedProjectTaskScope(await controller.taskScope(task.id,'probe-'+executionId),{projectId:plan.owner.id,repository:plan.owner.repository,ownerFingerprint:plan.owner.ownerFingerprint});
   if(scope.operationMode!=='read-only-review')return refuse();
   const before=await controller.inspect(),h=controller.historicalCharge;
-  if(before.used.requests!==h.requests||before.used.requestBytes!==h.requestBytes||before.used.reservedTokens!==h.reservedTokens||before.remaining.requests!==3||before.remaining.requestBytes>72000||before.remaining.reservedTokens>18000)return refuse();
+  if(before.used.requests<h.requests||before.used.requestBytes<h.requestBytes||before.used.reservedTokens<h.reservedTokens||before.remaining.requests!==3||before.remaining.requestBytes>72000||before.remaining.reservedTokens>18000)return refuse();
   await assertPublished();let evidence:Awaited<ReturnType<typeof collectCalculatorAssessmentEvidence>>|undefined,restored:PreparedCalculatorChanges|undefined;
   const save=async(status:PublishedReviewCheckpoint['status'],httpInFlight=false)=>checkpoint(Object.freeze({stage,status,httpInFlight,modelState:team!.checkpointCharge(),assessments:Object.freeze([...assessments])}));
   team=await createCalculatorProjectRuntimeTeam(plan.request,plan,env,{controller,executionId},{preset:'calculator-published-three-reviews',...(options.timing?{timing:options.timing}:{}),transport:options.transport,

@@ -64,7 +64,7 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
   const grant=await readApproval(),ledger=openProjectModelBudget(grant,options.store),issued=new Set<string>();
   const assertCurrentTime=()=>{if(revoked||expiresAt===undefined||touchClock()>=expiresAt){revoked=true;return refuse();}};const assertAuthorized=async()=>{if(revoked)return refuse();try{await readApproval();}catch{revoked=true;return refuse();}};
   const controller=Object.freeze({
-   identity,assertAuthorized,
+   identity,assertAuthorized,grant,grantSha256:hash(JSON.stringify(grant)),approvalBodySha256:decision.bodySha256,operationMode:operationMode!,
    projectKey:hash(canonical({projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,ownerFingerprint:identity.ownerFingerprint})),
    historyDigest:history.digest,historicalCharge:history.charge,
    async initialize(){await assertAuthorized();await ledger.initialize();},
