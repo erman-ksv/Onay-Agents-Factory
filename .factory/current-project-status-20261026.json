@@ -151,5 +151,24 @@
     "oldReservationsPreserved": 3
   },
   "wholeAppCompleted": false,
-  "generalProjectAutonomyVerified": false
+  "generalProjectAutonomyVerified": false,
+  "calculatorAcceptance": {
+    "status": "technical-matrix-verified-in-documented-scope",
+    "criteriaCovered": 11,
+    "criteriaTotal": 11,
+    "realBrowserScenarios": 5,
+    "eachArithmeticUiCaseVerifiedInRealBrowser": false,
+    "ownerVisualAcceptanceVerified": false,
+    "candidateCiVerified": 40178095158,
+    "modelCalls": 0,
+    "sourceChanged": false,
+    "proof": ".factory/calculator-acceptance-matrix-20261026.json",
+    "wholeAppCompleted": false
+  },
+  "nextStage": {
+    "status": "not-started",
+    "goal": "host-approved target profiles and isolated per-project budget identities",
+    "blocker": "existing production authorization/profile is intentionally Calculator-specific",
+    "newModelAllowance": 0
+  }
 }
