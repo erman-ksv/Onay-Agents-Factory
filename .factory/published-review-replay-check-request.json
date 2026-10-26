@@ -1,6 +1,6 @@
 {
-  "version": 1,
   "operation": "inspect-consumed-project-budget",
-  "expectedUsedRequests": 65,
-  "modelCallsAuthorized": 0
+  "version": 1,
+  "modelCallsAuthorized": 0,
+  "expectedUsedRequests": 65
 }
