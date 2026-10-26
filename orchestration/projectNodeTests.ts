@@ -69,5 +69,13 @@ function sandbox(policy:ProjectNodeTestPolicy,runner:CalculatorSandboxProcess,pr
 }
 /** A copied/modeled receipt or a simulated runner can never approve tests. */
 export async function verifyProjectNodeTestReceipt(receipt:ProjectNodeTestReceipt,plan:PreparedProjectPlan,taskId:string,snapshot:ProjectSourceSnapshot,changes:PreparedProjectChanges,policy:ProjectNodeTestPolicy){
- const r=receipts.get(receipt);try{if(!r||r.failed||r.policy!==policy||r.snapshot!==snapshot||r.changes!==changes||policies.get(policy)?.plan!==plan||policy.taskId!==taskId||receipt.provenance!=='native-docker'||receipt.status!=='passed'||!receipt.testsExecuted||receipt.failures.length)return refuse();assertProjectSnapshotIdentity(snapshot,plan,taskId);assertProjectChangesSnapshot(changes,snapshot);await verifyProjectChanges(changes);return receipt;}catch{if(r)r.failed=true;return refuse();}
+ return verifyReceipt(receipt,plan,taskId,snapshot,changes,policy,'passed');
+}
+/** Executed failure is repair evidence only; never a passed-test grant. */
+export async function verifyFailedProjectNodeTestReceipt(receipt:ProjectNodeTestReceipt,plan:PreparedProjectPlan,taskId:string,snapshot:ProjectSourceSnapshot,changes:PreparedProjectChanges,policy:ProjectNodeTestPolicy){return verifyReceipt(receipt,plan,taskId,snapshot,changes,policy,'failed');}
+/** HOST ONLY: contract IDs are mapped through the genuine immutable policy,
+ * never guessed from the first changed file or supplied model diagnostics. */
+export function projectNodeFailureIssues(receipt:ProjectNodeTestReceipt){const r=receipts.get(receipt),p=r&&policies.get(r.policy);if(!r||r.failed||!p||receipt.provenance!=='native-docker'||receipt.status!=='failed'||!receipt.testsExecuted)return refuse();return Object.freeze(receipt.failures.map(code=>{const path=code.startsWith('syntax:')?code.slice(7):p.checks.find(c=>'contract:'+c.id===code)?.path;if(!path)return refuse();return Object.freeze({path,detail:code});}));}
+async function verifyReceipt(receipt:ProjectNodeTestReceipt,plan:PreparedProjectPlan,taskId:string,snapshot:ProjectSourceSnapshot,changes:PreparedProjectChanges,policy:ProjectNodeTestPolicy,status:'passed'|'failed'){
+ const r=receipts.get(receipt);try{if(!r||r.failed||r.policy!==policy||r.snapshot!==snapshot||r.changes!==changes||policies.get(policy)?.plan!==plan||policy.taskId!==taskId||receipt.provenance!=='native-docker'||receipt.status!==status||!receipt.testsExecuted||(status==='passed'?receipt.failures.length!==0:receipt.failures.length===0))return refuse();assertProjectSnapshotIdentity(snapshot,plan,taskId);assertProjectChangesSnapshot(changes,snapshot);await verifyProjectChanges(changes);return receipt;}catch{if(r)r.failed=true;return refuse();}
 }

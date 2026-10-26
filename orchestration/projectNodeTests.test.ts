@@ -6,7 +6,7 @@ import {createProjectTargetRegistry} from './projectTargetRegistry.js';
 import {prepareProjectGoal,createProjectPlan,projectPlanTaskId} from './projectPlan.js';
 import {loadProjectTaskSnapshot,type ProjectSnapshotReader} from '../github/projectSourceSnapshot.js';
 import {prepareProjectChanges} from '../commander/projectChanges.js';
-import {prepareProjectNodeTestPolicy,createProjectNodeSandbox,createProjectNodeSandboxForTests,verifyProjectNodeTestReceipt,PROJECT_NODE_TEST_ERROR,type ProjectNodeTestPolicy} from './projectNodeTests.js';
+import {prepareProjectNodeTestPolicy,createProjectNodeSandbox,createProjectNodeSandboxForTests,verifyProjectNodeTestReceipt,verifyFailedProjectNodeTestReceipt,projectNodeFailureIssues,PROJECT_NODE_TEST_ERROR,type ProjectNodeTestPolicy} from './projectNodeTests.js';
 import type {CalculatorSandboxProcess} from './calculatorSandbox.js';
 const image='node@sha256:'+'1'.repeat(64),hash=(s:string)=>createHash('sha256').update(s).digest('hex'),blob=(s:string)=>createHash('sha1').update(Buffer.from('blob '+Buffer.byteLength(s)+'\0'+s)).digest('hex');
 const refusal=(e:unknown)=>e instanceof Error&&e.message===PROJECT_NODE_TEST_ERROR;
@@ -69,4 +69,7 @@ test('foreign or copied source/proposal cannot reach Docker or reflect source in
 });
 test('one-shot sandbox cannot replay even after unavailable isolation',async()=>{
  const f=await fixture(),r=processFixture(f.policy,'unavailable'),sandbox=createProjectNodeSandboxForTests(f.policy,r.runner);await sandbox.run(f.snapshot,f.changes);const count=r.calls.length;await assert.rejects(()=>sandbox.run(f.snapshot,f.changes),refusal);assert.equal(r.calls.length,count);
+});
+test('simulated or copied failed receipts cannot mint actionable native repair issues',async()=>{
+ const f=await fixture(),r=processFixture(f.policy,'failed'),receipt=await createProjectNodeSandboxForTests(f.policy,r.runner).run(f.snapshot,f.changes);assert.equal(receipt.status,'failed');assert.throws(()=>projectNodeFailureIssues(receipt),refusal);assert.throws(()=>projectNodeFailureIssues({...receipt,provenance:'native-docker'}),refusal);await assert.rejects(()=>verifyFailedProjectNodeTestReceipt(receipt,f.plan,f.taskId,f.snapshot,f.changes,f.policy),refusal);assert.equal(receipt.publicationAuthorized,false);
 });

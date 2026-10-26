@@ -8,7 +8,7 @@ import {createProjectTargetRegistry} from '../orchestration/projectTargetRegistr
 import {prepareProjectGoal,createProjectPlan,projectPlanTaskId} from '../orchestration/projectPlan.js';
 import {loadProjectTaskSnapshot} from '../github/projectSourceSnapshot.js';
 import {prepareProjectChanges} from '../commander/projectChanges.js';
-import {prepareProjectNodeTestPolicy,createProjectNodeSandbox,verifyProjectNodeTestReceipt} from '../orchestration/projectNodeTests.js';
+import {prepareProjectNodeTestPolicy,createProjectNodeSandbox,verifyProjectNodeTestReceipt,verifyFailedProjectNodeTestReceipt,projectNodeFailureIssues} from '../orchestration/projectNodeTests.js';
 for(const k of ['GROQ_API_KEY','GEMINI_API_KEY','CALCULATOR_GITHUB_TOKEN'])assert.equal(process.env[k],undefined,'No provider or writer credential is allowed.');
 const runtime=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();assert.equal(runtime,process.env.FACTORY_RUNTIME_SHA);
 const runId=process.env.FACTORY_SOURCE_CI_RUN;assert.match(runId??'',/^\d+$/);
@@ -36,7 +36,7 @@ const cases=[];for(const [id,body,expected] of [
   await assert.rejects(()=>verifyProjectNodeTestReceipt({...receipt},f.plan,f.taskId,f.snapshot,f.changes,f.policy));
   const foreign=await f.otherChanges();await assert.rejects(()=>verifyProjectNodeTestReceipt(receipt,f.plan,f.taskId,f.snapshot,foreign,f.policy));
   const second=await createProjectNodeSandbox(f.policy).run(f.snapshot,f.changes);f.stale();await assert.rejects(()=>verifyProjectNodeTestReceipt(second,f.plan,f.taskId,f.snapshot,f.changes,f.policy));
- }else await assert.rejects(()=>verifyProjectNodeTestReceipt(receipt,f.plan,f.taskId,f.snapshot,f.changes,f.policy));
+ }else{await verifyFailedProjectNodeTestReceipt(receipt,f.plan,f.taskId,f.snapshot,f.changes,f.policy);assert.deepEqual(projectNodeFailureIssues(receipt),[{path:'src/note.mjs',detail:'contract:contract-note'}]);await assert.rejects(()=>verifyProjectNodeTestReceipt(receipt,f.plan,f.taskId,f.snapshot,f.changes,f.policy));}
  await assert.rejects(()=>sandbox.run(f.snapshot,f.changes));cases.push({id,status:receipt.status,testsExecuted:receipt.testsExecuted,proposalDigest:receipt.proposalDigest,fileSetSha256:receipt.fileSetSha256,policySha256:receipt.policySha256,failures:receipt.failures});
 }
 const proof={version:1,status:'native-docker-contracts-verified',runtimeSha:runtime,sourceCiRunId:Number(runId),image,source:'synthetic host fixture; no native application commit is claimed',cases,realModelCalls:0,applicationWrites:0,budgetWrites:0,publicationAuthorized:false,wholeAppCompleted:false,legalEnabled:false};
