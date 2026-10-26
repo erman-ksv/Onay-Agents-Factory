@@ -1,0 +1,57 @@
+name: Calculator recovery GET-only preflight
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-recovery-preflight-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: calculator-recovery-readonly-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable tested preflight
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'c4bc50f2d15aabe7b3cb970769ee1c933329ad27'
+          path: runtime
+          persist-credentials: false
+      - name: Checkout reviewed metadata-only request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-recovery-preflight-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform tested modules without installing dependencies
+        working-directory: runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Inspect source and budget without provider or writer credentials
+        working-directory: runtime
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: 'c4bc50f2d15aabe7b3cb970769ee1c933329ad27'
+          FACTORY_SOURCE_CI_RUN: '40288806670'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/calculator-recovery-preflight.mjs
+      - name: Preserve source-free preflight result only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-recovery-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-recovery-preflight/result.json
+          if-no-files-found: warn
+          retention-days: 7
