@@ -36,10 +36,11 @@ export const CALCULATOR_SUCCESSOR_TASK_BUDGET = Object.freeze({ maxRequests: 4, 
   maxRunBytes: 96000, maxOutputTokens: 1200, wallTimeMs: 300000 });
 
 /** Separate host admission; original defaults and the 1200-token preset stay fixed. */
-export type CalculatorHostPreset = "calculator-successor-four-roles" | "calculator-frontend-2048-four-roles" | "calculator-restored-repair-four-roles" | "calculator-renewed-repair-four-roles" | "calculator-keyboard-eight-roles" | "calculator-successor-eight-roles";
+export type CalculatorHostPreset = "calculator-published-three-reviews" | "calculator-successor-four-roles" | "calculator-frontend-2048-four-roles" | "calculator-restored-repair-four-roles" | "calculator-renewed-repair-four-roles" | "calculator-keyboard-eight-roles" | "calculator-successor-eight-roles";
 export const CALCULATOR_FRONTEND_TASK_BUDGET = Object.freeze({ ...CALCULATOR_SUCCESSOR_TASK_BUDGET, maxOutputTokens: 2048 });
 export const CALCULATOR_KEYBOARD_TASK_BUDGET = Object.freeze({ maxRequests: 8, maxRequestBytes: 24000, maxRunBytes: 192000, maxOutputTokens: 2048, wallTimeMs: 600000 });
 export function calculatorHostModelBudget(preset: CalculatorHostPreset) {
+  if (preset === "calculator-published-three-reviews") return Object.freeze({...CALCULATOR_SUCCESSOR_TASK_BUDGET,maxRequests:3,maxRunBytes:72000});
   if (preset === "calculator-keyboard-eight-roles" || preset === "calculator-successor-eight-roles") return CALCULATOR_KEYBOARD_TASK_BUDGET;
   if (preset === "calculator-successor-four-roles") return CALCULATOR_SUCCESSOR_TASK_BUDGET;
   if (preset === "calculator-frontend-2048-four-roles") return CALCULATOR_FRONTEND_TASK_BUDGET;

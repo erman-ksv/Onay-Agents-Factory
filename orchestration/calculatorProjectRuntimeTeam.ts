@@ -53,6 +53,7 @@ export async function createCalculatorProjectRuntimeTeam(ownerRequest:unknown,pl
  };
  const wire=createTaskModelBudgetFetch({...limits,...(options.preset?{hostPreset:options.preset}:{}),now},guardedUpstream);
  const context=createProviderContextBudget({now,reservedOutputTokens:limits.maxOutputTokens,
+ ...(options.preset==='calculator-published-three-reviews'?{maxRunTokens:18000}:{}),
  ...(options.preset==='calculator-keyboard-eight-roles'?{maxRunTokens:32000}:{}),
  ...(options.preset==='calculator-successor-eight-roles'?{maxRunTokens:48000}:{}),
  ...(options.preset==='calculator-renewed-repair-four-roles'?{maxRunTokens:24000}:{})});

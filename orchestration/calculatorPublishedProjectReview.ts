@@ -9,6 +9,8 @@ import type {CalculatorSnapshot} from '../github/calculatorSnapshot.js';
 import type {PreparedCalculatorChanges} from '../commander/calculatorChanges.js';
 export const CALCULATOR_PUBLISHED_PROJECT_REVIEW_ERROR='Published candidate project review stopped. Preserve ledger and checkpoints; no replay, generation, publication or allowance initialization.';
 const refuse=():never=>{throw Error(CALCULATOR_PUBLISHED_PROJECT_REVIEW_ERROR);};
+const reviewFailures=new WeakMap<Error,Readonly<{stage:string;roles:readonly Readonly<{role:string;ready:boolean}>[];runtime:ReturnType<Awaited<ReturnType<typeof createCalculatorProjectRuntimeTeam>>['diagnostic']>|null}>>();
+export function publishedProjectReviewDiagnostic(error:unknown){return error instanceof Error?reviewFailures.get(error):undefined;}
 type Team=Awaited<ReturnType<typeof createCalculatorProjectRuntimeTeam>>;
 type Assessment=Awaited<ReturnType<Team['assess']>>;
 export type PublishedReviewCheckpoint=Readonly<{stage:string;status:'running'|'passed'|'blocked';httpInFlight:boolean;modelState:ReturnType<Team['checkpointCharge']>;assessments:readonly Assessment[]}>;
@@ -32,7 +34,7 @@ export async function runPublishedCalculatorProjectReview(options:Options){
   if(before.used.requests!==h.requests||before.used.requestBytes!==h.requestBytes||before.used.reservedTokens!==h.reservedTokens||before.remaining.requests!==3||before.remaining.requestBytes>72000||before.remaining.reservedTokens>18000)return refuse();
   await assertPublished();let evidence:Awaited<ReturnType<typeof collectCalculatorAssessmentEvidence>>|undefined,restored:PreparedCalculatorChanges|undefined;
   const save=async(status:PublishedReviewCheckpoint['status'],httpInFlight=false)=>checkpoint(Object.freeze({stage,status,httpInFlight,modelState:team!.checkpointCharge(),assessments:Object.freeze([...assessments])}));
-  team=await createCalculatorProjectRuntimeTeam(plan.request,plan,env,{controller,executionId},{preset:'calculator-successor-four-roles',...(options.timing?{timing:options.timing}:{}),transport:options.transport,
+  team=await createCalculatorProjectRuntimeTeam(plan.request,plan,env,{controller,executionId},{preset:'calculator-published-three-reviews',...(options.timing?{timing:options.timing}:{}),transport:options.transport,
    checkpoints:{beforeRequest:async()=>{await assertPublished();await controller.assertAuthorized();await save('running',true);}},
    evidence:async(t,c)=>{if(!evidence||t.id!==task.id||c!==restored)return refuse();return evidence;}});
   stage='restore_published_proposal';restored=team.restoreProposal(plan,task.id,original,options.changes,calculatorProposalDigest(options.changes),[]);
@@ -44,7 +46,7 @@ export async function runPublishedCalculatorProjectReview(options:Options){
   if(after.used.requests-before.used.requests!==3||team.checkpointCharge().attemptedRequests!==3)return refuse();stage='read_only_review_complete';await save('passed');
   return Object.freeze({status:'published-candidate-project-reviews-passed' as const,candidateSha,taskId:task.id,executionId,modelCalls:3,projectBudgetRequired:true as const,
    newReservations:after.used.requests-before.used.requests,used:after.used,remaining:after.remaining,roles:Object.freeze(assessments.map(a=>Object.freeze({role:a.role,ready:a.ready}))),publicationAuthorized:false as const,applicationChanged:false as const,wholeAppCompleted:false as const});
- }catch{if(team)try{await options.checkpoint({stage,status:'blocked',httpInFlight:true,modelState:team.checkpointCharge(),assessments:Object.freeze([...assessments])});}catch{/* Preserve existing state; no retry. */}return refuse();}
+ }catch{if(team)try{await options.checkpoint({stage,status:'blocked',httpInFlight:true,modelState:team.checkpointCharge(),assessments:Object.freeze([...assessments])});}catch{/* Preserve existing state; no retry. */}const error=new Error(CALCULATOR_PUBLISHED_PROJECT_REVIEW_ERROR);reviewFailures.set(error,Object.freeze({stage,roles:Object.freeze(assessments.map(a=>Object.freeze({role:a.role,ready:a.ready}))),runtime:team?.diagnostic()??null}));throw error;}
 }
 
 export function preparePublishedProjectReviewRequest(value:unknown){

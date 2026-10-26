@@ -168,6 +168,7 @@ export function createCalculatorModelTeam(ownerRequest: unknown, env: NodeJS.Pro
     wallTimeMs: DEFAULT_TASK_MODEL_BUDGET.wallTimeMs - prior.elapsedMs,
   } : {}) }, guardedTransport);
   const contextBudget = config.provider === "groq" ? createProviderContextBudget({ reservedOutputTokens: hostBudget?.maxOutputTokens ?? 1200, now,
+    ...(hostPreset === "calculator-published-three-reviews" ? { maxRunTokens: 18000 } : {}),
     ...(hostPreset === "calculator-keyboard-eight-roles" ? { maxRunTokens: 32000 } : {}),
     ...(hostPreset === "calculator-successor-eight-roles" ? { maxRunTokens: 48000 } : {}),
     ...(hostPreset === "calculator-renewed-repair-four-roles" ? { maxRunTokens: 24000 } : {}),
