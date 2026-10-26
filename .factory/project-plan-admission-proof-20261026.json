@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "status": "generic-plan-and-budget-admission-tested",
+  "stage": "10.3-generic-plan-and-execution-admission",
+  "sourceSha": "e405075c36538cc3ea1b31c9688ad2b14467d991",
+  "localRelatedTests": {
+    "tests": 140,
+    "passed": 140,
+    "failed": 0
+  },
+  "newTests": 17,
+  "modelCalls": 0,
+  "budgetWrites": 0,
+  "applicationWrites": 0,
+  "newProductionTargetsRegistered": 0,
+  "realSecondProjectExecuted": false,
+  "genericModelExecutorWired": false,
+  "legalEnabled": false,
+  "ci": {
+    "runId": 40323482182,
+    "jobId": 121574084870,
+    "typecheck": "passed",
+    "tests": 2445,
+    "passed": 2445,
+    "failed": 0
+  },
+  "scope": [
+    "owner criteria and required paths bound to genuine target",
+    "host-derived repository branch IDs and plan identity",
+    "DAG overlap and acceptance/path coverage validation",
+    "16k metadata planning context with explicit overflow refusal",
+    "native development controller plus repeated host source/dependency assertions",
+    "single-use admission and stable per-task scope ID"
+  ],
+  "integrationEvidence": "synthetic goals and mock owner/source/dependency callbacks; no real second-project execution",
+  "legacyIntegrity": {
+    "main": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "budgetCommit": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+    "changed": false
+  },
+  "pipelineStillRequired": [
+    "pre-plan model allowance and planning transport",
+    "generic guarded model generation and correction",
+    "profile-bound real snapshot/dependency adapters",
+    "independent Security Reviewer Tester with actual host tests",
+    "profile-bound candidate publication exact-CI delivery and restart"
+  ]
+}

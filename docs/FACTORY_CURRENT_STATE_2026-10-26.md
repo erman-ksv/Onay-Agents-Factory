@@ -24,3 +24,7 @@
 ## Этап10.2: фундамент профилей и бюджета готов
 
 Добавлен host-only реестр неизменяемых профилей; новый репозиторий требует genuine capability и native OWNER документ с подписанным targetProfileSha256. Разные проекты имеют разные namespace; смена профиля того же проекта не сбрасывает ledger. Source c393769, CI40321529096: TypeScript/2428tests PASS, локальные123/123 PASS. Native compatibility40321794272:14GET/0write/0model, старый Calculator used65 сохранён, повтор отклонён. [Полный отчёт](STEP_10_02_PROJECT_PROFILES_2026-10-26.md). Новых production targets0; generic planning/tools/sandbox/CI adapter ещё не подключены, второй проект не запускался. Это следующий инженерный этап, не повод снимать старые allowlist.
+
+## Этап10.3: общий валидатор плана и допуск готовы
+
+Source e405075: цель/критерии владельца, host-derived IDs/branch/profile, проверка DAG/покрытия, bounded16000 metadata context, одноразовый native budget admission с host source/dependency guards. CI40323482182: TypeScript/2445tests PASS, local140/140. [Отчёт](STEP_10_03_PROJECT_PLAN_ADMISSION_2026-10-26.md). Модельный планировщик/универсальный executor, реальные generic guards и весь generic reviews/tests/publication/CI delivery ещё не подключены. Новых моделей/бюджетов/production targets0, main/app/ledger неизменны. Второй проект не запускался.

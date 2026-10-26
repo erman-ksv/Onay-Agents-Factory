@@ -166,8 +166,8 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "foundation-complete-execution-wiring-not-started",
-    "goal": "connect host-approved target profile to planning, tools, sandbox and CI adapters",
+    "status": "generic-plan-admission-complete-model-pipeline-not-wired",
+    "goal": "bounded planning allowance and profile-bound source/model/review/test/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
   },
@@ -185,5 +185,19 @@
     "registeredNewProductionTargets": 0,
     "genericExecutionWired": false,
     "proof": ".factory/project-target-profiles-proof-20261026.json"
+  },
+  "genericPlanningAdmission": {
+    "status": "plan-validator-and-guarded-budget-admission-tested",
+    "sourceSha": "e405075c36538cc3ea1b31c9688ad2b14467d991",
+    "sourceCiRunId": 40323482182,
+    "tests": 2445,
+    "passed": 2445,
+    "localRelatedTests": 140,
+    "newTests": 17,
+    "genericModelExecutorWired": false,
+    "realSecondProjectExecuted": false,
+    "modelCalls": 0,
+    "budgetWrites": 0,
+    "proof": ".factory/project-plan-admission-proof-20261026.json"
   }
 }
