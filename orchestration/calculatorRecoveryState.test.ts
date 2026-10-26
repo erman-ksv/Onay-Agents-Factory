@@ -48,3 +48,8 @@ test('composed host authenticates source and restores metadata without claiming 
  const f=await fixture();let claims=0;const result=await restoreCalculatorRecoveryArtifactHost(f.cap,{checkpointPath:'checkpoint.json',receiptPath:'receipt-0.json',identity:f.identity},f.mapping,saved.request,f.directory,{verifyDependencies:async()=>undefined,claimRecovery:async()=>{claims++;},assertRecovery:async()=>{}});
  assert.equal(result.state.executionAuthorized,false);assert.equal(claims,0);assert.equal(result.host.identity.taskId,f.mapping.taskId);assert.equal(readdirSync(f.directory).length,3);
 });
+
+test('composed host refuses a mismatched receipt or malformed plan before writing and hides parse diagnostics',async()=>{
+ for(const mode of ['receipt','plan']){const f=await fixture({mutate:files=>{if(mode==='plan')files.set('plan.json',Buffer.from('PRIVATE_INVALID_PLAN'));}});const source={checkpointPath:'checkpoint.json',receiptPath:'receipt-0.json',identity:f.identity},mapping=mode==='receipt'?{...f.mapping,receipts:[]}:f.mapping;
+ await assert.rejects(()=>restoreCalculatorRecoveryArtifactHost(f.cap,source,mapping,saved.request,f.directory,{verifyDependencies:async()=>undefined,claimRecovery:async()=>{throw Error('must not claim');},assertRecovery:async()=>{}}),{message:'Authenticated recovery composition refused; preserve state. No execution is authorized.'});assert.deepEqual(readdirSync(f.parent),[]);}
+});

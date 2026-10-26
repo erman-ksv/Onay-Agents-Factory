@@ -29,6 +29,7 @@ export async function restoreCalculatorRecoveryArtifactHost(artifact:CalculatorR
  source:Readonly<{checkpointPath:string;receiptPath:string;identity:CalculatorExecutionCheckpointIdentity}>,
  state:CalculatorRecoveryStateMapping,ownerRequest:unknown,directory:string,
  operations:Pick<CalculatorRuntimeRecoveryHost,'verifyDependencies'|'claimRecovery'|'assertRecovery'>){
+ try{
  const host=createCalculatorRecoveryArtifactHost(artifact,source,operations);
  if(state.taskId!==host.identity.taskId||!state.receipts.some(r=>r.taskId===host.identity.taskId&&r.path===source.receiptPath))
   throw Error('Authenticated recovery source and state do not match.');
@@ -37,4 +38,5 @@ export async function restoreCalculatorRecoveryArtifactHost(artifact:CalculatorR
  const restored=await restoreCalculatorRecoveryState(artifact,state,ownerRequest,directory);
  if(restored.planFingerprint!==host.identity.planFingerprint)throw Error('Authenticated recovery source and plan do not match.');
  return Object.freeze({state:restored,host});
+ }catch{throw Error('Authenticated recovery composition refused; preserve state. No execution is authorized.');}
 }
