@@ -40,3 +40,7 @@ Source e1e86a5, CI40337212062: TypeScript/2460tests PASS; local185/185,15 нов
 ## Этап10.5: source snapshot и proposal gates проверены
 
 Source7ad340f, CI40341767562: TypeScript/2476tests PASS; local201/201,16 новых. Реальный native40342235253:6 Calculator source blobs/11284bytes verified, absence из полного tree, copied snapshot/foreign workflow proposal отказ,22GET/0write/0model. Полные source/proposal bytes остаются private; metadata only по умолчанию. [Отчёт](STEP_10_05_SOURCE_PROPOSAL_GATES_2026-10-26.md). Далее selected context packet binding и общий независимый role/correction/host/CI pipeline. Actual repair Calculator/второй проект не запускались, квота0.
+
+## Этап10.6: selective context и запрос связаны
+
+Sourceb597f4d, CI40350249664: TypeScript/2489tests PASS; local214/214,13 новых. Private packet→genuine plan/task/snapshot budget binding, exact body guard, explicit unshown ranges, overflow/full-source/message injection отказ. Native40350695171: request3538bytes/6unshown ranges, altered body отказ,28GET/0write/0model. [Отчёт](STEP_10_06_CONTEXT_BINDING_2026-10-26.md). Role verdict/phase ordering, actual host-test proof/correction и полный generic pipeline ещё не подключены. Реальных моделей/нового allowance0; Calculator repair не запускался.

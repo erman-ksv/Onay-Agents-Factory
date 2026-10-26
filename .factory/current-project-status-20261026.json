@@ -166,8 +166,8 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "source-and-proposal-gates-complete-context-and-role-pipeline-pending",
-    "goal": "selected context packet binding, independent role and bounded correction orchestration, actual host/CI delivery",
+    "status": "context-packets-and-request-binding-complete-verdict-and-correction-pipeline-pending",
+    "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
   },
@@ -238,5 +238,22 @@
     "budgetWrites": 0,
     "genericFullPipelineWired": false,
     "proof": ".factory/project-source-gates-proof-20261026.json"
+  },
+  "genericContextBinding": {
+    "status": "tested-native-readonly-context-verified",
+    "sourceSha": "b597f4dfc31a9dd093d9ac4b7fe55ff7d74c133c",
+    "sourceCiRunId": 40350249664,
+    "tests": 2489,
+    "passed": 2489,
+    "localRelatedTests": 214,
+    "newTests": 13,
+    "nativeAuditRunId": 40350695171,
+    "githubReads": 28,
+    "modelCalls": 0,
+    "applicationWrites": 0,
+    "budgetWrites": 0,
+    "genericFullPipelineWired": false,
+    "independentAssessmentsVerified": false,
+    "proof": ".factory/project-context-binding-proof-20261026.json"
   }
 }

@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.6-selected-context-binding",
+  "status": "selected-context-binding-tested-native-readonly-verified",
+  "sourceSha": "b597f4dfc31a9dd093d9ac4b7fe55ff7d74c133c",
+  "localRelatedTests": {
+    "total": 214,
+    "passed": 214,
+    "failed": 0
+  },
+  "newTests": 13,
+  "contextLimits": {
+    "fragments": 8,
+    "charactersPerFragment": 2048,
+    "selectedBytes": 6000,
+    "requestBytes": 12000,
+    "originalFileFraction": 0.6,
+    "existingFileSelectedBytes": 2048,
+    "reservedOutputTokens": 1200
+  },
+  "modelCalls": 0,
+  "applicationWrites": 0,
+  "budgetWrites": 0,
+  "independentAssessmentsVerified": false,
+  "genericFullPipelineWired": false,
+  "legalEnabled": false,
+  "ci": {
+    "runId": 40350249664,
+    "jobId": 121668029511,
+    "typecheck": "passed",
+    "tests": 2489,
+    "passed": 2489,
+    "failed": 0
+  },
+  "nativeAudit": {
+    "runId": 40350695171,
+    "jobId": 121669624912,
+    "eventSha": "63d0557e3cd79bde3b42971be0573e33b8ad0fec",
+    "result": {
+      "version": 1,
+      "status": "native-source-snapshot-and-context-verified",
+      "modelCalls": 0,
+      "githubApiMutationRequests": 0,
+      "applicationChanged": false,
+      "budgetWrites": 0,
+      "executionAuthorized": false,
+      "legalEnabled": false,
+      "runtimeSha": "b597f4dfc31a9dd093d9ac4b7fe55ff7d74c133c",
+      "sourceCiRunId": 40350249664,
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+      "files": [
+        {
+          "path": "index.html",
+          "exists": true,
+          "blobSha": "18150ee8ab02586759ec1ef341d83a5d4df0bd14",
+          "sourceSha256": "b910b1be94ca0ed30bfee9df726c3f3a5eb07de4f5b8fee981b92d694b48640b",
+          "bytes": 1344
+        },
+        {
+          "path": "src/__onay_readonly_probe_absent__.mjs",
+          "exists": false
+        },
+        {
+          "path": "src/app.mjs",
+          "exists": true,
+          "blobSha": "a218250d94cebaaa036cf8e97af238ae57396841",
+          "sourceSha256": "095b7a6a64196ebc7d4c1dc04a2c727f4f0472905dc91b053906f33215086d90",
+          "bytes": 1708
+        },
+        {
+          "path": "src/calculator.mjs",
+          "exists": true,
+          "blobSha": "e80e4cf99b5f2f892a60af61e0b82293c33445b1",
+          "sourceSha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+          "bytes": 882
+        },
+        {
+          "path": "styles.css",
+          "exists": true,
+          "blobSha": "2b91427a8d85dfa565bb47fe5c480c63b2ff044b",
+          "sourceSha256": "d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f",
+          "bytes": 850
+        },
+        {
+          "path": "test/calculator.test.mjs",
+          "exists": true,
+          "blobSha": "bfb51b49639454e37185178f542cc30b1bdb5a5f",
+          "sourceSha256": "d083598254a38c1a6badf00df045a48cd804c0001c701e26a4f982431d012aee",
+          "bytes": 1036
+        },
+        {
+          "path": "test/ui.test.mjs",
+          "exists": true,
+          "blobSha": "1ac172efed6e41524565de7288492b367dfc76ba",
+          "sourceSha256": "5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930",
+          "bytes": 5464
+        }
+      ],
+      "sourceBytes": 11284,
+      "metadataOnly": true,
+      "forgedSnapshotRefused": true,
+      "foreignProposalRefused": true,
+      "missingPathVerified": true,
+      "contextRequestBytes": 3538,
+      "contextRequestSha256": "955cfb8d221b1d793549d7a76119a46f1a9e93dec2e149c8636c53079a45a8f6",
+      "contextEstimatedReservedTokens": 2636,
+      "unshownRanges": 6,
+      "alteredContextRefused": true,
+      "contextMetadataOnly": true,
+      "unverifiedAreas": [
+        "Unshown source and unselected files",
+        "Completeness and semantic relevance of host-selected excerpts",
+        "Independent assessments and actual runtime/browser tests",
+        "Exact-candidate CI, publication and product completion"
+      ],
+      "newProductionTargetsRegistered": 0,
+      "githubReads": 28
+    }
+  },
+  "positiveModelTransportEvidence": "Synthetic/mock provider and owner with real temporary file budget; no real model request.",
+  "remainingGates": [
+    "genuine independent role verdicts and phase ordering",
+    "actual generic host-test evidence",
+    "bounded correction orchestration",
+    "candidate exact-CI publication delivery restart",
+    "new native planning/development allowance"
+  ]
+}
