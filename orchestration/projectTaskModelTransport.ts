@@ -24,6 +24,7 @@ export function createProjectTaskModelTransport(options:Options){
   const env={...options.env};if(env.AGENT_FACTORY_PROVIDER!=='groq'||env.ONAY_TEAM_FREE_TIER_CONFIRMED!=='true'||env.AGENT_FACTORY_PROJECT_LIVE_APPROVED!=='ONE_FREE_BOUNDED_RUN'||env.AGENT_FACTORY_LEGAL_ENABLED!=='false'||typeof options.assertRequestContext!=='function'||typeof options.checkpoint!=='function')throw Error();
   const config=selectProviderConfig(env);if(config.provider!=='groq'||config.baseURL!=='https://api.groq.com/openai/v1'||!/^[A-Za-z0-9][A-Za-z0-9_./-]{0,119}$/.test(config.model)||secrets(config.model))throw Error();const {apiKey,model}=config;
   const taskId=options.taskId,bound=consumeProjectExecutionAdmission(options.admission,options.plan,taskId),assertContext=options.assertRequestContext,checkpoint=options.checkpoint,upstream=options.transport??fetch,timing={...options.timing};
+  const clock=timing.now??(()=>performance.now()),wait=timing.wait??(ms=>new Promise<void>(resolve=>setTimeout(resolve,ms))),correctionStart=clock();let correctionCooled=bound.attempt!==2;
   if(typeof upstream!=='function')throw Error();let stopped=false,busy=false,providerCallsSent=0,reasonCode='ready',stage='ready';const abort=new AbortController();
   const refuse=(code='request-stopped'):never=>{stopped=true;if(reasonCode==='ready')reasonCode=code;abort.abort();throw Error(PROJECT_TASK_MODEL_ERROR);};
   const active=()=>{if(stopped||wire.failure||context.failure)return refuse(wire.failure?.code??context.failure?.code??'request-stopped');};
@@ -48,6 +49,10 @@ export function createProjectTaskModelTransport(options:Options){
    async request(input:unknown){
     try{
      active();if(busy)return refuse('concurrent-request');busy=true;stage='preflight';const body=requestBody(input);await bound.assertCurrent();active();if(await assertContext(body)!==undefined)return refuse('context-unverified');active();
+     // A fresh per-attempt TPM ledger cannot forget the previous attempt's
+     // window. Wait one conservative full minute before the first correction
+     // request; guards run between <=15s waits. No extra model call or retry.
+     if(!correctionCooled){stage='correction-cooldown';let prior=correctionStart;for(let i=0;;i++){const now=clock();if(!Number.isFinite(now)||now<prior||i>8)return refuse('invalid-correction-clock');if(now-correctionStart>=60000)break;await wait(Math.min(15000,60000-(now-correctionStart)));active();await bound.assertCurrent();active();if(await assertContext(body)!==undefined)return refuse('context-unverified');active();prior=now;}correctionCooled=true;}
      stage='pacing';await pace(body);active();await bound.assertCurrent();active();stage='reserve-and-send';const response=await budgeted(ENDPOINT,{method:'POST',redirect:'error',signal:abort.signal,headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},body});
      if(!response.ok||!response.body)return refuse(wire.failure?.code??context.failure?.code??'provider-refused');
      stage='response';const reader=response.body.getReader(),chunks:Uint8Array[]=[];let bytes=0;
