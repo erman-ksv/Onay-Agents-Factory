@@ -47,7 +47,8 @@ function targetBinding(options:Readonly<{identity:ProjectBudgetIdentity;targetPr
  if(Object.hasOwn(options,'targetProfile'))return projectTargetProfile(options.targetProfile,options.identity.repository);
  if(options.identity.repository!=='erman-ksv/Onay-Factory-Calculator')return refuse();return undefined;
 }
-function storageKey(identity:ProjectBudgetIdentity,profile:ReturnType<typeof targetBinding>){return hash(canonical({projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,ownerFingerprint:identity.ownerFingerprint,...(profile?{targetProfileSha256:profile.sha256}:{})}));}
+// A profile revision changes approved scope, never the project's spent ledger.
+function storageKey(identity:ProjectBudgetIdentity){return hash(canonical({projectId:identity.projectId,repository:identity.repository,planFingerprint:identity.planFingerprint,ownerFingerprint:identity.ownerFingerprint}));}
 /** Only a native authenticated OWNER comment on Factory may authorize a grant.
  * Caller pins its ID and exact body digest; arbitrary JSON/env is not approval.
  * Approval never bypasses source/task/live-mode/role/CI authorization. */
@@ -72,7 +73,7 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
   const assertCurrentTime=()=>{if(revoked||expiresAt===undefined||touchClock()>=expiresAt){revoked=true;return refuse();}};const assertAuthorized=async()=>{if(revoked)return refuse();try{await readApproval();}catch{revoked=true;return refuse();}};
   const controller=Object.freeze({
    identity,assertAuthorized,grant,grantSha256:hash(JSON.stringify(grant)),approvalBodySha256:decision.bodySha256,operationMode:operationMode!,...(profile?{targetProfile:target,targetProfileSha256:profile.sha256}:{}),
-   projectKey:storageKey(identity,profile),
+   projectKey:storageKey(identity),
    historyDigest:history.digest,historicalCharge:history.charge,
    async initialize(){await assertAuthorized();await ledger.initialize();},
    inspect:ledger.inspect,
@@ -89,7 +90,7 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
 export async function authorizeGitHubProjectBudget(options:Omit<Parameters<typeof authorizeProjectBudget>[0],'store'>){
  try{
  if(Object.hasOwn(options,'store'))return refuse();
- const i=options.identity,key=storageKey(i,targetBinding(options));
+ const i=options.identity;targetBinding(options);const key=storageKey(i);
  return authorizeProjectBudget({...options,store:createProjectModelBudgetGitHubStore({projectKey:key,token:options.token,...(options.transport?{transport:options.transport}:{})})});
  }catch{return refuse();}
 }

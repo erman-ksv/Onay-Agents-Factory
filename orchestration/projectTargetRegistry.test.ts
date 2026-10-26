@@ -75,10 +75,10 @@ test('different project IDs on the same profile cannot share a native ledger key
 test('later host options mutation cannot replace the target carried by a controller or scope',async()=>{
  const f=fixture();try{const original=f.target,c=await authorizeProjectBudget(f.options);f.options.targetProfile=createProjectTargetRegistry([definition('other','example/other')]).select('other');const host=consumeAuthorizedProjectTaskScope(await c.taskScope('t01','stable-target'),f.options.identity);assert.equal(host.targetProfile,original);assert.equal(c.targetProfile,original);}finally{f.cleanup();}
 });
-test('project repositories and profile revisions have independent keys; charges cannot debit another project',async()=>{
+test('projects have independent keys but a profile revision retains the same spent ledger',async()=>{
  const a=fixture(),b=fixture(definition('other','example/other')),revision=fixture({...definition(),maxReviewBytes:11999});try{
-  const ca=await authorizeProjectBudget(a.options),cb=await authorizeProjectBudget(b.options),cc=await authorizeProjectBudget(revision.options);assert.notEqual(ca.projectKey,cb.projectKey);assert.notEqual(ca.projectKey,cc.projectKey);await ca.initialize();await cb.initialize();
-  const host=consumeAuthorizedProjectTaskScope(await ca.taskScope('t01','reserve-one'),a.options.identity);await host.projectBudget.ledger.reserve({reservationId:'isolated-r1',taskId:'t01',requestSha256:'d'.repeat(64),requestBytes:100,reservedTokens:100});assert.equal((await ca.inspect()).used.requests,1);assert.equal((await cb.inspect()).used.requests,0);
+  const ca=await authorizeProjectBudget(a.options),cb=await authorizeProjectBudget(b.options),cc=await authorizeProjectBudget({...revision.options,store:a.options.store});assert.notEqual(ca.projectKey,cb.projectKey);assert.equal(ca.projectKey,cc.projectKey);await ca.initialize();await cb.initialize();
+  const host=consumeAuthorizedProjectTaskScope(await ca.taskScope('t01','reserve-one'),a.options.identity);await host.projectBudget.ledger.reserve({reservationId:'isolated-r1',taskId:'t01',requestSha256:'d'.repeat(64),requestBytes:100,reservedTokens:100});assert.equal((await ca.inspect()).used.requests,1);assert.equal((await cb.inspect()).used.requests,0);assert.equal((await cc.inspect()).used.requests,1);await assert.rejects(()=>cc.initialize());assert.equal((await ca.inspect()).used.requests,1);
   const scope=await ca.taskScope('t01','foreign-consumer');assert.throws(()=>consumeAuthorizedProjectTaskScope(scope,b.options.identity),authorizationRefusal);
  }finally{a.cleanup();b.cleanup();revision.cleanup();}
 });
@@ -87,7 +87,7 @@ test('legacy Calculator approval and stable remote namespace remain byte-compati
   f.document.targetProfileSha256=f.profile.sha256;f.refresh();await assert.rejects(()=>authorizeProjectBudget(f.options),authorizationRefusal);
  }finally{f.cleanup();}
 });
-test('native store uses the same profile-bound key and cannot accept injected storage',async()=>{
+test('native store uses the same project key and cannot accept injected storage',async()=>{
  const f=fixture();try{const c=await authorizeProjectBudget(f.options);const {store:unused,...options}=f.options;const reads:string[]=[];const transport:typeof fetch=async(url,init)=>{const s=String(url);reads.push(s);assert.equal(init?.method,'GET');if(s.includes('/issues/comments/'))return Response.json(f.comment);assert.ok(s.endsWith('/git/ref/heads/'+encodeURIComponent('state/project-model-budget/'+c.projectKey)));return new Response('',{status:404});};
   const remote=await authorizeGitHubProjectBudget({...options,transport});assert.equal(remote.projectKey,c.projectKey);await assert.rejects(()=>remote.inspect());assert.equal(reads.length,2);await assert.rejects(()=>authorizeGitHubProjectBudget({...options,store:unused} as any),authorizationRefusal);
  }finally{f.cleanup();}
