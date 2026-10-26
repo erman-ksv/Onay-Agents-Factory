@@ -1,5 +1,5 @@
 {
   "version": 1,
-  "operation": "inspect-existing-calculator-source",
+  "operation": "inspect-existing-calculator-source-and-context",
   "modelCallsAuthorized": 0
 }

@@ -1,4 +1,4 @@
-name: Verify generic source evidence on existing Calculator without models
+name: Verify generic source and bound context without models
 on:
   push:
     branches: ['feat/calculator-t02-charge-reconcile-20261022']
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout immutable tested source reader
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '7ad340f064454a869d4933d365c26a54dae2a1d5'
+          ref: 'b597f4dfc31a9dd093d9ac4b7fe55ff7d74c133c'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -29,11 +29,11 @@ jobs:
           function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
           for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
           JS
-      - name: Verify fixed read-only source and absence without model credentials
+      - name: Verify source, absence and selected context without model credentials
         env:
           FACTORY_READ_TOKEN: ${{ github.token }}
-          FACTORY_RUNTIME_SHA: '7ad340f064454a869d4933d365c26a54dae2a1d5'
-          FACTORY_SOURCE_CI_RUN: '40341767562'
+          FACTORY_RUNTIME_SHA: 'b597f4dfc31a9dd093d9ac4b7fe55ff7d74c133c'
+          FACTORY_SOURCE_CI_RUN: '40350249664'
           AGENT_FACTORY_LEGAL_ENABLED: 'false'
         run: node scripts/project-source-native-audit.mjs
       - name: Preserve metadata only
