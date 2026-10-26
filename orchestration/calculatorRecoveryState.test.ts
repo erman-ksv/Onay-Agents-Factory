@@ -1,0 +1,50 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {chmodSync,mkdtempSync,readFileSync,mkdirSync,readdirSync,statSync,writeFileSync,symlinkSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {createHash} from 'node:crypto';
+import {loadCalculatorRecoveryArtifact,type CalculatorRecoveryArtifactPin} from '../github/calculatorRecoveryArtifact.js';
+import {restoreCalculatorRecoveryState,CALCULATOR_RECOVERY_STATE_ERROR} from './calculatorRecoveryState.js';
+import {createCalculatorExecutionCheckpointStore} from './calculatorExecutionCheckpoint.js';
+import {restoreCalculatorRecoveryArtifactHost} from './calculatorRecoveryArtifactHost.js';
+import {createCalculatorPlan,calculatorPlanDigest} from './calculatorPlan.js';import {CalculatorPlanStore} from './calculatorPlanStore.js';
+const saved=JSON.parse(readFileSync(new URL('./fixtures/calculatorStep7SavedPlan.json',import.meta.url),'utf8')),plan=createCalculatorPlan(saved.request,saved.proposal),error={message:CALCULATOR_RECOVERY_STATE_ERROR};
+const hash=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
+// Independent stored ZIP fixture builder; production reader never uses this.
+function zip(files:Map<string,Buffer>){let offset=0;const local:Buffer[]=[],central:Buffer[]=[];
+ for(const [name,bytes] of files){const path=Buffer.from(name);let crc=0xffffffff;for(const b of bytes){crc^=b;for(let j=0;j<8;j++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}crc=(crc^0xffffffff)>>>0;
+ const l=Buffer.alloc(30);l.writeUInt32LE(0x04034b50);l.writeUInt16LE(20,4);l.writeUInt32LE(crc,14);l.writeUInt32LE(bytes.length,18);l.writeUInt32LE(bytes.length,22);l.writeUInt16LE(path.length,26);
+ const c=Buffer.alloc(46);c.writeUInt32LE(0x02014b50);c.writeUInt16LE(20,4);c.writeUInt16LE(20,6);c.writeUInt32LE(crc,16);c.writeUInt32LE(bytes.length,20);c.writeUInt32LE(bytes.length,24);c.writeUInt16LE(path.length,28);c.writeUInt32LE(offset,42);local.push(l,path,bytes);central.push(c,path);offset+=l.length+path.length+bytes.length;
+ }const cd=Buffer.concat(central),end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(files.size,8);end.writeUInt16LE(files.size,10);end.writeUInt32LE(cd.length,12);end.writeUInt32LE(offset,16);return Buffer.concat([...local,cd,end]);}
+async function fixture(options:{index?:number;mutate?:(files:Map<string,Buffer>)=>void}={}){
+ const index=options.index??0,task=plan.tasks[index]!,files=new Map<string,Buffer>(),put=(name:string,v:unknown)=>files.set(name,Buffer.from(JSON.stringify(v)+'\n'));
+ put('plan.json',saved);put('planning.json',{schemaVersion:1,id:'calc-plan-'+plan.owner.id,fingerprint:plan.owner.ownerFingerprint,status:'needs-review',reasonCode:'plan_saved_not_execution',stages:['save_plan','digest_a_'+plan.fingerprint.slice(0,32),'digest_b_'+plan.fingerprint.slice(32)].map(stage=>({stage,status:'passed'}))});
+ const receipts=plan.tasks.slice(0,index+1).map((t,i)=>{const path='receipt-'+i+'.json';put(path,{schemaVersion:1,id:'calc-'+t.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:t.id}),status:'blocked',reasonCode:'execution_failed_no_replay',stages:[{stage:'generate_1',status:'blocked'}]});return {taskId:t.id,path};});
+ const identity={repository:plan.owner.repository,goalId:plan.owner.id,ownerFingerprint:plan.owner.ownerFingerprint,planFingerprint:plan.fingerprint,taskId:task.id,branch:plan.branch,baseSha:plan.owner.baseSha,bootstrapSha:plan.owner.baseSha,runtimeConfigDigest:'e'.repeat(64)};
+ const checkpointDirectory=mkdtempSync(join(tmpdir(),'onay-checkpoint-')),checkpoint=createCalculatorExecutionCheckpointStore(checkpointDirectory,identity);checkpoint.save({attempt:1,stage:'generate_1',status:'blocked',assessments:[],modelState:{attemptedRequests:1,totalRequestBytes:100,reservedRunTokens:500,elapsedMs:10},httpInFlight:false,publicationStarted:false,failure:{reasonCode:'proposal_changes_invalid'}});checkpoint.close();files.set('checkpoint.json',readFileSync(join(checkpointDirectory,task.id+'.execution.json')));
+ options.mutate?.(files);const bytes=zip(files),pin:CalculatorRecoveryArtifactPin={runId:1,runAttempt:1,headSha:'a'.repeat(40),workflowPath:'.github/workflows/source.yml',conclusion:'failure',artifactId:2,name:'synthetic-recovery-state',size:bytes.length,sha256:hash(bytes),files:[...files].map(([path,b])=>({path,bytes:b.length,sha256:hash(b)}))};let expired=false,reads=0;
+ const transport:typeof fetch=async(u)=>{reads++;const url=String(u);if(url.endsWith('/zip'))return new Response(bytes);if(url.endsWith('/actions/runs/1'))return Response.json({id:1,run_attempt:1,head_sha:pin.headSha,path:pin.workflowPath,status:'completed',conclusion:'failure',repository:{full_name:'erman-ksv/Onay-Agents-Factory'}});return Response.json({id:2,name:pin.name,expired,size_in_bytes:pin.size,digest:'sha256:'+pin.sha256,workflow_run:{id:1,head_sha:pin.headSha}});};
+ const cap=await loadCalculatorRecoveryArtifact(pin,{GITHUB_REPOSITORY:'erman-ksv/Onay-Agents-Factory',FACTORY_READ_TOKEN:'fixture-token'},transport),parent=mkdtempSync(join(tmpdir(),'onay-state-')),directory=join(parent,'state');
+ return {cap,identity,files,parent,directory,mapping:{planPath:'plan.json',planningReceiptPath:'planning.json',taskId:task.id,receipts},expire:()=>{expired=true;},reads:()=>reads};
+}
+test('authenticated metadata is restored byte-for-byte with private modes and no execution authority',async()=>{
+ const f=await fixture(),out=await restoreCalculatorRecoveryState(f.cap,f.mapping,saved.request,f.directory);assert.equal(out.executionAuthorized,false);assert.equal(out.planFingerprint,plan.fingerprint);assert.equal(new CalculatorPlanStore(f.directory,saved.request).inspect()?.fingerprint,plan.fingerprint);assert.equal(statSync(f.directory).mode&0o777,0o700);
+ for(const name of readdirSync(f.directory))assert.equal(statSync(join(f.directory,name)).mode&0o777,0o600);
+ assert.deepEqual(readFileSync(join(f.directory,'calc-'+plan.tasks[0]!.id+'.json')),f.files.get('receipt-0.json'));assert.equal(readdirSync(f.directory).length,3);assert.ok(!JSON.stringify(out).includes('stages'));
+});
+test('repeat restoration cannot reset or overwrite an existing receipt',async()=>{const f=await fixture();await restoreCalculatorRecoveryState(f.cap,f.mapping,saved.request,f.directory);const path=join(f.directory,'sentinel');writeFileSync(path,'preserve');await assert.rejects(()=>restoreCalculatorRecoveryState(f.cap,f.mapping,saved.request,f.directory),error);assert.equal(readFileSync(path,'utf8'),'preserve');});
+test('all earlier receipts are required in plan order and preserved without promoting them to evidence',async()=>{const f=await fixture({index:1});await assert.rejects(()=>restoreCalculatorRecoveryState(f.cap,{...f.mapping,receipts:f.mapping.receipts.slice(1)},saved.request,f.directory),error);assert.deepEqual(readdirSync(f.parent),[]);await restoreCalculatorRecoveryState(f.cap,f.mapping,saved.request,f.directory);assert.equal(JSON.parse(readFileSync(join(f.directory,'calc-'+plan.tasks[0]!.id+'.json'),'utf8')).status,'blocked');});
+test('malformed plan, planning marker or original receipt refuses before filesystem mutation',async()=>{
+ for(const name of ['plan.json','planning.json','receipt-0.json']){const f=await fixture({mutate:files=>{const v=JSON.parse(files.get(name)!.toString());if(name==='plan.json')v.fingerprint='b'.repeat(64);else v.status='running';files.set(name,Buffer.from(JSON.stringify(v)));}});await assert.rejects(()=>restoreCalculatorRecoveryState(f.cap,f.mapping,saved.request,f.directory),error);assert.deepEqual(readdirSync(f.parent),[]);}
+});
+test('foreign owner, duplicate mappings and copied artifact capabilities refuse',async()=>{const f=await fixture();for(const [cap,mapping,owner] of [[{...f.cap},f.mapping,saved.request],[f.cap,{...f.mapping,planningReceiptPath:'plan.json'},saved.request],[f.cap,f.mapping,{...saved.request,goal:'A different owner calculator goal'}]] as const)await assert.rejects(()=>restoreCalculatorRecoveryState(cap,mapping,owner,f.directory),error);assert.deepEqual(readdirSync(f.parent),[]);});
+test('expired remote source refuses before creating a directory',async()=>{const f=await fixture();f.expire();await assert.rejects(()=>restoreCalculatorRecoveryState(f.cap,f.mapping,saved.request,f.directory),error);assert.deepEqual(readdirSync(f.parent),[]);});
+test('preexisting directories, symlinks and non-private parent directories cannot receive state',async()=>{
+ const f=await fixture();mkdirSync(f.directory,{mode:0o700});await assert.rejects(()=>restoreCalculatorRecoveryState(f.cap,f.mapping,saved.request,f.directory),error);
+ const g=await fixture();symlinkSync(f.directory,g.directory);await assert.rejects(()=>restoreCalculatorRecoveryState(g.cap,g.mapping,saved.request,g.directory),error);assert.deepEqual(readdirSync(f.directory),[]);
+ const h=await fixture();mkdirSync(join(h.parent,'public'),{mode:0o755});chmodSync(join(h.parent,'public'),0o755);await assert.rejects(()=>restoreCalculatorRecoveryState(h.cap,h.mapping,saved.request,join(h.parent,'public','state')),error);
+});
+
+test('configuration accessors refuse without evaluation',async()=>{const f=await fixture();let reads=0;const mapping=Object.defineProperty({...f.mapping},'receipts',{enumerable:true,get(){reads++;return f.mapping.receipts;}});await assert.rejects(()=>restoreCalculatorRecoveryState(f.cap,mapping,saved.request,f.directory),error);assert.equal(reads,0);assert.deepEqual(readdirSync(f.parent),[]);});
+
+test('composed host authenticates source and restores metadata without claiming or authorizing execution',async()=>{
+ const f=await fixture();let claims=0;const result=await restoreCalculatorRecoveryArtifactHost(f.cap,{checkpointPath:'checkpoint.json',receiptPath:'receipt-0.json',identity:f.identity},f.mapping,saved.request,f.directory,{verifyDependencies:async()=>undefined,claimRecovery:async()=>{claims++;},assertRecovery:async()=>{}});
+ assert.equal(result.state.executionAuthorized,false);assert.equal(claims,0);assert.equal(result.host.identity.taskId,f.mapping.taskId);assert.equal(readdirSync(f.directory).length,3);
+});
