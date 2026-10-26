@@ -1,4 +1,4 @@
-name: Verify encrypted correction recovery across host processes
+name: Verify generic publication fixture and native readonly candidate CI
 on:
   push:
     branches: ['feat/calculator-t02-charge-reconcile-20261022']
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout immutable tested implementation
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '1502dac7ed6061b62e6d555fa4cee1a3e49c61ce'
+          ref: '6a067b57ca4e44f4c7e9ad8c06e4d384509fd2f4'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -31,12 +31,12 @@ jobs:
           JS
       - name: Prepare the same pinned Node image used by the existing pilot
         run: docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
-      - name: Verify encrypted checkpoints across four fixed host processes
+      - name: Verify local fixture publication and readonly historical Task CI
         env:
           FACTORY_READ_TOKEN: ${{ github.token }}
-          FACTORY_RUNTIME_SHA: '1502dac7ed6061b62e6d555fa4cee1a3e49c61ce'
-          FACTORY_SOURCE_CI_RUN: '40386189954'
-        run: node scripts/project-correction-recovery-native-audit.mjs
+          FACTORY_RUNTIME_SHA: '6a067b57ca4e44f4c7e9ad8c06e4d384509fd2f4'
+          FACTORY_SOURCE_CI_RUN: '40392916653'
+        run: node scripts/project-publication-native-audit.mjs
       - name: Upload source-free native evidence
         uses: actions/upload-artifact@v4
         with:
