@@ -1,8 +1,12 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
-import {createCalculatorInputBrowserProbe,createCalculatorInputBrowserProbeForTests,calculatorInputBrowserContract,CALCULATOR_INPUT_BROWSER_ERROR} from './calculatorInputBrowserProbe.js';
+import {createCalculatorInputBrowserProbe,createCalculatorInputBrowserProbeForTests,calculatorInputBrowserContract,calculatorInputLabelMatches,CALCULATOR_INPUT_BROWSER_ERROR} from './calculatorInputBrowserProbe.js';
 import type {CalculatorSandboxProcess} from './calculatorSandbox.js';
 const image='mcr.microsoft.com/playwright@sha256:'+'1'.repeat(64),contract=calculatorInputBrowserContract(),sources=new Map(['index.html','styles.css','src/app.mjs','src/calculator.mjs'].map(p=>[p,'PRIVATE_SOURCE_MARKER'])),input={candidateSha:'a'.repeat(40),sources};
 const stopped=(e:unknown)=>e instanceof Error&&e.message===CALCULATOR_INPUT_BROWSER_ERROR;
+test('typographic minus on the original button is equivalent to keyboard subtraction',()=>{
+ for(const text of ['-','−','‑','–',' ‑ '])assert.equal(calculatorInputLabelMatches(text,'-'),true);
+ assert.equal(calculatorInputLabelMatches('×','*'),true);assert.equal(calculatorInputLabelMatches('÷','/'),true);assert.equal(calculatorInputLabelMatches('+','-'),false);assert.equal(calculatorInputLabelMatches('⌫','-'),false);
+});
 function fixture(mode='normal'){
  let runs=0,cleanups=0;
  const process:CalculatorSandboxProcess=async(args,options)=>{

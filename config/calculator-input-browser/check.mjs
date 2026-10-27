@@ -6,6 +6,7 @@ import {spawn} from 'node:child_process';
 import {readFileSync,readdirSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
+import {matchesInputButtonLabel} from '/button-label.mjs';
 const input=JSON.parse(readFileSync('/manifest.json','utf8'));
 const caseBytes=readFileSync('/cases.json'),cases=JSON.parse(caseBytes),caseSha256=createHash('sha256').update(caseBytes).digest('hex');
 const failures=[],caseIds=[];
@@ -66,7 +67,7 @@ async function run(){
  let ready=false;for(let i=0;i<50;i++){try{await isolatedWorld();ready=await evaluate('document.readyState==="complete"&&document.querySelectorAll("button").length>0');}catch{}if(ready)break;await pause(100);}assert.equal(ready,true);
  const display=()=>evaluate('(()=>{const e=document.querySelector("output")||document.getElementById("display")||document.getElementById("result")||document.querySelector("input[readonly]")||document.querySelector("[role=status]");return e?String("value" in e?e.value:e.textContent).trim():null})()');
  const click=async key=>{assert.ok(['0','1','2','3','4','5','6','7','8','9','.','+','-','*','/','=','clear','backspace'].includes(key));
-  assert.equal(await evaluate(`(()=>{const k=${JSON.stringify(key)};const b=Array.from(document.querySelectorAll('button')).find(b=>[b.textContent||'',b.getAttribute('aria-label')||''].map(t=>t.trim()).some(t=>k==='clear'?/^(C|AC|Clear|Очистить)$/i.test(t):k==='backspace'?/backspace|delete|удал|⌫|←|⌦|back/i.test(t):t.replace('×','*').replace('÷','/').replace('−','-')===k));if(!b)return false;b.click();return true})()`),true);await pause(25);
+  assert.equal(await evaluate(`(()=>{const k=${JSON.stringify(key)};const b=Array.from(document.querySelectorAll('button')).find(b=>[b.textContent||'',b.getAttribute('aria-label')||''].map(t=>t.trim()).some(t=>k==='clear'?/^(C|AC|Clear|Очистить)$/i.test(t):k==='backspace'?/backspace|delete|удал|⌫|←|⌦|back/i.test(t):(${matchesInputButtonLabel.toString()})(t,k)));if(!b)return false;b.click();return true})()`),true);await pause(25);
  };
  applicationChecksStarted=true;
  const press=async k=>{const key=k==='='?'Enter':k,code=/^[0-9]$/.test(k)?'Digit'+k:k==='='?'Enter':k==='+'?'Equal':k==='-'?'Minus':k==='*'?'Digit8':'Slash',keyCode=k==='='?13:/^[0-9]$/.test(k)?k.charCodeAt(0):k==='+'?187:k==='-'?189:k==='*'?56:191;
