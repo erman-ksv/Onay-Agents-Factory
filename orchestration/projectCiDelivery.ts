@@ -59,7 +59,7 @@ function delivery(options:Options,mode:'native'|'simulated'){
    try{
     if(typeof dispatch!=='function')return refuse();
     const bound=projectCandidateCiConfirmationBinding(confirmation),candidate=bound.candidate;
-    if(bound.approval.plan!==plan||bound.approval.controller!==controller||!confirmation.ciVerified||confirmation.ciStatus!=='passed'||mode==='native'&&candidate.provenance!=='native-github')return refuse();
+    if(bound.plan!==plan||bound.controller!==controller||!confirmation.ciVerified||confirmation.ciStatus!=='passed'||mode==='native'&&candidate.provenance!=='native-github')return refuse();
     const previous=await entries(),duplicate=previous.find(r=>r.value.taskId===candidate.taskId);
     if(duplicate){if(duplicate.value.candidateSha!==candidate.candidateSha||duplicate.value.policySha256!==bound.evidence.policySha256)return refuse();return Object.freeze({status:'already-recorded' as const,taskId:candidate.taskId,dispatch:duplicate.value.dispatch,executionAuthorized:false as const});}
     p=openDirectory();lock=openSync(join(directory,'.delivery.lock'),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);lockIdentity=fstatSync(lock);fsyncSync(lock);fsyncSync(p.fd);p.check();
