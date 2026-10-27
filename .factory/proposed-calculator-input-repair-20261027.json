@@ -7,13 +7,25 @@
   "goal": "Agents repair repeated/changed operators and leading-zero input without breaking existing arithmetic, negative operands, clear/backspace or keyboard behavior.",
   "newTaskRequired": true,
   "completedT05ReplayAuthorized": false,
-  "proposedWritablePaths": ["src/app.mjs", "test/ui.test.mjs"],
-  "readOnlyDependencies": ["index.html", "styles.css", "src/calculator.mjs"],
+  "proposedWritablePaths": [
+    "src/app.mjs",
+    "test/ui.test.mjs"
+  ],
+  "readOnlyDependencies": [
+    "index.html",
+    "styles.css",
+    "src/calculator.mjs"
+  ],
   "immutableHostCases": "config/calculator-input-browser/cases.json",
   "hostProbe": "orchestration/calculatorInputBrowserProbe.ts",
   "existing11CriteriaRemainRequired": true,
   "existingExpectedAnswersMayChange": false,
-  "requiredRoles": ["frontend", "security", "reviewer", "tester"],
+  "requiredRoles": [
+    "frontend",
+    "security",
+    "reviewer",
+    "tester"
+  ],
   "blockingWork": [
     "Bind the new real browser proof to the exact proposal and require it before native publication; a read-only probe is not publication approval.",
     "Bind read-only source dependencies without broadening writable paths.",
@@ -24,5 +36,7 @@
   "remainingModelRequests": 0,
   "applicationWritesAuthorized": false,
   "publicationAuthorized": false,
-  "legalEnabled": false
+  "legalEnabled": false,
+  "immutableHostCasesSha256": "8c4ddb579b3aa548561013d5a986afd306e0da6fff0b59dd0dd2b2b83659de6c",
+  "browserChecks": 25
 }
