@@ -27,7 +27,6 @@
     "tester"
   ],
   "blockingWork": [
-    "Bind read-only source dependencies without broadening writable paths.",
     "Reconcile and preserve all existing 65 model requests before a new exact OWNER development grant; no new allowance or ledger initialization is authorized by this proposal.",
     "After those gates, pin an actual production plan/manifest and run the real agent cycle under the approved bounds."
   ],
@@ -40,5 +39,8 @@
   "browserChecks": 25,
   "browserPublicationGateWired": true,
   "browserPublicationGateProof": ".factory/browser-publication-gate-proof-20261027.json",
-  "positiveNativeCorrectedAppAcceptanceVerified": false
+  "positiveNativeCorrectedAppAcceptanceVerified": false,
+  "readOnlyDependenciesWired": true,
+  "newFirstTaskStartWired": true,
+  "readonlyFirstStartProof": ".factory/readonly-first-start-proof-20261027.json"
 }
