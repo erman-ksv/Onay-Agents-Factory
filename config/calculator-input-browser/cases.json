@@ -1,0 +1,15 @@
+[
+  {"id":"repeat-multiply","keys":["6","*","*","2","="],"expected":"12","keyboard":true},
+  {"id":"replace-multiply-plus","keys":["6","*","+","2","="],"expected":"8","keyboard":true},
+  {"id":"repeat-divide","keys":["6","/","/","2","="],"expected":"3","keyboard":true},
+  {"id":"repeat-plus","keys":["6","+","+","2","="],"expected":"8","keyboard":true},
+  {"id":"leading-zero-display","keys":["0","0","0","0","5"],"expected":"5","keyboard":true},
+  {"id":"zero-remains-zero","keys":["0","0","0"],"expected":"0","keyboard":true},
+  {"id":"leading-zero-right-result","keys":["2","+","0","0","5","="],"expected":"7","keyboard":true},
+  {"id":"decimal-zero-preserved","keys":["0",".","0","5"],"expected":"0.05","keyboard":false},
+  {"id":"negative-right-preserved","keys":["2","*","-","3","="],"expected":"-6","keyboard":true},
+  {"id":"negative-result-preserved","keys":["7","-","1","0","="],"expected":"-3","keyboard":true},
+  {"id":"addition-preserved","keys":["2","+","3","="],"expected":"5","keyboard":true},
+  {"id":"division-preserved","keys":["8","/","2","="],"expected":"4","keyboard":true},
+  {"id":"decimal-result-preserved","keys":["0",".","1","+","0",".","2","="],"expected":"0.3","keyboard":false}
+]

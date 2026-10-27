@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "status": "proposed-task-not-dispatched-not-runtime-manifest",
+  "repository": "erman-ksv/Onay-Factory-Calculator",
+  "baseRef": "feat/calculator-agent/calculator-pilot-step7-v1",
+  "baseSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "goal": "Agents repair repeated/changed operators and leading-zero input without breaking existing arithmetic, negative operands, clear/backspace or keyboard behavior.",
+  "newTaskRequired": true,
+  "completedT05ReplayAuthorized": false,
+  "proposedWritablePaths": ["src/app.mjs", "test/ui.test.mjs"],
+  "readOnlyDependencies": ["index.html", "styles.css", "src/calculator.mjs"],
+  "immutableHostCases": "config/calculator-input-browser/cases.json",
+  "hostProbe": "orchestration/calculatorInputBrowserProbe.ts",
+  "existing11CriteriaRemainRequired": true,
+  "existingExpectedAnswersMayChange": false,
+  "requiredRoles": ["frontend", "security", "reviewer", "tester"],
+  "blockingWork": [
+    "Bind the new real browser proof to the exact proposal and require it before native publication; a read-only probe is not publication approval.",
+    "Bind read-only source dependencies without broadening writable paths.",
+    "Reconcile and preserve all existing 65 model requests before a new exact OWNER development grant; no new allowance or ledger initialization is authorized by this proposal.",
+    "After those gates, pin an actual production plan/manifest and run the real agent cycle under the approved bounds."
+  ],
+  "currentOwnerMode": "read-only-review",
+  "remainingModelRequests": 0,
+  "applicationWritesAuthorized": false,
+  "publicationAuthorized": false,
+  "legalEnabled": false
+}
