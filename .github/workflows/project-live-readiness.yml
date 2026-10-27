@@ -1,0 +1,79 @@
+name: Verify installed state protection and persistent key readiness
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/project-live-readiness-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-model-free-live-readiness
+  cancel-in-progress: false
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      key-configured: ${{ steps.probe.outputs.key-configured }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'e2b51e368f55ff8fe6966c9a8895132554073ad0'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform trusted modules without dependency installation
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Native effective rules, unchanged real budget and secret readiness
+        id: probe
+        env:
+          FACTORY_RULES_READ_TOKEN: ${{ github.token }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          FACTORY_RUNTIME_SHA: 'e2b51e368f55ff8fe6966c9a8895132554073ad0'
+          FACTORY_SOURCE_CI_RUN: '40481857488'
+        run: node scripts/project-live-protection-readiness.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-free-live-readiness
+          path: ${{ runner.temp }}/factory-live-readiness/
+          if-no-files-found: error
+          retention-days: 1
+  verify-persistent-key:
+    needs: readiness
+    if: needs.readiness.outputs.key-configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'e2b51e368f55ff8fe6966c9a8895132554073ad0'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: model-free-live-readiness
+          path: ${{ runner.temp }}/factory-key-probe
+      - name: Verify key in a different job without printing or storing its value
+        env:
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {readFileSync,readdirSync,writeFileSync,chmodSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          const {loadProjectRuntimeRecoveryKey}=await import('./orchestration/projectRuntimeRecovery.js'),{readProjectHostEnvelope,destroyProjectCorrectionRecoveryKey}=await import('./orchestration/projectCorrectionCheckpoint.js'),directory=join(process.env.RUNNER_TEMP,'factory-key-probe');chmodSync(directory,0o700);chmodSync(join(directory,'encrypted-probe.json'),0o600);const metadata=JSON.parse(readFileSync(join(directory,'probe-metadata.json'),'utf8')),key=loadProjectRuntimeRecoveryKey(process.env);try{assert.equal(metadata.keyId,key.keyId);const payload=readProjectHostEnvelope('onay-key-persistence-probe-v1',key,join(directory,'encrypted-probe.json'),metadata.sha256);assert.equal(createHash('sha256').update(payload).digest('hex'),metadata.payloadSha256);const proof={version:1,status:'persistent-recovery-key-verified-across-two-jobs',keyValuePrinted:false,keyWritten:false,providerCalls:0,applicationWrites:0,budgetWrites:0,executionAuthorized:false};writeFileSync('persistent-key-proof.json',JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));}finally{destroyProjectCorrectionRecoveryKey(key);}
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: persistent-key-proof
+          path: persistent-key-proof.json
+          if-no-files-found: error
+          retention-days: 7
