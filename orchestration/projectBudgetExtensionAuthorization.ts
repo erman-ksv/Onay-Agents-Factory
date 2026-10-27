@@ -32,3 +32,23 @@ export async function authorizeProjectBudgetExtension(previous:AuthorizedProject
 export function consumeProjectBudgetExtensionPermit(value:unknown,projectKey:string):Command{
  const p=value&&typeof value==='object'?permits.get(value):undefined;if(!p||p.used||p.command.projectKey!==projectKey)return refuse();p.used=true;return p.command;
 }
+
+/** Separate development policy: exactly one additional bounded slot. Existing
+ * read-only extension policy and every historical reservation stay unchanged.
+ * Inspection is data only; two fresh genuine OWNER controllers are required. */
+export function inspectProjectDevelopmentBudgetExtension(previous:AuthorizedProjectBudgetController,stateInput:unknown,proposedInput:unknown){
+ if(!isAuthorizedProjectBudgetController(previous)||previous.operationMode!=='development')return refuse();
+ const state=parseProjectModelBudgetState(stateInput),next=parseProjectModelGrant(proposedInput),old=previous.grant,stateSha256=projectBudgetStateDigest(state);
+ if(state.grantSha256!==previous.grantSha256||next.grantId!=='development-extend-'+stateSha256||next.projectId!==old.projectId||next.repository!==old.repository||next.planFingerprint!==old.planFingerprint||next.historicalEvidenceSha256!==old.historicalEvidenceSha256||JSON.stringify(next.historical)!==JSON.stringify(old.historical)||next.maxRequestBytes!==old.maxRequestBytes||next.maxRequests!==old.maxRequests+1||next.maxTotalRequestBytes!==old.maxTotalRequestBytes+12000||next.maxReservedTokens!==old.maxReservedTokens+6000)return refuse();
+ const used={...old.historical};for(const r of state.reservations){used.requests++;used.requestBytes+=r.requestBytes;used.reservedTokens+=r.reservedTokens;}
+ if(used.requests>old.maxRequests||used.requestBytes>old.maxTotalRequestBytes||used.reservedTokens>old.maxReservedTokens)return refuse();
+ const grantSha256=hash(JSON.stringify(next)),newState=parseProjectModelBudgetState({...state,grantSha256});
+ return Object.freeze({stateSha256,grant:next,grantSha256,used:Object.freeze(used),newState,additionalRequestsAuthorized:0 as const,taskReplayAuthorized:false as const});
+}
+export async function authorizeProjectDevelopmentBudgetExtension(previous:AuthorizedProjectBudgetController,next:AuthorizedProjectBudgetController,expectedRevision:string,stateInput:unknown):Promise<ProjectBudgetExtensionPermit>{
+ if(!isAuthorizedProjectBudgetController(previous)||!isAuthorizedProjectBudgetController(next)||next.operationMode!=='development'||previous===next||previous.projectKey!==next.projectKey||JSON.stringify(previous.identity)!==JSON.stringify(next.identity)||previous.historyDigest!==next.historyDigest||previous.targetProfileSha256!==next.targetProfileSha256||previous.approvalBodySha256===next.approvalBodySha256||!/^[a-f0-9]{64}$/.test(expectedRevision))return refuse();
+ const before=parseProjectModelBudgetState(stateInput),inspected=inspectProjectDevelopmentBudgetExtension(previous,before,next.grant);
+ if(next.grantSha256!==inspected.grantSha256)return refuse();
+ const assertAuthorized=async()=>{await previous.assertAuthorized();await next.assertAuthorized();};await assertAuthorized();
+ const permit=Object.freeze({}) as ProjectBudgetExtensionPermit;permits.set(permit,{used:false,command:Object.freeze({projectKey:previous.projectKey,expectedRevision,before,after:inspected.newState,assertAuthorized})});return permit;
+}
