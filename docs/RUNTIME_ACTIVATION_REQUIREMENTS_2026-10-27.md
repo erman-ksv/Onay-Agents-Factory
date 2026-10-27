@@ -23,3 +23,6 @@ Factory code work and synthetic checks can continue without model quota. Дей�
 
 
 Следующий механизм готов: bounded active runner + native bootstrap из pinned host manifest, feature-only push marker. Это позволяет ждать CI и продолжать план внутри одного15-minute runner job без default-branch relay. Проверки source b8ffbf6b: typecheck/2656testsPASS; native launch40496458547 подтвердил остановку до модели при ненастроенном manifest. Точные границы: BOUNDED_CI_CONTINUATION_2026-10-27.md. Конкретный production manifest, browser/device gates для UI/Expo, новый ограниченный OWNER development grant и реальный цикл остаются незавершёнными. Постоянный ключ и state rules уже проверены; повторно настраивать их не нужно.
+
+
+Пункт1 browser-before-publication реализован для Calculator UI: genuine receipts на25input+5существующих browser checks связаны с exactproposal/source/policy; worker/manifest обязательны; role=coder не обходит UI gate. Source8c05f839b7034a8630c4d4726e540f39190609f9 CI40500786916,typecheck/2674PASS. Другие frontend/Expo/device targets этим не приняты. Остались read-only dependencies+new first-task start, точный development allowance и реальный цикл. Report BROWSER_PUBLICATION_GATE_2026-10-27.md.

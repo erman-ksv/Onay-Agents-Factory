@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "concrete-input-repair-browser-baseline-confirmed-publication-binding-readonly-dependencies-first-task-and-development-grant-pending",
+    "status": "mandatory-browser-publication-gate-tested-readonly-dependencies-first-task-development-grant-and-live-run-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -888,5 +888,49 @@
     "newAllowance": 0,
     "legalEnabled": false,
     "wholeProjectAutonomyVerified": false
+  },
+  "browserPublicationGate": {
+    "version": 1,
+    "date": "2026-10-27",
+    "status": "mandatory-proposal-bound-ui-browser-publication-gate-implemented-and-tested",
+    "sourceSha": "8c05f839b7034a8630c4d4726e540f39190609f9",
+    "sourceTree": "301f209c17f252a79276229476ce4ce4eadb4b6e",
+    "sourceCiRunId": 40500786916,
+    "sourceCiJobId": 122177646457,
+    "typecheck": "passed",
+    "tests": 2674,
+    "passed": 2674,
+    "failures": 0,
+    "newRegressionTests": 12,
+    "localRelatedTestsPassed": 22,
+    "gitDiffCheck": "passed",
+    "browserPublicationGateWired": true,
+    "requiresGenuineBrowserProof": true,
+    "bindsExactPlanTaskSnapshotProposalPolicy": true,
+    "roleRelabelingBypassBlocked": true,
+    "simulatedProofCannotAuthorizeNativePublication": true,
+    "existingBrowserScenariosRemainRequired": true,
+    "originalExpectedAnswersChanged": false,
+    "fixedInputBrowserChecks": 25,
+    "existingBrowserScenarios": 5,
+    "supportedBrowserTarget": "Calculator input and existing UI regressions only",
+    "unsupportedFrontendTargets": "fail-closed",
+    "nativeCorrectedApplicationAcceptanceVerified": false,
+    "realProviderCalls": 0,
+    "applicationWrites": 0,
+    "budgetWrites": 0,
+    "stateWrites": 0,
+    "readOnlyDependenciesWired": false,
+    "newFirstTaskStartWired": false,
+    "currentOwnerMode": "read-only-review",
+    "usedRequests": 65,
+    "remainingRequests": 0,
+    "legalEnabled": false,
+    "wholeProjectAutonomyVerified": false,
+    "remainingItems": [
+      "Read-only dependencies and safe first-task start",
+      "Exact bounded development owner approval preserving spent history",
+      "Real agent correction, independent checks, publication, CI and successor evidence"
+    ]
   }
 }

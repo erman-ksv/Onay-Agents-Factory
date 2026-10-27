@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 'b8ffbf6b5e4020af5c006f19e559d1e11a959ec7'
+          ref: '8c05f839b7034a8630c4d4726e540f39190609f9'
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -44,6 +44,15 @@ jobs:
       - name: Prepare immutable host test image
         if: steps.config.outputs.ready == 'true'
         run: docker pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Prepare host browser images from the verified immutable manifest
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync} from 'node:fs';import {execFileSync} from 'node:child_process';
+          const v=JSON.parse(readFileSync('.factory/runtime-project-manifest.json','utf8')),images=[...new Set(v.taskPolicies.flatMap(p=>p.browser?[p.browser.image]:[]))];
+          if(images.length>8)throw Error('Browser image count refused');
+          for(const image of images){if(typeof image!=='string'||!/^mcr\.microsoft\.com\/playwright@sha256:[a-f0-9]{64}$/.test(image))throw Error('Unpinned browser image refused');execFileSync('/usr/bin/docker',['pull',image],{stdio:'inherit',timeout:120000,env:{PATH:'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}});}
+          JS
       - name: Run bounded continuation with native owner and existing-budget checks
         if: steps.config.outputs.ready == 'true'
         env:
