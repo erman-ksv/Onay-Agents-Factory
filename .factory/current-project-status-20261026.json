@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "state-protection-gate-tested-ruleset-key-development-allowance-and-live-activation-pending",
+    "status": "installed-state-protection-native-verified-recovery-key-development-grant-and-live-entrypoint-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -551,6 +551,86 @@
     "applicationWrites": 0,
     "actualBudgetWrites": 0,
     "stateRefWrites": 0,
+    "legalEnabled": false,
+    "wholeProjectAutonomyVerified": false
+  },
+  "projectInstalledProtectionReadiness": {
+    "version": 1,
+    "date": "2026-10-27",
+    "status": "installed-state-protection-native-verified-recovery-key-and-development-grant-blocked",
+    "sourceSha": "dca52ea14be52008ca890f585069e87a43efd2a2",
+    "sourceCiRunId": 40483037312,
+    "sourceCiJobId": 122117847758,
+    "typecheck": "passed",
+    "tests": 2634,
+    "passed": 2634,
+    "failures": 0,
+    "newRegressionTests": 5,
+    "localRelatedTestsPassed": 14,
+    "nativeRunId": 40484076762,
+    "nativeReadinessJobId": 122121353479,
+    "comparisonJobId": 122121353951,
+    "crossJobKeyVerification": "skipped-key-missing-or-invalid",
+    "native": {
+      "version": 1,
+      "status": "native-effective-state-rules-verified-readonly",
+      "nativeRequestBoundary": {
+        "stopped": false,
+        "requestsSent": 13,
+        "methods": [
+          "GET"
+        ],
+        "nativeWriteRequestsSent": 0
+      },
+      "sourceSha": "dca52ea14be52008ca890f585069e87a43efd2a2",
+      "sourceCiRunId": "40483037312",
+      "rulesetIds": [
+        25942828
+      ],
+      "stateGuardProvenance": "native-github",
+      "stateProtectionSha256": "6edd36a0add2729d36e219abc4ccfcd589fe4e48b273b3e48e0b9aa56b3c1534",
+      "effectiveBranchesChecked": [
+        "state/project-checkpoints/80c9100eeecda6d2b2a632bb4fb93c627d535ccc1ba9d78dbbc106320ea3e50b",
+        "state/project-model-budget/80c9100eeecda6d2b2a632bb4fb93c627d535ccc1ba9d78dbbc106320ea3e50b"
+      ],
+      "controllerAuthorization": "synthetic-host-only-no-real-development-approval",
+      "syntheticLedgerRequests": 0,
+      "mockedModelReplies": 0,
+      "realProviderCalls": 0,
+      "applicationWrites": 0,
+      "actualBudgetWrites": 0,
+      "stateWrites": 0,
+      "actualBudgetRefSha": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+      "actualOwnerCommentId": 6413719353,
+      "actualOwnerMode": "read-only-review",
+      "actualUsedRequests": 65,
+      "actualRemainingRequests": 0,
+      "recoveryKeyConfigured": false,
+      "requiredRepositorySecret": "FACTORY_RECOVERY_KEY_BASE64",
+      "crossJobProbePrepared": false,
+      "keyValuePrinted": false,
+      "keyWritten": false,
+      "productionWorkerActivated": false,
+      "legalEnabled": false
+    },
+    "credentialPresence": {
+      "version": 1,
+      "kind": "credential-and-key-presence-only",
+      "factoryReadTokenAvailable": false,
+      "calculatorTokenAvailable": true,
+      "keyConfigured": false,
+      "keyValuePrinted": false,
+      "providerCalls": 0,
+      "writes": 0
+    },
+    "rulesetConfigured": true,
+    "nativeEffectiveStateProtectionVerified": true,
+    "keyValuePrinted": false,
+    "realProviderCalls": 0,
+    "appWrites": 0,
+    "actualBudgetWrites": 0,
+    "actualStateWrites": 0,
+    "productionWorkerActivated": false,
     "legalEnabled": false,
     "wholeProjectAutonomyVerified": false
   }
