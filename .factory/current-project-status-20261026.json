@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "installed-state-protection-native-verified-recovery-key-development-grant-and-live-entrypoint-pending",
+    "status": "native-state-protection-and-persistent-key-verified-development-grant-and-live-entrypoint-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -632,6 +632,69 @@
     "actualStateWrites": 0,
     "productionWorkerActivated": false,
     "legalEnabled": false,
+    "wholeProjectAutonomyVerified": false
+  },
+  "projectPersistentKeyVerification": {
+    "version": 1,
+    "date": "2026-10-27",
+    "status": "native-protection-and-persistent-key-verified-development-still-blocked",
+    "probeCommit": "6e74a0c1931f6dcc1e81c51b1cfa5850213fc684",
+    "runId": 40493328418,
+    "readinessJobId": 122152434642,
+    "crossJobKeyJobId": 122152529367,
+    "crossJobKeyVerification": "passed",
+    "native": {
+      "version": 1,
+      "status": "native-effective-state-rules-verified-readonly",
+      "nativeRequestBoundary": {
+        "stopped": false,
+        "requestsSent": 13,
+        "methods": [
+          "GET"
+        ],
+        "nativeWriteRequestsSent": 0
+      },
+      "sourceSha": "dca52ea14be52008ca890f585069e87a43efd2a2",
+      "sourceCiRunId": "40483037312",
+      "rulesetIds": [
+        25942828
+      ],
+      "stateGuardProvenance": "native-github",
+      "stateProtectionSha256": "d6ce316b04842c86d2b22b2471eed96923c4edc7ddab73034e6b0baa9f02fd33",
+      "effectiveBranchesChecked": [
+        "state/project-checkpoints/8f80874d9ff68886572b0d4f904687b0f9364b6461ca441a24d6bb680f19e1d7",
+        "state/project-model-budget/8f80874d9ff68886572b0d4f904687b0f9364b6461ca441a24d6bb680f19e1d7"
+      ],
+      "controllerAuthorization": "synthetic-host-only-no-real-development-approval",
+      "syntheticLedgerRequests": 0,
+      "mockedModelReplies": 0,
+      "realProviderCalls": 0,
+      "applicationWrites": 0,
+      "actualBudgetWrites": 0,
+      "stateWrites": 0,
+      "actualBudgetRefSha": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+      "actualOwnerCommentId": 6413719353,
+      "actualOwnerMode": "read-only-review",
+      "actualUsedRequests": 65,
+      "actualRemainingRequests": 0,
+      "recoveryKeyConfigured": true,
+      "requiredRepositorySecret": "FACTORY_RECOVERY_KEY_BASE64",
+      "crossJobProbePrepared": true,
+      "keyValuePrinted": false,
+      "keyWritten": false,
+      "productionWorkerActivated": false,
+      "legalEnabled": false
+    },
+    "persistentKey": {
+      "version": 1,
+      "status": "persistent-recovery-key-verified-across-two-jobs",
+      "keyValuePrinted": false,
+      "keyWritten": false,
+      "providerCalls": 0,
+      "applicationWrites": 0,
+      "budgetWrites": 0,
+      "executionAuthorized": false
+    },
     "wholeProjectAutonomyVerified": false
   }
 }
