@@ -15,3 +15,8 @@ Factory code work and synthetic checks can continue without model quota. Дей�
 
 
 Последнее подтверждение27.10.2026: ruleset25942828 уже включён владельцем и принят native guard в Actions40484076762. Импортировать повторно не требуется. Для metadata bypass actors использовать доступный owner credential (в успешной проверке CALCULATOR_GITHUB_TOKEN); FACTORY_READ_TOKEN в Actions отсутствует, github.token скрывает bypass_actors. Не считать отсутствующее поле пустым. Readiness может только GET; recovery key пока missing/invalid, cross-job proof skipped; actual allowance read-only/0.
+
+
+Актуализация после настройки ключа: Actions40493328418 (readiness122152434642 и отдельная key job122152529367) SUCCESS; постоянный ключ принят и проверен между двумя runners. Ключ не генерировать/ротировать повторно. Ruleset25942828 также принят native guard. Предыдущие missing/invalid/skipped выше — история, не текущее состояние.
+
+Добавлен host API runProjectCiEvent: зашифрованный archive → read-only восстановление кандидата → независимое CI evidence с точным run ID/attempt → существующий durable runtime. Описание: PROJECT_CI_EVENT_ENTRYPOINT_2026-10-27.md. Это ещё не настроенный production relay/bootstrap. Нужны действующий development grant с ограниченным allowance (текущий read-only65/65), конкретный plan/host policies и реальный archive intent под тем же ledger/history. Не запускать synthetic fixture как реальную задачу и не переигрывать CalculatorT05.

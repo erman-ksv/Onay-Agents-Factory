@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "native-state-protection-and-persistent-key-verified-development-grant-and-live-entrypoint-pending",
+    "status": "cold-ci-entrypoint-tested-native-relay-host-bootstrap-and-development-grant-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -696,5 +696,41 @@
       "executionAuthorized": false
     },
     "wholeProjectAutonomyVerified": false
+  },
+  "projectCiEventEntrypoint": {
+    "version": 1,
+    "date": "2026-10-27",
+    "status": "cold-ci-event-composition-tested-production-relay-and-development-approval-pending",
+    "sourceSha": "9bb0db2a881a2bdb33092899a1f9e840744d55ff",
+    "sourceTree": "e6522b6448f97355be647b0f0ddeca8a419bda86",
+    "sourceCiRunId": 40494408921,
+    "sourceCiJobId": 122156089993,
+    "typecheck": "passed",
+    "tests": 2644,
+    "passed": 2644,
+    "failures": 0,
+    "newRegressionTests": 10,
+    "localRelatedTestsPassed": 27,
+    "gitDiffCheck": "passed",
+    "recoveryKeyProofRunId": 40493328418,
+    "nativeStateProtectionVerified": true,
+    "crossJobPersistentKeyVerified": true,
+    "eventToExistingRuntimeWired": true,
+    "productionRelayActivated": false,
+    "productionHostBootstrapConfigured": false,
+    "realAutonomousNextTaskVerified": false,
+    "realProviderCalls": 0,
+    "actualAppWrites": 0,
+    "actualBudgetWrites": 0,
+    "actualStateWrites": 0,
+    "currentOwnerMode": "read-only-review",
+    "usedRequests": 65,
+    "remainingRequests": 0,
+    "legalEnabled": false,
+    "wholeProjectAutonomyVerified": false,
+    "modelAndSandboxInNewTests": "simulated-only",
+    "factoryMainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+    "budgetRefSha": "b139646c2f359fe23f213e0a3227aa99dd84f369"
   }
 }
