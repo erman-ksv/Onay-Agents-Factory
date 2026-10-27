@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "cold-ci-entrypoint-tested-native-relay-host-bootstrap-and-development-grant-pending",
+    "status": "bounded-feature-launch-and-bootstrap-tested-concrete-production-manifest-development-allowance-and-live-cycle-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -732,5 +732,54 @@
     "factoryMainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
     "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
     "budgetRefSha": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "boundedCiContinuation": {
+    "version": 1,
+    "date": "2026-10-27",
+    "status": "bounded-active-continuation-and-pinned-bootstrap-tested-native-unconfigured-guard-verified",
+    "sourceSha": "b8ffbf6b5e4020af5c006f19e559d1e11a959ec7",
+    "sourceTree": "7a9dffabb8b59c935a5b1f4f2d879fd622be3530",
+    "sourceCiRunId": 40496129660,
+    "sourceCiJobId": 122161907187,
+    "typecheck": "passed",
+    "tests": 2656,
+    "passed": 2656,
+    "failures": 0,
+    "newRegressionTests": 12,
+    "localRelatedTestsPassed": 22,
+    "scriptSyntax": "passed",
+    "gitDiffCheck": "passed",
+    "workflowSha": "7f7e2c400f2afa96f45efe68a5c75229ebee2ca3",
+    "nativeRunId": 40496458547,
+    "nativeJobId": 122163029675,
+    "nativeProof": {
+      "version": 1,
+      "status": "blocked-host-manifest-not-configured",
+      "runtimeActivated": false,
+      "providerCalls": 0,
+      "applicationWrites": 0,
+      "budgetWrites": 0,
+      "stateWrites": 0,
+      "newAllowance": 0,
+      "legalEnabled": false
+    },
+    "runtimeStep": "skipped-no-pinned-host-manifest",
+    "activeRunPollsBounded": 12,
+    "maxIntervalMs": 15000,
+    "maxElapsedMs": 600000,
+    "defaultBranchUnchanged": true,
+    "applicationWorkflowUnchanged": true,
+    "productionHostManifestConfigured": false,
+    "realDevelopmentRunVerified": false,
+    "realProviderCalls": 0,
+    "actualApplicationWrites": 0,
+    "actualBudgetWrites": 0,
+    "actualStateWrites": 0,
+    "currentOwnerMode": "read-only-review",
+    "usedRequests": 65,
+    "remainingRequests": 0,
+    "newModelAllowance": 0,
+    "legalEnabled": false,
+    "wholeProjectAutonomyVerified": false
   }
 }
