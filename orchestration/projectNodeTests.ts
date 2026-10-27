@@ -31,6 +31,8 @@ export function prepareProjectNodeTestPolicy(plan:PreparedProjectPlan,taskId:str
   if(task.acceptanceIds.some(id=>!covered.has(id)))return refuse();const policy=Object.freeze({planFingerprint:plan.fingerprint,taskId,sha256:hash(encoded),image:v.image,checkIds:Object.freeze(['syntax',...v.checks.map((c:Check)=>c.id)]),acceptanceIds:Object.freeze([...covered].sort())});policies.set(policy,{plan,taskId,checks:v.checks});return policy;
  }catch{return refuse();}
 }
+/** Host policy identity check; no test execution or receipt is created. */
+export function assertProjectNodePolicy(policy:ProjectNodeTestPolicy,plan:PreparedProjectPlan,taskId:string){const r=policies.get(policy);if(!r||r.plan!==plan||r.taskId!==taskId)return refuse();}
 export type ProjectNodeTestReceipt=Readonly<{repository:string;planFingerprint:string;taskId:string;baseSha:string;proposalDigest:string;policySha256:string;fileSetSha256:string;status:'passed'|'failed'|'unverified';testsExecuted:boolean;provenance:'native-docker'|'simulated';checks:readonly string[];failures:readonly string[];acceptanceIds:readonly string[];coverage:'host-selected-node-contracts-only';unverifiedAreas:readonly string[];publicationAuthorized:false;wholeAppCompleted:false}>;
 const receipts=new WeakMap<ProjectNodeTestReceipt,{policy:ProjectNodeTestPolicy;snapshot:ProjectSourceSnapshot;changes:PreparedProjectChanges;failed:boolean}>();
 const prefix=['--host=unix:///var/run/docker.sock'];

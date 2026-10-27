@@ -12,8 +12,12 @@ const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const kind='onay-ci-delivery-v1';
 type Charge=Readonly<{requests:number;requestBytes:number;reservedTokens:number}>;
 type Entry=Readonly<{version:1;sequence:number;previousSha256:string|null;planFingerprint:string;ownerFingerprint:string;targetProfileSha256:string;projectKey:string;grantSha256:string;used:Charge;taskId:string;parentSha:string;candidateSha:string;policySha256:string;provenance:'native-github'|'simulated';nextTaskId:string|null;dispatch:'claimed'|'budget-blocked'|'complete';executionAuthorized:false}>;
-type Options=Readonly<{plan:PreparedProjectPlan;controller:AuthorizedProjectBudgetController;directory:string;key:ProjectCorrectionRecoveryKey}>;
+type Options=Readonly<{plan:PreparedProjectPlan;controller:AuthorizedProjectBudgetController;directory:string;key:ProjectCorrectionRecoveryKey;persist?:(checkpoint:Readonly<{kind:string;path:string;sha256:string;taskId:string}>)=>Promise<void>}>;
 export type ProjectCiDispatchNotice=Readonly<{taskId:string;completedTaskId:string;parentSha:string;planFingerprint:string;requiresFreshSource:true;requiresFreshAdmission:true;requiresCooldown:true;executionAuthorized:false;publicationAuthorized:false}>;
+const notices=new WeakMap<ProjectCiDispatchNotice,{plan:PreparedProjectPlan;controller:AuthorizedProjectBudgetController;mode:'native'|'simulated';used:boolean;current:()=>Promise<void>}>();
+/** HOST ONLY one-use dispatch capability; copied/serialized notices do not
+ * authorize a worker. This does not refresh source/CI or create an admission. */
+export async function consumeProjectCiDispatchNotice(notice:ProjectCiDispatchNotice,plan:PreparedProjectPlan,controller:AuthorizedProjectBudgetController,mode:'native'|'simulated'){const r=notices.get(notice);if(!r||r.used||r.plan!==plan||r.controller!==controller||mode==='native'&&r.mode!=='native')return refuse();r.used=true;await r.current();return Object.freeze({assertCurrent:r.current});}
 type Dispatch=(notice:ProjectCiDispatchNotice)=>Promise<void>;
 
 /** Production accepts only native publication + CI capabilities. This is an
@@ -26,7 +30,7 @@ export function createProjectCiDeliveryForTests(options:Options){return delivery
 
 function delivery(options:Options,mode:'native'|'simulated'){
  const {plan,controller,directory,key}=options,identity=projectPlanBudgetIdentity(plan);
- if(Object.keys(options).some(k=>!['plan','controller','directory','key'].includes(k))||plan.status!=='planned'||!isAuthorizedProjectBudgetController(controller)||controller.operationMode!=='development'||controller.identity.projectId!==identity.projectId||controller.identity.repository!==identity.repository||controller.identity.planFingerprint!==identity.planFingerprint||controller.identity.ownerFingerprint!==identity.ownerFingerprint||JSON.stringify(controller.identity.taskIds)!==JSON.stringify(identity.taskIds)||controller.targetProfileSha256!==plan.targetProfileSha256||!isAbsolute(directory)||resolve(directory)!==directory)return refuse();
+ if(Object.keys(options).some(k=>!['plan','controller','directory','key','persist'].includes(k))||plan.status!=='planned'||!isAuthorizedProjectBudgetController(controller)||controller.operationMode!=='development'||controller.identity.projectId!==identity.projectId||controller.identity.repository!==identity.repository||controller.identity.planFingerprint!==identity.planFingerprint||controller.identity.ownerFingerprint!==identity.ownerFingerprint||JSON.stringify(controller.identity.taskIds)!==JSON.stringify(identity.taskIds)||controller.targetProfileSha256!==plan.targetProfileSha256||!isAbsolute(directory)||resolve(directory)!==directory)return refuse();
  function openDirectory(){
   if(realpathSync(directory)!==directory)return refuse();
   const fd=openSync(directory,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);
@@ -70,11 +74,11 @@ function delivery(options:Options,mode:'native'|'simulated'){
     await consumeProjectCandidateCiConfirmation(confirmation,mode);
     const state=await budget();done.add(task.id);const next=plan.tasks.find(t=>!done.has(t.id)&&t.dependsOn.every(id=>done.has(id))),enough=state.remaining.requests>=4&&state.remaining.requestBytes>=48000&&state.remaining.reservedTokens>=24000;
     const record:Entry={version:1,sequence:saved.length+1,previousSha256:saved.at(-1)?.sha256??null,planFingerprint:plan.fingerprint,ownerFingerprint:plan.ownerFingerprint,targetProfileSha256:plan.targetProfileSha256,projectKey:controller.projectKey,grantSha256:state.grantSha256,used:state.used,taskId:task.id,parentSha:candidate.parentSha,candidateSha:candidate.candidateSha,policySha256:bound.evidence.policySha256,provenance:candidate.provenance,nextTaskId:next?.id??null,dispatch:!next?'complete':enough?'claimed':'budget-blocked',executionAuthorized:false};
-    p.check();writeProjectHostEnvelope(kind,JSON.stringify(record),key,join(directory,String(record.sequence).padStart(4,'0')+'.json'));p.check();
+    p.check();const path=join(directory,String(record.sequence).padStart(4,'0')+'.json'),sealed=writeProjectHostEnvelope(kind,JSON.stringify(record),key,path);p.check();if(options.persist&&await options.persist(Object.freeze({kind:'ci-claim',path,sha256:sealed.sha256,taskId:task.id}))!==undefined)return refuse();
     // The durable claim precedes the callback. Unknown callback outcome is
     // never retried, even by a new worker or another CI event/run attempt.
     if(record.dispatch!=='claimed')return Object.freeze({status:record.dispatch,taskId:task.id,executionAuthorized:false as const});
-    try{await dispatch(Object.freeze({taskId:next!.id,completedTaskId:task.id,parentSha:candidate.candidateSha,planFingerprint:plan.fingerprint,requiresFreshSource:true,requiresFreshAdmission:true,requiresCooldown:true,executionAuthorized:false,publicationAuthorized:false}));return Object.freeze({status:'notified' as const,taskId:task.id,nextTaskId:next!.id,executionAuthorized:false as const});}
+    const notice:ProjectCiDispatchNotice=Object.freeze({taskId:next!.id,completedTaskId:task.id,parentSha:candidate.candidateSha,planFingerprint:plan.fingerprint,requiresFreshSource:true,requiresFreshAdmission:true,requiresCooldown:true,executionAuthorized:false,publicationAuthorized:false});notices.set(notice,{plan,controller,mode,used:false,current:async()=>{const latest=await entries(),last=latest.at(-1)?.value;if(!last||last.taskId!==task.id||last.candidateSha!==candidate.candidateSha||last.nextTaskId!==next!.id||last.dispatch!=='claimed')return refuse();}});try{await dispatch(notice);return Object.freeze({status:'notified' as const,taskId:task.id,nextTaskId:next!.id,executionAuthorized:false as const});}
     catch{return Object.freeze({status:'dispatch-uncertain' as const,taskId:task.id,nextTaskId:next!.id,executionAuthorized:false as const});}
    }catch{return refuse();}finally{
     if(lock!==undefined){try{const path=join(directory,'.delivery.lock'),now=lstatSync(path);if(now.ino===lockIdentity?.ino&&now.dev===lockIdentity.dev&&now.isFile()){unlinkSync(path);if(p)fsyncSync(p.fd);}}finally{closeSync(lock);}}
