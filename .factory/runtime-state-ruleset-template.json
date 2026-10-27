@@ -1,0 +1,19 @@
+{
+  "name": "Factory state: append only",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/state/project-checkpoints/*",
+        "refs/heads/state/project-model-budget/*"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ]
+}
