@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "readonly-publication-recovery-tested-production-worker-and-cross-machine-storage-pending",
+    "status": "generic-successor-and-native-encrypted-archive-tested-production-key-development-grant-and-live-entrypoint-pending",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -455,5 +455,74 @@
     "factoryMainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
     "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
     "budgetRefSha": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "projectNextTaskRuntime": {
+    "version": 1,
+    "date": "2026-10-27",
+    "status": "generic-successor-and-native-encrypted-archive-tested-production-configuration-blocked",
+    "sourceSha": "2b2b058727f5ac170ffd064357e40b723c91e134",
+    "sourceCiRunId": 40444959205,
+    "sourceCiJobId": 121993912409,
+    "typecheck": "passed",
+    "tests": 2620,
+    "passed": 2620,
+    "failures": 0,
+    "localRelatedTests": 24,
+    "newRegressionTests": 12,
+    "gitDiffCheck": "passed",
+    "nativeRunId": 40445190178,
+    "nativeJobId": 121994667850,
+    "readinessJobId": 121994668123,
+    "native": {
+      "version": 1,
+      "status": "native-encrypted-archive-cas-and-two-task-fixture-passed",
+      "sourceSha": "2b2b058727f5ac170ffd064357e40b723c91e134",
+      "sourceCiRunId": "40444959205",
+      "archiveBranch": "state/project-checkpoints/b50e859b203a26c0ad0572a627442b2514acb803d86596fa8efcee2e0c295b1a",
+      "archivePin": {
+        "head": "ebe365ae0f9fc3cfcc7234bd3f01cd1768849557",
+        "sequence": 10
+      },
+      "actualFactorySyntheticStateCommits": 10,
+      "actualRemoteCasWinners": 1,
+      "actualRemoteCasLosers": 1,
+      "rehydratedEncryptedFiles": 9,
+      "actualDockerChecks": 2,
+      "actualLocalGitPushes": 2,
+      "mockedModelReplies": 8,
+      "successorModelReplies": 4,
+      "temporaryLedgerRequests": 8,
+      "realProviderCalls": 0,
+      "actualApplicationWrites": 0,
+      "actualProjectBudgetWrites": 0,
+      "productionWorkerActivated": false,
+      "productionRecoveryKeyProvisioned": false,
+      "crossMachineKeyPersistenceVerified": false,
+      "realAutonomousNextTaskVerified": false,
+      "legalEnabled": false
+    },
+    "readiness": {
+      "version": 1,
+      "recoveryKeyConfigured": false,
+      "requiredRepositorySecret": "FACTORY_RECOVERY_KEY_BASE64",
+      "keyId": "onay-runtime-key-v1",
+      "keyValuePrinted": false,
+      "keyGenerated": false,
+      "keyWritten": false,
+      "providerCalls": 0,
+      "actualBudgetRemainingRequests": 0,
+      "currentOwnerMode": "read-only-review",
+      "developmentRunAuthorized": false,
+      "runtimeBlocked": true
+    },
+    "productionWorkerActivated": false,
+    "productionLatestPinProtectionVerified": false,
+    "realProviderCalls": 0,
+    "realApplicationWrites": 0,
+    "realModelBudgetWrites": 0,
+    "legalEnabled": false,
+    "currentOwnerMode": "read-only-review",
+    "remainingRequests": 0,
+    "wholeProjectAutonomyVerified": false
   }
 }
