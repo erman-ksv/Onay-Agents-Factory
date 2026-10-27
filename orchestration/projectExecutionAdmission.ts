@@ -1,3 +1,4 @@
+import {consumeProjectUncertainRecoveryTicket,type ProjectUncertainRecoveryTicket} from './projectUncertainRecoveryClaim.js';
 import {createHash} from 'node:crypto';
 import {projectPlanTarget,projectPlanBudgetIdentity,type PreparedProjectPlan,type ProjectPlanTask} from './projectPlan.js';
 import {projectTargetProfile,assertProjectTargetScope} from './projectTargetRegistry.js';
@@ -35,6 +36,14 @@ export function createProjectExecutionAdmission(plan:PreparedProjectPlan,control
      if((await controller.inspectExecution(task.id,correction.executionId)).requests!==0)return refuse();active();
      const claimed=await claimProjectCorrectionAdmission(value,plan,task.id);await current(task);const scope=await controller.taskScope(task.id,claimed.executionId);const assertCurrent=async()=>{await current(task);await inspectProjectCorrection(value,plan,task.id);await current(task);};await assertCurrent();active();
      const admission=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(admission,{plan,taskId:task.id,scope,controller,assertCurrent,consumed:false,attempt:2,correction:value});return admission;
+    }catch{stopped=true;return refuse();}finally{busy=false;}
+   },
+   async prepareRecovery(taskId:string,ticket:ProjectUncertainRecoveryTicket,mode:'native'|'simulated'):Promise<ProjectExecutionAdmission>{
+    try{active();if(busy||!['native','simulated'].includes(mode))return refuse();busy=true;const task=plan.tasks.find(t=>t.id===taskId);if(!task||task!==plan.tasks[0])return refuse();assertProjectTargetScope(target,{repository:plan.repository,branch:plan.branch,changePaths:task.paths});
+     const recovery=await consumeProjectUncertainRecoveryTicket(ticket,controller,taskId,mode);if(recovery.parentSha!==plan.request.baseSha)return refuse();
+     const assertCurrent=async()=>{await recovery.assertCurrent();await current(task);};await assertCurrent();
+     const budget=await controller.inspect();if(budget.remaining.requests<4||budget.remaining.requestBytes<48000||budget.remaining.reservedTokens<24000||(await controller.inspectExecution(taskId,recovery.executionId)).requests!==0)return refuse();
+     const scope=await controller.taskScope(taskId,recovery.executionId);await assertCurrent();const cap=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(cap,{plan,taskId,scope,controller,assertCurrent,consumed:false,attempt:2,cooldownBeforeFirstRequest:true});return cap;
     }catch{stopped=true;return refuse();}finally{busy=false;}
    },
    snapshot:()=>Object.freeze({stopped,executionAuthorized:false as const,modelCalls:0 as const,publicationAuthorized:false as const}),

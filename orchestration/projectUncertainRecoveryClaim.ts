@@ -47,3 +47,8 @@ async function prepare(o:Options,store:Pick<ProjectModelBudgetStore,'read'>,nati
 export async function consumeProjectUncertainRecoveryTicket(cap:ProjectUncertainRecoveryTicket,controller:AuthorizedProjectBudgetController,taskId:string,mode:'native'|'simulated'){
  const r=tickets.get(cap);if(!r||r.used||r.controller!==controller||r.taskId!==taskId||mode==='native'&&!r.native)return refuse();r.used=true;await r.current();return Object.freeze({executionId:r.executionId,parentSha:r.baseSha,assertCurrent:r.current,requiresCooldown:true as const,executionAuthorized:false as const,replayOriginal:false as const});
 }
+
+/** Read-only in-memory binding. JSON cannot inspect or reconstruct a ticket. */
+export async function projectUncertainRecoveryTicketBinding(cap:ProjectUncertainRecoveryTicket,controller:AuthorizedProjectBudgetController,taskId:string,mode:'native'|'simulated'){
+ const r=tickets.get(cap);if(!r||r.used||r.controller!==controller||r.taskId!==taskId||mode==='native'&&!r.native)return refuse();await r.current();return Object.freeze({executionId:r.executionId,parentSha:r.baseSha,assertCurrent:r.current,executionAuthorized:false as const});
+}
