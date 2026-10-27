@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "kind": "authorize-project-model-budget",
+  "mode": "development",
+  "targetProfileSha256": "1f3bf6bf615db6463421590195cd1f801657f6551a75cbb1bf4348bbf35b1065",
+  "expiresAt": "2026-10-30T23:59:59.000Z",
+  "grant": {
+    "version": 1,
+    "projectId": "calculator-input-repair-20261027",
+    "repository": "erman-ksv/Onay-Factory-Calculator",
+    "planFingerprint": "02b1e1662ef8ef4d7483db9e9ea65bed67e73cce15fcab1db42b284f1f2b6110",
+    "grantId": "input-repair-8-7fa843500f864f154a3e55a0",
+    "maxRequests": 73,
+    "maxRequestBytes": 12000,
+    "maxTotalRequestBytes": 722530,
+    "maxReservedTokens": 311359,
+    "historical": {
+      "requests": 65,
+      "requestBytes": 626530,
+      "reservedTokens": 263359
+    },
+    "historicalEvidenceSha256": "7fa843500f864f154a3e55a0a51a08a0ad0407b8841fda81d08f4236bdfab63b",
+    "provider": "groq",
+    "freeTierConfirmed": true,
+    "legalEnabled": false
+  }
+}

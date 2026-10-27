@@ -28,7 +28,8 @@ import {isAbsolute,resolve} from 'node:path';
 
 export const PROJECT_NEXT_WORKER_ERROR='Next task worker stopped. Preserve the dispatch, checkpoints and budget; no automatic task replay, grant, publication retry or deployment is authorized.';
 const refuse=():never=>{throw Error(PROJECT_NEXT_WORKER_ERROR);};
-type Range=Readonly<{path:string;version:'base'|'proposed';start:number;end:number}>;
+import {resolveProjectContextSelections,type ProjectContextSelection} from './projectContextSelection.js';
+type Range=ProjectContextSelection;
 type Options=Readonly<{plan:PreparedProjectPlan;controller:AuthorizedProjectBudgetController;env:NodeJS.ProcessEnv;ciPolicy:ProjectCiPolicy;taskPolicies:readonly Readonly<{taskId:string;nodePolicy:ProjectNodeTestPolicy;browserPolicy?:ProjectBrowserTestPolicy;authorSelections:readonly Range[];reviewSelections:readonly Range[]}>[];key:ProjectCorrectionRecoveryKey;directory:string;stateProtection?:ProjectStateProtection;
  /** HOST ONLY durable persistence acknowledgement. This runs before HTTP or
   * push; a local-only callback does not prove cross-machine persistence. */
@@ -57,8 +58,8 @@ function worker(options:Options,injections?:Injections){
   const admission=await createProjectExecutionAdmission(plan,controller,{assertSource:createProjectSnapshotSourceGuard(snapshot),assertDependencies:dependencies}).prepare(task.id,{requireCooldown:true});
   const persist=async(kind:string,path:string,sha256:string)=>{if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);await controller.assertAuthorized();if(await options.persist(Object.freeze({kind,path,sha256,taskId:task.id}))!==undefined)return refuse();await controller.assertAuthorized();};
   const wire=createContextBoundProjectTransport({plan,taskId:task.id,snapshot,admission,env,...(injections?{transport:injections.model,timing:injections.timing}:{}),checkpoint:async event=>{const path=join(options.directory,task.id+'-before-http-'+event.attemptedRequests+'.json'),sealed=writeProjectHostEnvelope('onay-runtime-http-v1',JSON.stringify(event),options.key,path);await persist('before-http',path,sealed.sha256);}});
-  const changes=await prepareProjectReplyChanges(await wire.request(await prepareProjectModelContext(plan,task.id,snapshot,{role:'author',model,selections:policy.authorSelections})));
-  for(const role of ['security','reviewer','tester'] as const){const result=await prepareProjectReplyAssessment(await wire.request(await prepareProjectModelContext(plan,task.id,snapshot,{role,model,changes,selections:policy.reviewSelections})));if(result.decision!=='ready')return refuse();}
+  const changes=await prepareProjectReplyChanges(await wire.request(await prepareProjectModelContext(plan,task.id,snapshot,{role:'author',model,selections:resolveProjectContextSelections(snapshot,undefined,policy.authorSelections)})));
+  for(const role of ['security','reviewer','tester'] as const){const result=await prepareProjectReplyAssessment(await wire.request(await prepareProjectModelContext(plan,task.id,snapshot,{role,model,changes,selections:resolveProjectContextSelections(snapshot,changes,policy.reviewSelections)})));if(result.decision!=='ready')return refuse();}
   const receipt=await(injections?injections.node(policy.nodePolicy,snapshot,changes):createProjectNodeSandbox(policy.nodePolicy).run(snapshot,changes));
   if(receipt.status!=='passed'||!receipt.testsExecuted)return refuse();
   if(projectTaskRequiresBrowser(plan,task.id)){

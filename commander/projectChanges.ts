@@ -34,6 +34,7 @@ export async function prepareProjectChanges(plan:PreparedProjectPlan,taskId:stri
     if(!exact(c,['operation','path','sourceSha256','edits','message'])||!sources.has(c.path)||!Array.isArray(c.edits)||!c.edits.length||c.edits.some((e:any)=>!exact(e,['before','after'])||typeof e.before!=='string'||typeof e.after!=='string'))return refuse();
     for(const e of c.edits)changed+=e.before.length+e.after.length;const [result]=applyBoundedPatches([c as BoundedPatch],sources,snapshot.changePaths);file=Object.freeze({...result!});
    }else return refuse();
+   if((profile.appendOnlyPaths??[]).includes(file.path)&&(!sources.has(file.path)||!file.content.startsWith(sources.get(file.path)!)||file.content.length<=sources.get(file.path)!.length))return refuse();
    if(changed>profile.maxChangedCharacters||Buffer.byteLength(file.content)>profile.maxSourceBytes||Buffer.from(file.content).toString('utf8')!==file.content||projectSourceContainsSecrets(file.content))return refuse();totalBytes+=Buffer.byteLength(file.content)-Buffer.byteLength(sources.get(file.path)??'');if(totalBytes>profile.maxSourceBytes)return refuse();
    files.push(Object.freeze(file));metadata.push(Object.freeze({path:file.path,operation:c.operation,...(sources.has(file.path)?{sourceSha256:hash(sources.get(file.path)!)}:{}),contentSha256:hash(file.content),bytes:Buffer.byteLength(file.content)}));
   }

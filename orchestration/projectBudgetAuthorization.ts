@@ -1,7 +1,7 @@
 import {createProjectModelBudgetGitHubStore} from '../github/projectModelBudgetStore.js';
 import {createHash} from 'node:crypto';
 import {projectTargetProfile,type ApprovedProjectTarget} from './projectTargetRegistry.js';
-import {openProjectModelBudget,parseProjectModelGrant,type ProjectModelBudget,type ProjectModelBudgetStore,type ProjectModelCharge} from './projectModelBudget.js';
+import {openProjectModelBudget,parseProjectModelGrant,type ProjectModelBudget,type ProjectModelBudgetStore,type ProjectModelCharge,type ProjectModelGrant} from './projectModelBudget.js';
 export const PROJECT_AUTHORIZATION_ERROR='Project owner approval, complete history or task scope is unverified. No model call or budget reset is authorized.';
 const refuse=():never=>{throw Error(PROJECT_AUTHORIZATION_ERROR);};
 const SHA=/^[a-f0-9]{64}$/,ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -18,20 +18,34 @@ function canonical(value:unknown,depth=0):string{
 }
 export type ProjectBudgetIdentity=Readonly<{projectId:string;repository:string;planFingerprint:string;ownerFingerprint:string;taskIds:readonly string[]}>;
 export type ProjectHistoryObservation=Readonly<{scopeId:string;kind:'cumulative-scope-total';charge:ProjectModelCharge;evidenceSha256:string}>;
-export type ProjectBudgetHistory=Readonly<{version:1;projectId:string;repository:string;planFingerprint:string;observations:readonly ProjectHistoryObservation[]}>;
+export type ProjectBudgetCarryover=Readonly<{projectKey:string;head:string;grant:ProjectModelGrant;used:ProjectModelCharge;evidenceSha256:string}>;
+export type ProjectBudgetHistory=Readonly<{version:1;projectId:string;repository:string;planFingerprint:string;observations:readonly ProjectHistoryObservation[];carryover?:ProjectBudgetCarryover}>;
 /** Raw phase counters must first be reconciled by an authenticated audit. These
  * observations are cumulative totals for each scope, not independent phases.
  * The native owner approval binds their digest; missing coverage never means 0. */
 export function reconcileProjectBudgetHistory(input:unknown,identity:ProjectBudgetIdentity){
- if(!plain(input)||!exact(input,['version','projectId','repository','planFingerprint','observations'])||input.version!==1||input.projectId!==identity.projectId||input.repository!==identity.repository||input.planFingerprint!==identity.planFingerprint||!Array.isArray(input.observations)||input.observations.length>512)return refuse();
+ if(!plain(input)||!exact(input,['version','projectId','repository','planFingerprint','observations',...(Object.hasOwn(input,'carryover')?['carryover']:[])])||input.version!==1||input.projectId!==identity.projectId||input.repository!==identity.repository||input.planFingerprint!==identity.planFingerprint||!Array.isArray(input.observations)||input.observations.length>512)return refuse();
  const required=['planning',...identity.taskIds],totals=new Map<string,ProjectModelCharge>();if(new Set(required).size!==required.length)return refuse();
  for(const o of input.observations){if(!plain(o)||!exact(o,['scopeId','kind','charge','evidenceSha256'])||typeof o.scopeId!=='string'||!required.includes(o.scopeId)||o.kind!=='cumulative-scope-total'||typeof o.evidenceSha256!=='string'||!SHA.test(o.evidenceSha256)||!plain(o.charge)||!exact(o.charge,['requests','requestBytes','reservedTokens'])||Object.values(o.charge).some(v=>typeof v!=='number'||!Number.isSafeInteger(v)||v<0))return refuse();
   const c=o.charge as ProjectModelCharge,previous=totals.get(o.scopeId);totals.set(o.scopeId,Object.freeze({requests:Math.max(c.requests,previous?.requests??0),requestBytes:Math.max(c.requestBytes,previous?.requestBytes??0),reservedTokens:Math.max(c.reservedTokens,previous?.reservedTokens??0)}));
  }
  if(required.some(id=>!totals.has(id)))return refuse();const charge={requests:0,requestBytes:0,reservedTokens:0};for(const c of totals.values())for(const k of ['requests','requestBytes','reservedTokens'] as const){charge[k]+=c[k];if(!Number.isSafeInteger(charge[k]))return refuse();}
+ if(Object.hasOwn(input,'carryover')){const c=carryoverShape(input.carryover);if(c.grant.repository!==identity.repository||c.grant.planFingerprint===identity.planFingerprint)return refuse();for(const k of ['requests','requestBytes','reservedTokens'] as const){charge[k]+=c.used[k];if(!Number.isSafeInteger(charge[k]))return refuse();}}
  const text=canonical(input);if(Buffer.byteLength(text)>262144)return refuse();return Object.freeze({digest:hash(text),charge:Object.freeze(charge),coveredScopes:Object.freeze(required)});
 }
 export function projectBudgetApprovalDigest(input:unknown):string{return hash(canonical(input));}
+function carryoverShape(input:unknown):ProjectBudgetCarryover{
+ if(!plain(input)||!exact(input,['projectKey','head','grant','used','evidenceSha256'])||typeof input.projectKey!=='string'||!SHA.test(input.projectKey)||typeof input.head!=='string'||!/^[a-f0-9]{40}$/.test(input.head)||typeof input.evidenceSha256!=='string'||!SHA.test(input.evidenceSha256)||!plain(input.used)||!exact(input.used,['requests','requestBytes','reservedTokens'])||Object.values(input.used).some(v=>typeof v!=='number'||!Number.isSafeInteger(v)||v<0))return refuse();
+ const grant=parseProjectModelGrant(input.grant),used=input.used as ProjectModelCharge;if(used.requests!==grant.maxRequests||(['requests','requestBytes','reservedTokens'] as const).some(k=>used[k]<grant.historical[k]))return refuse();return Object.freeze({projectKey:input.projectKey,head:input.head,grant,used:Object.freeze({...used}),evidenceSha256:input.evidenceSha256});
+}
+/** Read-only native source audit. A different plan must retain spent costs,
+ * not relabel old development as new planning or infer missing history as 0.
+ * Pins cover the old grant AND every reservation, including failed requests. */
+export async function verifyProjectBudgetCarryover(input:ProjectBudgetCarryover,token:string,transport?:typeof fetch){try{
+ const c=carryoverShape(input),store=createProjectModelBudgetGitHubStore({projectKey:c.projectKey,token,...(transport?{transport}:{})}),state=await store.read();if(!state||state.revision!==hash(c.head))return refuse();
+ const snapshot=await openProjectModelBudget(c.grant,{read:async()=>state,compareAndSwap:async()=>refuse()}).inspect(),evidenceSha256=projectBudgetApprovalDigest({version:1,projectKey:c.projectKey,head:c.head,grantSha256:state.data&&plain(state.data)?state.data.grantSha256:null,used:snapshot.used,state:state.data});
+ if(canonical(snapshot.used)!==canonical(c.used)||evidenceSha256!==c.evidenceSha256)return refuse();return Object.freeze({projectKey:c.projectKey,head:c.head,used:snapshot.used,evidenceSha256,modelCalls:0 as const,stateWrites:0 as const});
+}catch{return refuse();}}
 export type ProjectOwnerDecision=Readonly<{issueNumber:number;commentId:number;bodySha256:string}>;
 declare const scopeBrand:unique symbol;
 export type AuthorizedProjectTaskScope=Readonly<{[scopeBrand]:true}>;
@@ -57,10 +71,11 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
   const identity=Object.freeze({...options.identity,taskIds:Object.freeze([...options.identity.taskIds])}),decision=Object.freeze({...options.decision}),transport=options.transport??fetch,clock=options.now??Date.now,token=options.token;
   const profile=targetBinding({...options,identity}),target=profile?options.targetProfile:undefined;
   if(!safeId(identity.projectId)||!SHA.test(identity.planFingerprint)||!SHA.test(identity.ownerFingerprint)||identity.taskIds.length<1||identity.taskIds.length>64||identity.taskIds.some(id=>!safeId(id))||new Set(identity.taskIds).size!==identity.taskIds.length||!Number.isSafeInteger(decision.issueNumber)||decision.issueNumber<1||!Number.isSafeInteger(decision.commentId)||decision.commentId<1||!SHA.test(decision.bodySha256)||!token)return refuse();
-  const history=reconcileProjectBudgetHistory(options.history,identity);let lastTime=clock();if(!Number.isFinite(lastTime))return refuse();let expectedDocument:string|undefined;let operationMode:'development'|'read-only-review'|undefined;let expiresAt:number|undefined;let revoked=false;
+  const historyInput=JSON.parse(canonical(options.history)) as ProjectBudgetHistory,history=reconcileProjectBudgetHistory(historyInput,identity);let lastTime=clock();if(!Number.isFinite(lastTime))return refuse();let expectedDocument:string|undefined;let operationMode:'development'|'read-only-review'|undefined;let expiresAt:number|undefined;let revoked=false;
   function touchClock(){lastTime=Math.max(lastTime,clock());if(!Number.isFinite(lastTime))return refuse();return lastTime;}
   async function readApproval(){
    touchClock();
+   if(historyInput.carryover)await verifyProjectBudgetCarryover(historyInput.carryover,token,transport);
    const r=await transport('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/comments/'+decision.commentId,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'}});
    if(r.status!==200||!r.body){void r.body?.cancel().catch(()=>undefined);return refuse();}const reader=r.body.getReader(),parts:Uint8Array[]=[];let size=0;try{for(;;){const p=await reader.read();if(p.done)break;size+=p.value.byteLength;if(size>32768){await reader.cancel();return refuse();}parts.push(p.value);}}finally{reader.releaseLock();}
    const c=JSON.parse(Buffer.concat(parts).toString('utf8')),base='https://github.com/erman-ksv/Onay-Agents-Factory/';
