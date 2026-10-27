@@ -1,3 +1,4 @@
+import {projectTaskFailureDiagnostic} from './projectTaskFailureDiagnostic.js';
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {selectProviderConfig} from '../commander/providerConfig.js';
@@ -48,7 +49,7 @@ function worker(options:Options,injections?:Injections){
  const readCi=injections?createProjectCiReaderForTests(options.ciPolicy,env,injections.github):createProjectCiReader(options.ciPolicy,env),policies=new Map<string,Options['taskPolicies'][number]>();
  for(const value of options.taskPolicies){if(policies.has(value.taskId))return refuse();assertProjectNodePolicy(value.nodePolicy,plan,value.taskId);if(projectTaskRequiresBrowser(plan,value.taskId)){assertProjectBrowserPolicy(value.browserPolicy,plan,value.taskId);if(injections&&typeof injections.browser!=='function')return refuse();}const copy=(ranges:readonly Range[])=>Object.freeze(ranges.map(r=>Object.freeze({...r})));policies.set(value.taskId,Object.freeze({...value,authorSelections:copy(value.authorSelections),reviewSelections:copy(value.reviewSelections)}));}
  let used=false;
- async function execute(notice:ProjectCiDispatchNotice|ProjectInitialTaskTicket,initial=false):Promise<ProjectPublishedCandidate>{try{
+ async function execute(notice:ProjectCiDispatchNotice|ProjectInitialTaskTicket,initial=false):Promise<ProjectPublishedCandidate>{let requestSnapshot:(()=>unknown)|undefined;try{
   if(used)return refuse();used=true;if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);const dispatch=initial?await consumeProjectInitialTaskTicket(notice as ProjectInitialTaskTicket,plan,controller,mode):await consumeProjectCiDispatchNotice(notice as ProjectCiDispatchNotice,plan,controller,mode);const selected=initial?{taskId:plan.tasks[0]!.id,parentSha:plan.request.baseSha,planFingerprint:plan.fingerprint,requiresCooldown:true,requiresFreshAdmission:true,requiresFreshSource:true}:notice as ProjectCiDispatchNotice,policy=policies.get(selected.taskId);if(!policy)return refuse();
   const task=plan.tasks.find(t=>t.id===selected.taskId);if(!task||selected.planFingerprint!==plan.fingerprint||!selected.requiresCooldown||!selected.requiresFreshAdmission||!selected.requiresFreshSource)return refuse();
   const executionId='project-run-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,task.id])).digest('hex').slice(0,32);if((await controller.inspectExecution(task.id,executionId)).requests!==0)return refuse();
@@ -58,6 +59,7 @@ function worker(options:Options,injections?:Injections){
   const admission=await createProjectExecutionAdmission(plan,controller,{assertSource:createProjectSnapshotSourceGuard(snapshot),assertDependencies:dependencies}).prepare(task.id,{requireCooldown:true});
   const persist=async(kind:string,path:string,sha256:string)=>{if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);await controller.assertAuthorized();if(await options.persist(Object.freeze({kind,path,sha256,taskId:task.id}))!==undefined)return refuse();await controller.assertAuthorized();};
   const wire=createContextBoundProjectTransport({plan,taskId:task.id,snapshot,admission,env,...(injections?{transport:injections.model,timing:injections.timing}:{}),checkpoint:async event=>{const path=join(options.directory,task.id+'-before-http-'+event.attemptedRequests+'.json'),sealed=writeProjectHostEnvelope('onay-runtime-http-v1',JSON.stringify(event),options.key,path);await persist('before-http',path,sealed.sha256);}});
+  requestSnapshot=wire.snapshot;
   const changes=await prepareProjectReplyChanges(await wire.request(await prepareProjectModelContext(plan,task.id,snapshot,{role:'author',model,selections:resolveProjectContextSelections(snapshot,undefined,policy.authorSelections)})));
   for(const role of ['security','reviewer','tester'] as const){const result=await prepareProjectReplyAssessment(await wire.request(await prepareProjectModelContext(plan,task.id,snapshot,{role,model,changes,selections:resolveProjectContextSelections(snapshot,changes,policy.reviewSelections)})));if(result.decision!=='ready')return refuse();}
   const receipt=await(injections?injections.node(policy.nodePolicy,snapshot,changes):createProjectNodeSandbox(policy.nodePolicy).run(snapshot,changes));
@@ -69,7 +71,7 @@ function worker(options:Options,injections?:Injections){
   let approval;if(receipt.provenance==='native-docker'){await wire.verifyRuntimeTests(receipt,policy.nodePolicy);approval=await wire.preparePublication();}else{if(!injections)return refuse();approval=await wire.preparePublicationForTests({receipt,policy:policy.nodePolicy});}
   const checkpoint=async(event:Parameters<Parameters<typeof createProjectPublisher>[0]['checkpoint']>[0])=>{if(event.stage==='before-push'){const path=join(options.directory,task.id+'-publication-intent.json'),sealed=await saveProjectPublicationIntent(event.intent,options.key,path);await persist('before-push',path,sealed.sha256);}else{const path=join(options.directory,task.id+'-after-push.json'),sealed=writeProjectHostEnvelope('onay-runtime-push-v1',JSON.stringify({taskId:task.id,candidateSha:event.candidateSha,parentSha:event.parentSha,proposalDigest:event.proposalDigest}),options.key,path);await persist('after-push',path,sealed.sha256);}};
   const publisher=injections?createProjectPublisherForTests({env,checkpoint,transport:injections.github,runGit:injections.git}):createProjectPublisher({env,checkpoint}),candidate=await publisher.publish(approval),path=join(options.directory,task.id+'-published.json'),sealed=writeProjectHostEnvelope('onay-runtime-published-v1',JSON.stringify(candidate),options.key,path);await persist('candidate-published',path,sealed.sha256);return candidate;
- }catch{return refuse();}}
+ }catch{if(requestSnapshot)console.error(JSON.stringify(projectTaskFailureDiagnostic(requestSnapshot())));return refuse();}}
  return Object.freeze({execute:(notice:ProjectCiDispatchNotice)=>execute(notice),start:(ticket:ProjectInitialTaskTicket)=>execute(ticket,true)});
 }
 

@@ -1,0 +1,14 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {projectTaskFailureDiagnostic as diagnostic} from './projectTaskFailureDiagnostic.js';
+test('distinguishes a charged pre-HTTP stop from a sent provider failure',()=>{
+ const before=diagnostic({stage:'post-checkpoint-guard',reasonCode:'task_timeout',providerCallsSent:0,attemptedRequests:1});
+ assert.equal(before.providerCallsSent,0);assert.equal(before.attemptedRequests,1);assert.equal(before.stage,'post-checkpoint-guard');
+ const sent=diagnostic({stage:'http',reasonCode:'rate_limited',providerCallsSent:1,attemptedRequests:1});assert.equal(sent.providerCallsSent,1);assert.equal(sent.reasonCode,'rate_limited');assert.equal(sent.replayAuthorized,false);
+});
+test('private source, provider bodies and arbitrary error text are excluded',()=>{
+ const privateText='PRIVATE_SOURCE_SENTINEL';const v=diagnostic({stage:privateText,reasonCode:privateText,content:privateText,apiKey:privateText,error:privateText,providerCallsSent:privateText});
+ assert.equal(JSON.stringify(v).includes(privateText),false);assert.equal(v.stage,'unclassified');assert.equal(v.providerCallsSent,null);
+});
+test('malformed or excessive counters cannot masquerade as execution evidence',()=>{
+ for(const value of [null,{}, {providerCallsSent:-1,attemptedRequests:Infinity,totalRequestBytes:1.2,reservedRunTokens:16000001}]){const v=diagnostic(value);assert.equal(v.providerCallsSent,null);assert.equal(v.executionAuthorized,false);}
+});
