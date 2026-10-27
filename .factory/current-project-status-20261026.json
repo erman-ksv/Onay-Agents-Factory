@@ -166,7 +166,7 @@
     "wholeAppCompleted": false
   },
   "nextStage": {
-    "status": "browser-gate-readonly-dependencies-and-first-start-tested-concrete-development-approval-and-real-agent-cycle-pending",
+    "status": "concrete-two-task-eight-request-proposal-native-preflight-verified-awaiting-owner-comment-no-new-allowance",
     "goal": "bind actual model reply to role/proposal/context and validate independent verdicts; host tests/correction/CI composition",
     "newModelAllowance": 0,
     "secondProjectRunVerified": false
@@ -980,5 +980,135 @@
       "Concrete plan/history/manifest and exact bounded OWNER development grant preserving all spent history",
       "Real agent repair, independent tests, publication, exact CI and autonomous successor evidence"
     ]
+  },
+  "inputRepairLaunchProposal": {
+    "version": 1,
+    "date": "2026-10-27",
+    "status": "concrete-eight-request-launch-proposal-tested-native-preflight-verified-awaiting-owner",
+    "sourceSha": "de8825f2246c397d830210619030b804ae862e87",
+    "sourceTree": "da2c18315aa5c0c817f8115af2b9034bba250ea3",
+    "sourceCiRunId": 40518338021,
+    "sourceCiJobId": 122237945344,
+    "typecheck": "passed",
+    "tests": 2696,
+    "passed": 2696,
+    "failures": 0,
+    "newRegressionTests": 10,
+    "selectedLocalTestsPassed": 15,
+    "relatedLocalTestsPassed": 22,
+    "gitDiffCheck": "passed",
+    "nativeRunId": 40519171316,
+    "nativeJobId": 122241191386,
+    "native": {
+      "version": 1,
+      "status": "native-launch-package-preflight-verified-no-owner-approval",
+      "planFingerprint": "02b1e1662ef8ef4d7483db9e9ea65bed67e73cce15fcab1db42b284f1f2b6110",
+      "projectKey": "abb7eb35a69bf638cb5b57278226170e2f6b02fd039344c29044014531ca5a0b",
+      "carryover": {
+        "projectKey": "30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+        "head": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+        "used": {
+          "requests": 65,
+          "requestBytes": 626530,
+          "reservedTokens": 263359
+        },
+        "evidenceSha256": "154e7efd80d452febb36239d7e7abc8fe437177c0c8a877ce0de341d67becf4c",
+        "modelCalls": 0,
+        "stateWrites": 0
+      },
+      "contexts": [
+        {
+          "taskId": "calculator-input-repair-202610-29e2a8-t01",
+          "requestBytes": 4668,
+          "estimatedReservedTokens": 3012,
+          "readOnlyDependencies": [
+            {
+              "path": "index.html",
+              "sourceSha256": "b910b1be94ca0ed30bfee9df726c3f3a5eb07de4f5b8fee981b92d694b48640b"
+            },
+            {
+              "path": "src/calculator.mjs",
+              "sourceSha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900"
+            },
+            {
+              "path": "styles.css",
+              "sourceSha256": "d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f"
+            }
+          ],
+          "writablePaths": [
+            "src/app.mjs"
+          ]
+        },
+        {
+          "taskId": "calculator-input-repair-202610-29e2a8-t02",
+          "requestBytes": 5082,
+          "estimatedReservedTokens": 3150,
+          "readOnlyDependencies": [
+            {
+              "path": "index.html",
+              "sourceSha256": "b910b1be94ca0ed30bfee9df726c3f3a5eb07de4f5b8fee981b92d694b48640b"
+            },
+            {
+              "path": "src/calculator.mjs",
+              "sourceSha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900"
+            },
+            {
+              "path": "styles.css",
+              "sourceSha256": "d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f"
+            }
+          ],
+          "writablePaths": [
+            "test/ui.test.mjs"
+          ]
+        }
+      ],
+      "baseCiRunIds": [
+        40178095158
+      ],
+      "newBudgetAbsent": true,
+      "newArchiveAbsent": true,
+      "proposedAdditionalMaximum": {
+        "requests": 8,
+        "requestBytes": 96000,
+        "reservedTokens": 48000
+      },
+      "ownerApprovalVerified": false,
+      "providerCalls": 0,
+      "applicationWrites": 0,
+      "budgetWrites": 0,
+      "stateWrites": 0,
+      "nativeRequests": 52,
+      "nativeMethods": [
+        "GET"
+      ],
+      "legalEnabled": false
+    },
+    "previousSpent": {
+      "requests": 65,
+      "requestBytes": 626530,
+      "reservedTokens": 263359
+    },
+    "proposedAdditionalMaximum": {
+      "requests": 8,
+      "requestBytes": 96000,
+      "reservedTokens": 48000
+    },
+    "proposedTotalMaximum": {
+      "requests": 73,
+      "requestBytes": 722530,
+      "reservedTokens": 311359
+    },
+    "ownerApprovalCreated": false,
+    "ownerApprovalVerified": false,
+    "modelCallsAuthorized": 0,
+    "actualProviderCalls": 0,
+    "budgetWrites": 0,
+    "stateWrites": 0,
+    "applicationWrites": 0,
+    "productionManifestConfigured": false,
+    "legalEnabled": false,
+    "wholeProjectAutonomyVerified": false,
+    "permissionPackage": ".factory/input-repair-launch-package-20261027.json",
+    "proposedOwnerComment": ".factory/proposed-input-repair-owner-approval-20261027.json"
   }
 }

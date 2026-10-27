@@ -27,8 +27,8 @@
     "tester"
   ],
   "blockingWork": [
-    "Reconcile and preserve all existing 65 model requests before a new exact OWNER development grant; no new allowance or ledger initialization is authorized by this proposal.",
-    "After those gates, pin an actual production plan/manifest and run the real agent cycle under the approved bounds."
+    "Owner must publish the exact bounded development approval as an unedited native OWNER comment. No new allowance has been granted.",
+    "After approval, bind the actual comment ID/digest, initialize the new budget once with all prior spent history carried, and run the concrete plan under native gates."
   ],
   "currentOwnerMode": "read-only-review",
   "remainingModelRequests": 0,
@@ -42,5 +42,11 @@
   "positiveNativeCorrectedAppAcceptanceVerified": false,
   "readOnlyDependenciesWired": true,
   "newFirstTaskStartWired": true,
-  "readonlyFirstStartProof": ".factory/readonly-first-start-proof-20261027.json"
+  "readonlyFirstStartProof": ".factory/readonly-first-start-proof-20261027.json",
+  "launchPackage": ".factory/input-repair-launch-package-20261027.json",
+  "launchReadinessProof": ".factory/input-repair-launch-readiness-proof-20261027.json",
+  "historyReconciledAndNativeVerified": true,
+  "concretePlanPrepared": true,
+  "proposedAdditionalRequests": 8,
+  "ownerDecision": null
 }
