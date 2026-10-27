@@ -4,5 +4,7 @@
   "ownerCommentId": 6448721815,
   "manifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
   "budgetResetAuthorized": false,
-  "legalEnabled": false
+  "legalEnabled": false,
+  "activationAttempt": 2,
+  "priorReadOnlyInspectionRunId": 40552700334
 }

@@ -44,7 +44,7 @@ jobs:
           import assert from 'node:assert/strict';import {readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';
           for(const [path,pin] of [
             ['.factory/runtime-project-manifest.json','97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284'],
-            ['scripts/project-input-repair-activation.mjs','105057a4a42f4660c88d0b72f18306ee57fc36984cafd54c648f2c4abc6c515e'],
+            ['scripts/project-input-repair-activation.mjs','c522ac6e10cfa950cb801aedadbef125e106e7b92cd549caef2434154cbda395'],
             ['scripts/project-input-repair-activation.test.mjs','ccd42eeb0a7ef3b6711c11f1e2164e2715f6c184bdb23c6e96b4a1d3267ad5b7']
           ]){const bytes=readFileSync('activation-config/'+path);assert.equal(createHash('sha256').update(bytes).digest('hex'),pin);writeFileSync(path,bytes);}
           JS
