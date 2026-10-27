@@ -29,10 +29,10 @@ jobs:
   readiness:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # GitHub may hide bypass actors from read-only tokens. The pinned script
-    # wraps native fetch in a tested GET-only Factory transport; no writes run.
+    # The existing owner read token can expose ruleset bypass metadata that
+    # GitHub hides from an installation token. All native requests remain GET.
     permissions:
-      contents: write
+      contents: read
       actions: read
     outputs:
       key-configured: ${{ steps.probe.outputs.key-configured }}
@@ -53,7 +53,7 @@ jobs:
       - name: Native effective rules, unchanged real budget and secret readiness
         id: probe
         env:
-          FACTORY_RULES_READ_TOKEN: ${{ github.token }}
+          FACTORY_RULES_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN }}
           FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
           FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
           FACTORY_RUNTIME_SHA: 'dca52ea14be52008ca890f585069e87a43efd2a2'
@@ -62,7 +62,7 @@ jobs:
       - name: Diagnose fixed state rule response metadata after a guard failure
         if: failure()
         env:
-          FACTORY_RULES_READ_TOKEN: ${{ github.token }}
+          FACTORY_RULES_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN }}
         run: |
           node --input-type=module - <<'JS'
           const key='30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0',proof=[];
