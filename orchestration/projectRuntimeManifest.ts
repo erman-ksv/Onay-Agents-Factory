@@ -8,6 +8,7 @@ import {destroyProjectCorrectionRecoveryKey} from './projectCorrectionCheckpoint
 import {createProjectCiPolicy} from '../github/projectCi.js';
 import {createProjectCheckpointArchive,type ProjectCheckpointPin} from '../github/projectCheckpointArchive.js';
 import {prepareProjectStateProtection} from '../github/projectStateProtection.js';
+import {projectTaskRequiresBrowser,prepareProjectBrowserTestPolicy} from './projectBrowserTests.js';
 import type {runProjectCiContinuation} from './projectCiContinuation.js';
 
 export const PROJECT_RUNTIME_MANIFEST_ERROR='Pinned host runtime manifest or development authorization is unverified. No ledger initialization, new grant, provider request or fallback configuration is authorized.';
@@ -31,9 +32,9 @@ export function prepareProjectRuntimeManifest(body:string,expectedSha256:string)
  reconcileProjectBudgetHistory(v.history,projectPlanBudgetIdentity(plan));
  const ciPolicy=createProjectCiPolicy(target,v.workflowPins),seen=new Set<string>();
  const taskPolicies=v.taskPolicies.map((p:any)=>{
-  if(!exact(p,['taskId','node','authorSelections','reviewSelections'])||seen.has(p.taskId))return refuse();const task=plan.tasks.find(t=>t.id===p.taskId);if(!task)return refuse();seen.add(task.id);
+  const task=plan.tasks.find(t=>t.id===p.taskId);if(!task||!exact(p,['taskId','node','authorSelections','reviewSelections',...(projectTaskRequiresBrowser(plan,task.id)?['browser']:[])])||seen.has(p.taskId))return refuse();seen.add(task.id);
   const ranges=(input:any)=>{if(!Array.isArray(input)||input.length>8)return refuse();return Object.freeze(input.map((r:any)=>{if(!exact(r,['path','version','start','end'])||!task.paths.includes(r.path)||!['base','proposed'].includes(r.version)||!Number.isSafeInteger(r.start)||!Number.isSafeInteger(r.end)||r.start<0||r.end<=r.start||r.end>profile.maxSourceBytes||r.end-r.start>2048)return refuse();return Object.freeze({...r});}));};
-  return Object.freeze({taskId:task.id,nodePolicy:prepareProjectNodeTestPolicy(plan,task.id,p.node),authorSelections:ranges(p.authorSelections),reviewSelections:ranges(p.reviewSelections)});
+  return Object.freeze({taskId:task.id,nodePolicy:prepareProjectNodeTestPolicy(plan,task.id,p.node),...(projectTaskRequiresBrowser(plan,task.id)?{browserPolicy:prepareProjectBrowserTestPolicy(plan,task.id,p.browser)}:{}),authorSelections:ranges(p.authorSelections),reviewSelections:ranges(p.reviewSelections)});
  });
  const cap=Object.freeze({}) as PreparedProjectRuntimeManifest;records.set(cap,{plan,target,ciPolicy,taskPolicies:Object.freeze(taskPolicies),history:v.history,decision:Object.freeze({...v.decision}),pin:Object.freeze({...v.archivePin}),candidateSha:v.candidateSha,sha256:expectedSha256,used:false});return cap;
 }catch{return refuse();}}

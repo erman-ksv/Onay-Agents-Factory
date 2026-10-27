@@ -19,15 +19,16 @@ import type {CalculatorGitRunner} from '../github/calculatorPublisher.js';
 import type {CalculatorModelTiming} from './calculatorGroqPacing.js';
 import type {ProjectSourceSnapshot} from '../github/projectSourceSnapshot.js';
 import type {PreparedProjectChanges} from '../commander/projectChanges.js';
+import {projectTaskRequiresBrowser,assertProjectBrowserPolicy,createProjectBrowserSandbox,type ProjectBrowserTestPolicy,type ProjectBrowserTestReceipt} from './projectBrowserTests.js';
 
 export const PROJECT_NEXT_WORKER_ERROR='Next task worker stopped. Preserve the dispatch, checkpoints and budget; no automatic task replay, grant, publication retry or deployment is authorized.';
 const refuse=():never=>{throw Error(PROJECT_NEXT_WORKER_ERROR);};
 type Range=Readonly<{path:string;version:'base'|'proposed';start:number;end:number}>;
-type Options=Readonly<{plan:PreparedProjectPlan;controller:AuthorizedProjectBudgetController;env:NodeJS.ProcessEnv;ciPolicy:ProjectCiPolicy;taskPolicies:readonly Readonly<{taskId:string;nodePolicy:ProjectNodeTestPolicy;authorSelections:readonly Range[];reviewSelections:readonly Range[]}>[];key:ProjectCorrectionRecoveryKey;directory:string;stateProtection?:ProjectStateProtection;
+type Options=Readonly<{plan:PreparedProjectPlan;controller:AuthorizedProjectBudgetController;env:NodeJS.ProcessEnv;ciPolicy:ProjectCiPolicy;taskPolicies:readonly Readonly<{taskId:string;nodePolicy:ProjectNodeTestPolicy;browserPolicy?:ProjectBrowserTestPolicy;authorSelections:readonly Range[];reviewSelections:readonly Range[]}>[];key:ProjectCorrectionRecoveryKey;directory:string;stateProtection?:ProjectStateProtection;
  /** HOST ONLY durable persistence acknowledgement. This runs before HTTP or
   * push; a local-only callback does not prove cross-machine persistence. */
  persist:(checkpoint:Readonly<{kind:string;path:string;sha256:string;taskId:string}>)=>Promise<void>}>;
-type Injections=Readonly<{github:typeof fetch;model:typeof fetch;git:CalculatorGitRunner;timing:CalculatorModelTiming;node:(policy:ProjectNodeTestPolicy,snapshot:ProjectSourceSnapshot,changes:PreparedProjectChanges)=>Promise<ProjectNodeTestReceipt>}>;
+type Injections=Readonly<{github:typeof fetch;model:typeof fetch;git:CalculatorGitRunner;timing:CalculatorModelTiming;node:(policy:ProjectNodeTestPolicy,snapshot:ProjectSourceSnapshot,changes:PreparedProjectChanges)=>Promise<ProjectNodeTestReceipt>;browser?:(policy:ProjectBrowserTestPolicy,snapshot:ProjectSourceSnapshot,changes:PreparedProjectChanges)=>Promise<ProjectBrowserTestReceipt>}>;
 /** Fixed native source/CI/model/Git/Docker adapters. No model-selected tool,
  * repository, test oracle, callback or command can enter this composition. */
 export function createProjectNextTaskWorker(options:Options){if(Object.keys(options).some(k=>!['plan','controller','env','ciPolicy','taskPolicies','key','directory','persist','stateProtection'].includes(k)))return refuse();return worker(options);}
@@ -38,7 +39,7 @@ function worker(options:Options,injections?:Injections){
  if(!injections)assertProjectStateProtection(options.stateProtection,controller,'native');else if(options.stateProtection)assertProjectStateProtection(options.stateProtection,controller,'simulated');
  if(config.provider!=='groq'||env.AGENT_FACTORY_LEGAL_ENABLED!=='false'||env.ONAY_TEAM_FREE_TIER_CONFIRMED!=='true'||typeof options.persist!=='function'||options.ciPolicy.targetProfileSha256!==profile.sha256)return refuse();
  const readCi=injections?createProjectCiReaderForTests(options.ciPolicy,env,injections.github):createProjectCiReader(options.ciPolicy,env),policies=new Map<string,Options['taskPolicies'][number]>();
- for(const value of options.taskPolicies){if(policies.has(value.taskId))return refuse();assertProjectNodePolicy(value.nodePolicy,plan,value.taskId);const copy=(ranges:readonly Range[])=>Object.freeze(ranges.map(r=>Object.freeze({...r})));policies.set(value.taskId,Object.freeze({...value,authorSelections:copy(value.authorSelections),reviewSelections:copy(value.reviewSelections)}));}
+ for(const value of options.taskPolicies){if(policies.has(value.taskId))return refuse();assertProjectNodePolicy(value.nodePolicy,plan,value.taskId);if(projectTaskRequiresBrowser(plan,value.taskId)){assertProjectBrowserPolicy(value.browserPolicy,plan,value.taskId);if(injections&&typeof injections.browser!=='function')return refuse();}const copy=(ranges:readonly Range[])=>Object.freeze(ranges.map(r=>Object.freeze({...r})));policies.set(value.taskId,Object.freeze({...value,authorSelections:copy(value.authorSelections),reviewSelections:copy(value.reviewSelections)}));}
  let used=false;
  return Object.freeze({async execute(notice:ProjectCiDispatchNotice):Promise<ProjectPublishedCandidate>{try{
   if(used)return refuse();used=true;if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);const dispatch=await consumeProjectCiDispatchNotice(notice,plan,controller,mode),policy=policies.get(notice.taskId);if(!policy)return refuse();
@@ -53,6 +54,10 @@ function worker(options:Options,injections?:Injections){
   for(const role of ['security','reviewer','tester'] as const){const result=await prepareProjectReplyAssessment(await wire.request(await prepareProjectModelContext(plan,task.id,snapshot,{role,model:config.model,changes,selections:policy.reviewSelections})));if(result.decision!=='ready')return refuse();}
   const receipt=await(injections?injections.node(policy.nodePolicy,snapshot,changes):createProjectNodeSandbox(policy.nodePolicy).run(snapshot,changes));
   if(receipt.status!=='passed'||!receipt.testsExecuted)return refuse();
+  if(projectTaskRequiresBrowser(plan,task.id)){
+   const browserReceipt=await(injections?injections.browser!(policy.browserPolicy!,snapshot,changes):createProjectBrowserSandbox(policy.browserPolicy!).run(snapshot,changes));
+   if(browserReceipt.provenance==='native-docker')await wire.verifyBrowserTests(browserReceipt,policy.browserPolicy!);else{if(!injections)return refuse();await wire.verifyBrowserTestsForTests(browserReceipt,policy.browserPolicy!);}
+  }
   let approval;if(receipt.provenance==='native-docker'){await wire.verifyRuntimeTests(receipt,policy.nodePolicy);approval=await wire.preparePublication();}else{if(!injections)return refuse();approval=await wire.preparePublicationForTests({receipt,policy:policy.nodePolicy});}
   const checkpoint=async(event:Parameters<Parameters<typeof createProjectPublisher>[0]['checkpoint']>[0])=>{if(event.stage==='before-push'){const path=join(options.directory,task.id+'-publication-intent.json'),sealed=await saveProjectPublicationIntent(event.intent,options.key,path);await persist('before-push',path,sealed.sha256);}else{const path=join(options.directory,task.id+'-after-push.json'),sealed=writeProjectHostEnvelope('onay-runtime-push-v1',JSON.stringify({taskId:task.id,candidateSha:event.candidateSha,parentSha:event.parentSha,proposalDigest:event.proposalDigest}),options.key,path);await persist('after-push',path,sealed.sha256);}};
   const publisher=injections?createProjectPublisherForTests({env,checkpoint,transport:injections.github,runGit:injections.git}):createProjectPublisher({env,checkpoint}),candidate=await publisher.publish(approval),path=join(options.directory,task.id+'-published.json'),sealed=writeProjectHostEnvelope('onay-runtime-published-v1',JSON.stringify(candidate),options.key,path);await persist('candidate-published',path,sealed.sha256);return candidate;

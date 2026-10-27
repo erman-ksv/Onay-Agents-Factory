@@ -12,6 +12,10 @@ export function calculatorInputLabelMatches(text:string,key:string){return text.
 const refuse=():never=>{throw Error(CALCULATOR_INPUT_BROWSER_ERROR);};
 const paths=['index.html','styles.css','src/app.mjs','src/calculator.mjs'],prefix=['--host=unix:///var/run/docker.sock'];
 const digest=(v:string|Buffer)=>createHash('sha256').update(v).digest('hex');
+const proofs=new WeakMap<object,Readonly<{provenance:'native-docker'|'simulated';candidateSha:string;sourceSetSha256:string;contractSha256:string;status:'passed'|'failed'}>>();
+/** Host-only identity check. A serialized/caller-constructed report is data,
+ * never proof that the trusted browser process ran. */
+export function calculatorInputBrowserProofBinding(value:object){const r=proofs.get(value);if(!r)return refuse();return r;}
 const casesBytes=()=>readFileSync(new URL('../config/calculator-input-browser/cases.json',import.meta.url));
 export function calculatorInputBrowserContract(){const bytes=casesBytes(),cases=JSON.parse(bytes.toString());return Object.freeze({sha256:digest(bytes),caseIds:Object.freeze([...cases.flatMap((c:any)=>c.keyboard?[c.id+':buttons',c.id+':keyboard']:[c.id+':buttons']),'narrow-layout']) as readonly string[]});}
 type Input=Readonly<{candidateSha:string;sources:ReadonlyMap<string,string>}>;
@@ -41,6 +45,6 @@ function probe(image:string,runner:CalculatorSandboxProcess,provenance:'native-d
     return proof;
    }catch{return refuse();}finally{if(name)try{await runner([...prefix,'rm','--force',name],options);}catch{}if(directory)rmSync(directory,{recursive:true,force:true});}
   }
-  await execute('preflight');const result=await execute('check');return Object.freeze({version:1,candidateSha:input.candidateSha,sourceSetSha256,contractSha256:contract.sha256,status:result.status as 'passed'|'failed',testsExecuted:true as const,caseIds:contract.caseIds,failures:Object.freeze([...result.failures]) as readonly string[],browser:result.browser as string,sandboxDisabled:false as const,networkIsolated:true as const,credentialsExcluded:true as const,provenance,executionAuthorized:false as const,publicationAuthorized:false as const,wholeAppCompleted:false as const});
+  await execute('preflight');const result=await execute('check'),proof=Object.freeze({version:1,candidateSha:input.candidateSha,sourceSetSha256,contractSha256:contract.sha256,status:result.status as 'passed'|'failed',testsExecuted:true as const,caseIds:contract.caseIds,failures:Object.freeze([...result.failures]) as readonly string[],browser:result.browser as string,sandboxDisabled:false as const,networkIsolated:true as const,credentialsExcluded:true as const,provenance,executionAuthorized:false as const,publicationAuthorized:false as const,wholeAppCompleted:false as const});proofs.set(proof,Object.freeze({provenance,candidateSha:input.candidateSha,sourceSetSha256,contractSha256:contract.sha256,status:proof.status}));return proof;
  }});
 }
