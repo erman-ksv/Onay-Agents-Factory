@@ -1,0 +1,71 @@
+name: Bounded project CI continuation
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/runtime-continuation-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-bounded-project-continuation
+  cancel-in-progress: false
+jobs:
+  continuation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'b8ffbf6b5e4020af5c006f19e559d1e11a959ec7'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform immutable trusted source without installing dependencies
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Verify independently pinned host configuration before exposing credentials
+        id: config
+        env:
+          # Intentionally unset. This literal and the immutable checkout must
+          # be reviewed together with the concrete OWNER development grant.
+          # Never derive this pin from the trigger marker, model or artifact.
+          EXPECTED_RUNTIME_MANIFEST_SHA256: ''
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync,writeFileSync,appendFileSync} from 'node:fs';
+          const expected=process.env.EXPECTED_RUNTIME_MANIFEST_SHA256;
+          if(!expected){const proof={version:1,status:'blocked-host-manifest-not-configured',runtimeActivated:false,providerCalls:0,applicationWrites:0,budgetWrites:0,stateWrites:0,newAllowance:0,legalEnabled:false};writeFileSync('continuation-readiness.json',JSON.stringify(proof,null,2)+'\n');appendFileSync(process.env.GITHUB_OUTPUT,'ready=false\n');console.log(JSON.stringify(proof));}
+          else{const {prepareProjectRuntimeManifest,projectRuntimeManifestMetadata}=await import('./orchestration/projectRuntimeManifest.js'),body=readFileSync('.factory/runtime-project-manifest.json','utf8'),cap=prepareProjectRuntimeManifest(body,expected),v=JSON.parse(body);appendFileSync(process.env.GITHUB_OUTPUT,'ready=true\nmanifest-sha='+expected+'\nprofile='+v.profile.id+'\nrepository='+v.profile.repository+'\n');writeFileSync('continuation-readiness.json',JSON.stringify({version:1,status:'host-manifest-verified-development-authorization-still-required',manifest:projectRuntimeManifestMetadata(cap),runtimeActivated:false,legalEnabled:false},null,2)+'\n');}
+          JS
+      - name: Prepare immutable host test image
+        if: steps.config.outputs.ready == 'true'
+        run: docker pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Run bounded continuation with native owner and existing-budget checks
+        if: steps.config.outputs.ready == 'true'
+        env:
+          EXPECTED_RUNTIME_MANIFEST_SHA256: ${{ steps.config.outputs.manifest-sha }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_STATE_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          AGENT_FACTORY_PROVIDER: 'groq'
+          GROQ_MODEL: 'qwen/qwen3-32b'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_PROJECT_LIVE_APPROVED: 'ONE_FREE_BOUNDED_RUN'
+          AGENT_FACTORY_TARGET_PROFILE: ${{ steps.config.outputs.profile }}
+          AGENT_ALLOWED_REPOSITORIES: ${{ steps.config.outputs.repository }}
+        run: node scripts/project-ci-continuation.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bounded-continuation-readiness
+          path: continuation-readiness.json
+          if-no-files-found: error
+          retention-days: 7

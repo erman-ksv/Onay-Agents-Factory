@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "mode": "verify-unconfigured-host-launch-stops-before-models",
+  "runtimeActivationAuthorized": false,
+  "providerCallsAuthorized": 0,
+  "budgetResetAuthorized": false,
+  "legalEnabled": false
+}
