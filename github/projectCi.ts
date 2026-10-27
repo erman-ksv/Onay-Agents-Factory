@@ -10,7 +10,11 @@ export type ProjectCiPolicy=Readonly<{targetProfileSha256:string;sha256:string;w
 const policies=new WeakMap<ProjectCiPolicy,{target:ApprovedProjectTarget;pins:readonly Pin[]}>();
 export type ProjectCiEvidence=ProjectCiInput&Readonly<{targetProfileSha256:string;policySha256:string;status:'passed'|'pending'|'failed'|'no-runs';verifiedRunIds:readonly number[];provenance:'native-github'|'simulated';mergeAuthorized:false;wholeAppCompleted:false}>;
 const records=new WeakMap<ProjectCiEvidence,{target:ApprovedProjectTarget;assertCurrent:()=>Promise<void>}>();
+const eventRuns=new WeakMap<ProjectCiEvidence,readonly Readonly<{id:number;attempt:number}>[]>();
 export function projectCiEvidenceBinding(value:ProjectCiEvidence){const r=records.get(value);if(!r)return refuse();return r;}
+/** Event metadata is untrusted. Match it against the attempt actually read by
+ * the native/simulated CI collector, never against the relay's success flag. */
+export function projectCiEventRunMatches(value:ProjectCiEvidence,runId:number,attempt:number){return eventRuns.get(value)?.some(r=>r.id===runId&&r.attempt===attempt)===true;}
 type RawRun = Omit<WorkflowRun, "head_sha" | "run_attempt"> & { head_sha: string; run_attempt: number; workflow_id: number; path: string; head_branch: string; event: string };
 const SHA = /^[a-f0-9]{40}$/;
 
@@ -166,6 +170,7 @@ function reader(policy:ProjectCiPolicy,env:NodeJS.ProcessEnv,transport:typeof fe
       await current();
       const gate=evaluateCiJobs(runs,jobs,[...profile.requiredCiNames],[...profile.requiredCiSteps]);
       const evidence:ProjectCiEvidence=Object.freeze({...approved,targetProfileSha256:profile.sha256,policySha256:policy.sha256,status:gate.status,verifiedRunIds:Object.freeze(verifiedRunIds),provenance:mode,mergeAuthorized:false,wholeAppCompleted:false});
+      eventRuns.set(evidence,Object.freeze(listed.filter(r=>verifiedRunIds.includes(r.id)).map(r=>Object.freeze({id:r.id,attempt:r.run_attempt}))));
       records.set(evidence,{target,assertCurrent:async()=>{await current();const latest=(await pages('/actions/runs?head_sha='+approved.candidateSha+'&branch='+encodeURIComponent(approved.branch),'workflow_runs',20,MAX_RUNS)).map(run);if(latest.length!==listed.length||listed.some(before=>!latest.some(after=>sameRun(before,after))))return refuse();for(const before of listed)if(!sameRun(before,run(await read('/actions/runs/'+before.id))))return refuse();await current();}});return evidence;
     } catch { return refuse(); }
   };
