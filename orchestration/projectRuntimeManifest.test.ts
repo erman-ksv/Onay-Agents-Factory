@@ -28,3 +28,6 @@ test('every task needs host policy and bounded task-owned source selections',asy
 test('native bootstrap refuses missing explicit free/legal configuration and cannot reuse a consumed manifest',async()=>{
  const f=await fixture();try{const cap=f.prepare();await assert.rejects(()=>bootstrapProjectRuntime(cap,{},f.root),stopped);await assert.rejects(()=>bootstrapProjectRuntime(cap,{AGENT_FACTORY_LEGAL_ENABLED:'false',ONAY_TEAM_FREE_TIER_CONFIRMED:'true'},f.root),stopped);assert.equal(f.calls(),0);assert.equal((await f.controller.inspect()).used.requests,4);}finally{f.cleanup();}
 });
+test('first-task manifest explicitly requests an absent archive and cannot turn an existing pin into a fresh start',async()=>{
+ const f=await fixture();try{const initial={...f.v,mode:'first-task',archivePin:null,candidateSha:null},metadata=projectRuntimeManifestMetadata(f.prepare(initial));assert.equal(metadata.mode,'first-task');assert.equal(metadata.archivePin,null);assert.equal(metadata.candidateSha,null);assert.throws(()=>f.prepare({...f.v,mode:'first-task'}));assert.throws(()=>f.prepare({...initial,mode:'continue'}));assert.throws(()=>f.prepare({...initial,mode:'reset-and-run'}));assert.equal(f.calls(),0);}finally{f.cleanup();}
+});

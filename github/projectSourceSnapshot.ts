@@ -16,7 +16,7 @@ export type ProjectSnapshotReader=Readonly<{
  readTree:(sha:string)=>Promise<{sha:string;truncated:boolean;tree:readonly ProjectTreeEntry[]}>;
  readBlob:(sha:string)=>Promise<{sha:string;encoding:string;content:string}>;
 }>;
-export type ProjectSourceSnapshot=Readonly<{repository:string;planFingerprint:string;targetProfileSha256:string;taskId:string;baseRef:string;baseSha:string;changePaths:readonly string[];sourceBytes:number;files:readonly Readonly<{path:string;exists:boolean;blobSha?:string;sourceSha256?:string;bytes?:number}>[];unverifiedAreas:readonly string[];executionAuthorized:false}>;
+export type ProjectSourceSnapshot=Readonly<{repository:string;planFingerprint:string;targetProfileSha256:string;taskId:string;baseRef:string;baseSha:string;changePaths:readonly string[];sourceBytes:number;files:readonly Readonly<{path:string;exists:boolean;blobSha?:string;sourceSha256?:string;bytes?:number;readOnly?:true}>[];unverifiedAreas:readonly string[];executionAuthorized:false}>;
 type SourceRecord={plan:PreparedProjectPlan;reader:ProjectSnapshotReader;sources:ReadonlyMap<string,string>;stopped:boolean};
 const records=new WeakMap<ProjectSourceSnapshot,SourceRecord>();
 /** HOST ONLY test/composition entry. Production uses the fixed GitHub adapter
@@ -37,13 +37,13 @@ export async function loadProjectTaskSnapshot(plan:PreparedProjectPlan,taskId:st
   const tree=new Map<string,ProjectTreeEntry>();
   for(const e of result.tree){if(!e||!path(e.path)||!sha(e.sha)||tree.has(e.path)||!['blob','tree','commit'].includes(e.type)||typeof e.mode!=='string')return refuse();tree.set(e.path,{...e});}
   const sources=new Map<string,string>(),files:Array<ProjectSourceSnapshot['files'][number]>=[];let sourceBytes=0;
-  for(const p of [...new Set([...task.paths,...plan.request.requiredPaths])].sort()){
+  for(const p of [...new Set([...task.paths,...plan.request.requiredPaths,...(plan.request.readOnlyPaths??[])])].sort()){
    const parts=p.split('/');for(let i=1;i<parts.length;i++){const parent=parts.slice(0,i).join('/'),e=tree.get(parent);if((e&&(e.type!=='tree'||e.mode!=='040000'))||(!e&&[...tree.keys()].some(k=>k.startsWith(parent+'/'))))return refuse();}
-   const e=tree.get(p);if(!e){if([...tree.keys()].some(k=>k.startsWith(p+'/')))return refuse();files.push(Object.freeze({path:p,exists:false}));continue;}
+   const readOnly=(plan.request.readOnlyPaths??[]).includes(p),e=tree.get(p);if(!e){if(readOnly)return refuse();if([...tree.keys()].some(k=>k.startsWith(p+'/')))return refuse();files.push(Object.freeze({path:p,exists:false}));continue;}
    if(e.type!=='blob'||e.mode!=='100644'||(e.size!==undefined&&(!Number.isSafeInteger(e.size)||e.size<0||e.size>profile.maxSourceBytes)))return refuse();
    const b=await reader.readBlob(e.sha);if(b.sha!==e.sha||b.encoding!=='base64'||typeof b.content!=='string'||b.content.length>profile.maxSourceBytes*2)return refuse();const encoded=b.content.replace(/\r?\n/g,''),bytes=Buffer.from(encoded,'base64'),content=bytes.toString('utf8');
    if(bytes.toString('base64')!==encoded||!Buffer.from(content).equals(bytes)||createHash('sha1').update(Buffer.concat([Buffer.from('blob '+bytes.length+'\0'),bytes])).digest('hex')!==e.sha||(e.size!==undefined&&e.size!==bytes.length)||projectSourceContainsSecrets(content))return refuse();
-   sourceBytes+=bytes.length;if(sourceBytes>profile.maxSourceBytes)return refuse();sources.set(p,content);files.push(Object.freeze({path:p,exists:true,blobSha:e.sha,sourceSha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length}));
+   sourceBytes+=bytes.length;if(sourceBytes>profile.maxSourceBytes)return refuse();sources.set(p,content);files.push(Object.freeze({path:p,exists:true,...(readOnly?{readOnly:true as const}:{}),blobSha:e.sha,sourceSha256:createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length}));
   }
   await refs();const snapshot:ProjectSourceSnapshot=Object.freeze({repository:plan.repository,planFingerprint:plan.fingerprint,targetProfileSha256:profile.sha256,taskId,baseRef,baseSha,changePaths:Object.freeze([...task.paths]),sourceBytes,files:Object.freeze(files),unverifiedAreas:Object.freeze(['Unselected repository source','Dependency acceptance and runtime behavior','Independent reviews, tests and exact-candidate CI']),executionAuthorized:false});records.set(snapshot,{plan,reader,sources,stopped:false});return snapshot;
  }catch{return refuse();}

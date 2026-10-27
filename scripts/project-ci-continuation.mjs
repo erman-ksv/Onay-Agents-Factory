@@ -4,6 +4,8 @@ import {constants,openSync,fstatSync,readFileSync,closeSync,mkdtempSync} from 'n
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {prepareProjectRuntimeManifest,bootstrapProjectRuntime,projectRuntimeManifestMetadata} from '../orchestration/projectRuntimeManifest.js';
+import {createProjectInitialTaskRuntime} from '../orchestration/projectNextTaskWorker.js';
+import {createProjectCiReader} from '../github/projectCi.js';
 import {runProjectCiContinuation} from '../orchestration/projectCiContinuation.js';
 let fd,host;
 try{
@@ -12,7 +14,9 @@ try{
  const body=readFileSync(fd,'utf8');closeSync(fd);fd=undefined;
  const manifest=prepareProjectRuntimeManifest(body,process.env.EXPECTED_RUNTIME_MANIFEST_SHA256),directory=mkdtempSync(join(tmpdir(),'onay-native-continuation-'));
  host=await bootstrapProjectRuntime(manifest,process.env,directory);
- const result=await runProjectCiContinuation(host.options);
+ let continuation=host.options;
+ if(host.mode==='first-task'){const {plan,ciPolicy,env}=host.options,baseCi=await createProjectCiReader(ciPolicy,env)({repository:plan.repository,branch:plan.request.baseRef,candidateSha:plan.request.baseSha}),initial=await createProjectInitialTaskRuntime(host.options).start(baseCi);continuation={...host.options,candidateSha:initial.candidate.candidateSha,polling:{maxPolls:12,intervalMs:10000}};}
+ const result=await runProjectCiContinuation(continuation);
  console.log(JSON.stringify({version:1,manifest:projectRuntimeManifestMetadata(manifest),result,legalEnabled:false}));
  if(!['plan-ci-recorded','awaiting-ci','already-recorded'].includes(result.status))process.exitCode=1;
 }catch{
