@@ -38,6 +38,15 @@ jobs:
           FACTORY_RUNTIME_SHA: 'e2b51e368f55ff8fe6966c9a8895132554073ad0'
           FACTORY_SOURCE_CI_RUN: '40481857488'
         run: node scripts/project-live-protection-readiness.mjs
+      - name: Diagnose fixed state rule response metadata after a guard failure
+        if: failure()
+        env:
+          FACTORY_RULES_READ_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          const key='30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0',proof=[];
+          for(const prefix of ['state/project-checkpoints/','state/project-model-budget/']){const branch=prefix+key,r=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/rules/branches/'+encodeURIComponent(branch),{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.FACTORY_RULES_READ_TOKEN}}),text=await r.text();if(Buffer.byteLength(text)>65536)throw Error('Rules diagnostic response too large');let d;try{d=JSON.parse(text);}catch{}proof.push({branch,status:r.status,pagination:r.headers.get('link'),rules:Array.isArray(d)?d.map(v=>({type:v.type,ruleset_id:v.ruleset_id,ruleset_source_type:v.ruleset_source_type,ruleset_source:v.ruleset_source})):undefined,message:typeof d?.message==='string'?d.message.slice(0,160):undefined});}console.log(JSON.stringify({version:1,kind:'readonly-state-rules-response-shape',proof,providerCalls:0,writes:0}));
+          JS
       - uses: actions/upload-artifact@v4
         with:
           name: model-free-live-readiness
