@@ -13,6 +13,9 @@ import {prepareProjectNodeTestPolicy,createProjectNodeSandbox,createProjectNodeS
 import {createProjectCiPolicy} from '../../github/projectCi.js';
 import {type CalculatorGitRunner} from '../../github/calculatorPublisher.js';
 export async function createProjectPublicationFixtureForTests(nativeTests=false,withSecondTask=false,maxRequests=8){const core=await publicationFixtureCore(withSecondTask,maxRequests);return{...core,...await core.produce(nativeTests)};}
+/** Read-only host probes need genuine synthetic capabilities without running
+ * any model role, sandbox or publication. Initializes only a temporary ledger. */
+export async function createProjectPublicationHostFixtureForTests(){return publicationFixtureCore(true,8);}
 /** Fresh host capabilities/controller over the existing synthetic remote and
  * ledger. No initialize/model/sandbox/Git mutation is performed on reopen. */
 export async function reopenProjectPublicationFixtureForTests(root:string){return publicationFixtureCore(true,8,root);}
