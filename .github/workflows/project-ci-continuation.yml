@@ -13,6 +13,9 @@ jobs:
   continuation:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -78,8 +81,8 @@ jobs:
       - name: Initialize only the approved new metadata ledger before exposing model credentials
         if: steps.config.outputs.ready == 'true'
         env:
-          FACTORY_STATE_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
-          FACTORY_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN }}
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
           FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
           AGENT_FACTORY_LEGAL_ENABLED: 'false'
@@ -89,8 +92,8 @@ jobs:
         env:
           EXPECTED_RUNTIME_MANIFEST_SHA256: ${{ steps.config.outputs.manifest-sha }}
           GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
-          FACTORY_STATE_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
-          FACTORY_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN }}
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
           FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
