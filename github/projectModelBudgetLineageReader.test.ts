@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
 import {createProjectModelBudgetGitHubLineageReader} from './projectModelBudgetStore.js';
+import {createProjectGrantChainFixtureForTests} from '../config/fixtures/projectGrantChainFixture.js';
 function fixture(kind='ok'){
  const key='a'.repeat(64),beforeHead='1'.repeat(40),afterHead='2'.repeat(40),file='project-model-budget.json',calls:string[]=[];
  const gitHash=(type:string,b:Buffer)=>createHash('sha1').update(Buffer.concat([Buffer.from(type+' '+b.length+'\0'),b])).digest('hex');
@@ -43,3 +44,19 @@ test('acknowledged reader refuses rewritten or removed charges, extra grant tran
 test('acknowledged history read refuses ref races and bounds reservation suffix traversal',async()=>{
  const moving=reservedFixture('drift');await assert.rejects(()=>moving.reader.readAcknowledgedTransition(moving.beforeHead,moving.afterHead));const bound=reservedFixture('ok',9);await assert.rejects(()=>bound.reader.readAcknowledgedTransition(bound.beforeHead,bound.afterHead));assert.ok(bound.calls.length<40);
 });
+function chainFixture(kind='ok'){
+ const entry=(n:number)=>({reservationId:'prior-'+n+':r1',taskId:'t01',requestSha256:'e'.repeat(64),requestBytes:100,reservedTokens:50}),state=(grant:string,count:number)=>({version:1 as const,grantSha256:grant.repeat(64),reservations:Array.from({length:count},(_,i)=>entry(i))}),states=[state('b',1),state('c',1),state('c',2),state('d',2),state('d',3)];
+ if(kind==='grant')states[4]!.grantSha256='f'.repeat(64);if(kind==='rewrite')states[4]!.reservations[0]!.requestBytes++;if(kind==='bulk')states[4]!.reservations.push(entry(3));
+ const f=createProjectGrantChainFixtureForTests('a'.repeat(64),states),pairs=[{beforeHead:f.heads[0]!,afterHead:f.heads[1]!},{beforeHead:f.heads[2]!,afterHead:f.heads[3]!}];if(kind==='merge')f.objects.get('/git/commits/'+f.heads[4]).parents.push({sha:f.heads[0]});if(kind==='drift')f.live.drift=true;if(kind==='tamper')f.live.corrupt=true;return {...f,pairs};
+}
+test('cold multi-grant reader proves two exact extensions with all intermediate charges and fresh refs',async()=>{
+ const f=chainFixture(),reader=f.reader(),proof=await reader.readAcknowledgedChain(f.pairs);assert.equal(proof.transitions.length,2);assert.equal(proof.current.data.reservations.length,3);assert.equal(f.trace.filter(p=>p.startsWith('/git/ref/')).length,2);const count=f.trace.length;assert.deepEqual(await reader.readAcknowledgedChain(f.pairs),proof);assert.deepEqual(f.trace.slice(count).map(p=>p.split('/').slice(0,3).join('/')),['/git/ref','/git/ref']);
+});
+test('multi-grant reader rejects unacknowledged epochs, rewritten charges, merge, tampering and live ref races',async()=>{
+ for(const kind of ['grant','rewrite','bulk','merge','drift','tamper']){const f=chainFixture(kind);await assert.rejects(()=>f.reader().readAcknowledgedChain(f.pairs));}
+ const f=chainFixture();await assert.rejects(()=>f.reader().readAcknowledgedChain([...f.pairs].reverse()));await assert.rejects(()=>f.reader().readAcknowledgedChain([{...f.pairs[0]!,beforeHead:'f'.repeat(40)},f.pairs[1]!]));
+});
+test('multi-grant reader refuses missing, duplicate or unbounded extension pins before network work',async()=>{
+ const f=chainFixture();for(const pairs of [[],[f.pairs[0]!],[f.pairs[0]!,f.pairs[0]!],Array(9).fill(f.pairs[0])])await assert.rejects(()=>f.reader().readAcknowledgedChain(pairs));assert.equal(f.trace.length,0);
+});
+

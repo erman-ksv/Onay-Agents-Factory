@@ -32,6 +32,30 @@ export function restoreGitHubAcknowledgedDevelopmentGrantLineage(options:Restore
  const reader=createProjectModelBudgetGitHubLineageReader({projectKey:options.previous.projectKey,token:options.token});return restore(options,{readTransition:reader.readAcknowledgedTransition},true,true);
 }
 export function restoreAcknowledgedDevelopmentGrantLineageForTests(options:RestoreOptions,reader:AcknowledgedReader){return restore(options,{readTransition:reader.readAcknowledgedTransition},false,true);}
+type ChainOptions={controllers:readonly AuthorizedProjectBudgetController[];transitions:readonly Readonly<{beforeHead:string;afterHead:string}>[];stateProtection:ProjectStateProtection};
+type ChainReader=Pick<ReturnType<typeof createProjectModelBudgetGitHubLineageReader>,'readAcknowledgedChain'>;
+/** Cold, GET-only proof of multiple acknowledged extensions on the CURRENT
+ * protected ancestry. Never recreates a permit, write or task claim. */
+export function restoreGitHubDevelopmentGrantChain(o:ChainOptions&{token:string}){
+ if(Object.keys(o).some(k=>!['controllers','transitions','stateProtection','token'].includes(k)))return Promise.reject(Error('Unverified grant chain options'));
+ return restoreChain(o,createProjectModelBudgetGitHubLineageReader({projectKey:o.controllers[0]?.projectKey??'',token:o.token}),true);
+}
+export function restoreDevelopmentGrantChainForTests(o:ChainOptions,reader:ChainReader){return restoreChain(o,reader,false);}
+async function restoreChain(o:ChainOptions,reader:ChainReader,native:boolean):Promise<ProjectGrantLineage>{try{
+ const cs=[...o.controllers],pairs=o.transitions.map(p=>({...p}));if(cs.length<3||cs.length>9||pairs.length!==cs.length-1||cs.some(c=>!isAuthorizedProjectBudgetController(c))||new Set(cs.map(c=>c.grantSha256)).size!==cs.length||cs.some(c=>c.projectKey!==cs[0]!.projectKey))return refuse();const next=cs.at(-1)!;
+ const guard=async()=>{for(const c of cs)await c.assertAuthorized();await verifyProjectStateProtection(o.stateProtection,next,native?'native':'simulated');};await guard();
+ const proof=await reader.readAcknowledgedChain(pairs);if(proof.transitions.length!==pairs.length)return refuse();const grants:FloorGrant[]=[];
+ for(const [i,t]of proof.transitions.entries()){
+  const pair=pairs[i]!,previous=cs[i]!,current=cs[i+1]!;if(t.before.revision!==createHash('sha256').update(pair.beforeHead).digest('hex')||t.after.revision!==createHash('sha256').update(pair.afterHead).digest('hex'))return refuse();
+  const inspection=inspectProjectDevelopmentBudgetExtension(previous,t.before.data,current.grant);await authorizeProjectDevelopmentBudgetExtension(previous,current,t.before.revision,t.before.data);
+  if(JSON.stringify(parseProjectModelBudgetState(t.after.data))!==JSON.stringify(inspection.newState))return refuse();
+  if(i>0){const prior=proof.transitions[i-1]!.after.data,now=parseProjectModelBudgetState(t.before.data);if(now.grantSha256!==prior.grantSha256||now.reservations.length<prior.reservations.length||now.reservations.length>prior.reservations.length+8||JSON.stringify(now.reservations.slice(0,prior.reservations.length))!==JSON.stringify(prior.reservations))return refuse();}
+  grants.push({controller:previous,beforeUsed:inspection.used});
+ }
+ const after=proof.transitions.at(-1)!.after.data,live=parseProjectModelBudgetState(proof.current.data),used={...next.grant.historical};if(live.grantSha256!==next.grantSha256||live.reservations.length<after.reservations.length||live.reservations.length>after.reservations.length+8||JSON.stringify(live.reservations.slice(0,after.reservations.length))!==JSON.stringify(after.reservations))return refuse();for(const r of live.reservations){used.requests++;used.requestBytes+=r.requestBytes;used.reservedTokens+=r.reservedTokens;}
+ const ledger=await next.inspect();if(JSON.stringify(ledger.used)!==JSON.stringify(used))return refuse();await guard();if(JSON.stringify(await reader.readAcknowledgedChain(pairs))!==JSON.stringify(proof))return refuse();
+ const cap=Object.freeze({}) as ProjectGrantLineage;entries.set(cap,{grants,next,beforeUsed:grants.at(-1)!.beforeUsed,native});return cap;
+}catch{return refuse();}}
 async function restore(o:RestoreOptions,reader:Reader,native:boolean,withReservations=false):Promise<ProjectGrantLineage>{try{
  if(!isAuthorizedProjectBudgetController(o.previous)||!isAuthorizedProjectBudgetController(o.next)||!/^[a-f0-9]{40}$/.test(o.beforeHead)||!/^[a-f0-9]{40}$/.test(o.afterHead)||o.beforeHead===o.afterHead)return refuse();
  const guard=()=>verifyProjectStateProtection(o.stateProtection,o.next,native?'native':'simulated');await guard();
