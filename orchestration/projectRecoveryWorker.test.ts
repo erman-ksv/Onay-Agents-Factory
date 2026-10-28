@@ -4,6 +4,11 @@ import {createProjectUncertainRecoveryRuntimeForTests,createProjectCiRuntimeForT
 import {createProjectCiReaderForTests} from '../github/projectCi.js';import {confirmProjectCandidateCi} from '../github/projectPublisher.js';
 import {materializeProjectRuntimeArchive} from './projectRuntimeRecovery.js';
 import {runProjectCiContinuationForTests} from './projectCiContinuation.js';
+test('explicit OSS120b policy keeps low reasoning, JSON replies and unchanged ceilings through both tasks',async()=>{
+ const f=await fixture('normal',true,'openai/gpt-oss-120b');try{
+  const first=await createProjectUncertainRecoveryRuntimeForTests(f.options,f.injections).recover(f.ticket),root=join(f.root,'oss-bounded-loop');mkdirSync(root,{mode:0o700});const result=await runProjectCiContinuationForTests({...f.options,directory:root,lineage:f.lineage!,candidateSha:first.candidate.candidateSha,polling:{maxPolls:4,intervalMs:10000}},f.injections,{now:()=>0,wait:async()=>{}});assert.equal(result.status,'plan-ci-recorded');assert.equal(f.requestSettings.length,8);for(const r of f.requestSettings){assert.equal(r.model,'openai/gpt-oss-120b');assert.equal(r.reasoningEffort,'low');assert.deepEqual(r.responseFormat,{type:'json_object'});assert.equal(r.maxCompletionTokens,1200);}assert.equal((await f.controller.inspect()).used.requests,9);assert.equal(f.calls(),8);assert.ok(f.clock()>=60000);
+ }finally{f.cleanup();}
+});
 test('provider rejection and network failure retain charges and emit only the last numeric HTTP status',async()=>{
  for(const mode of ['provider-401','network-failed']){const f=await fixture(mode),previous=console.error,logs:string[]=[];console.error=(value:unknown)=>{logs.push(String(value));};try{await assert.rejects(()=>createProjectUncertainRecoveryRuntimeForTests(f.options,f.injections).recover(f.ticket));assert.equal(f.calls(),1);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.gitCalls.filter(c=>c.includes('push')).length,0);assert.equal(logs.length,1);const d=JSON.parse(logs[0]!);assert.equal(d.lastProviderHttpStatus,mode==='provider-401'?401:null);assert.equal(d.reasonCode,'transport_error');assert.equal(d.providerCallsSent,1);assert.equal(d.replayAuthorized,false);assert.equal(logs.join('').includes('PRIVATE_PROVIDER_BODY_MUST_NOT_BE_LOGGED'),false);}finally{console.error=previous;f.cleanup();}}
 });
