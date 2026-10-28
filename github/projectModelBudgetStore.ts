@@ -66,6 +66,20 @@ function createNativeBudgetStore(options:Readonly<{projectKey:string;token:strin
    if(!again||again.head!==afterHead||JSON.stringify(again.data)!==JSON.stringify(after.data))return refuse();
    return Object.freeze({before:Object.freeze({revision:before.revision,data:before.data}),after:Object.freeze({revision:after.revision,data:after.data})});
   }catch{return refuse();}
+ },async readAcknowledgedTransition(beforeHead:string,afterHead:string){
+  try{
+   if(!SHA.test(beforeHead)||!SHA.test(afterHead)||beforeHead===afterHead)return refuse();
+   const current=await load();if(!current)return refuse();let after=current;
+   // A bounded suffix of reservations may follow the acknowledged extension.
+   // Every edge must retain the grant and add exactly one immutable charge.
+   for(let hops=0;after.head!==afterHead;hops++){
+    if(hops>=8||after.parents.length!==1)return refuse();const parent=await loadCommit(after.parents[0]!);
+    if(after.data.grantSha256!==parent.data.grantSha256||after.data.reservations.length!==parent.data.reservations.length+1||JSON.stringify(after.data.reservations.slice(0,-1))!==JSON.stringify(parent.data.reservations))return refuse();after=parent;
+   }
+   if(after.parents.length!==1||after.parents[0]!==beforeHead)return refuse();
+   const before=await loadCommit(beforeHead),again=await load();if(!again||again.head!==current.head||JSON.stringify(again.data)!==JSON.stringify(current.data))return refuse();
+   return Object.freeze({before:Object.freeze({revision:before.revision,data:before.data}),after:Object.freeze({revision:after.revision,data:after.data}),current:Object.freeze({revision:current.revision,data:current.data})});
+  }catch{return refuse();}
  },async extend(permit:ProjectBudgetExtensionPermit){
   const command=consumeProjectBudgetExtensionPermit(permit,projectKey);
   try{if(writes.has(command.expectedRevision))return refuse();writes.add(command.expectedRevision);await command.assertAuthorized();const current=await load();
@@ -80,4 +94,4 @@ export function createProjectModelBudgetGitHubStore(options:Readonly<{projectKey
 export function createProjectModelBudgetGitHubExtensionStore(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){const store=createNativeBudgetStore(options);return Object.freeze({read:store.normal.read,extend:store.extend});}
 /** GET-only reader for an exact direct-parent transition at the current head.
  * Historical JSON or a detached sibling commit cannot establish live lineage. */
-export function createProjectModelBudgetGitHubLineageReader(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){const store=createNativeBudgetStore(options);return Object.freeze({readTransition:store.readTransition});}
+export function createProjectModelBudgetGitHubLineageReader(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){const store=createNativeBudgetStore(options);return Object.freeze({readTransition:store.readTransition,readAcknowledgedTransition:store.readAcknowledgedTransition});}

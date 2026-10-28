@@ -1,5 +1,6 @@
 import {extendProjectDevelopmentBudgetWithLineageForTests as extendLineage,assertProjectGrantLineageFloor as assertFloor} from './projectGrantLineage.js';
 import {restoreProjectDevelopmentGrantLineageForTests as restoreLineage,restoreGitHubProjectDevelopmentGrantLineage} from './projectGrantLineage.js';
+import {restoreAcknowledgedDevelopmentGrantLineageForTests as restoreAcknowledged,restoreGitHubAcknowledgedDevelopmentGrantLineage} from './projectGrantLineage.js';
 import {prepareProjectStateProtectionForTests} from '../github/projectStateProtection.js';
 import {createHash} from 'node:crypto';
 import test from 'node:test';import assert from 'node:assert/strict';
@@ -57,4 +58,19 @@ test('cold lineage refuses copied protection, changed rules and revoked OWNER de
 test('cold lineage refuses a transition changed during verification and checks later revocation',async()=>{
  const c=await coldFixture();let count=0;await assert.rejects(()=>restoreLineage(c.options,{readTransition:async(a,b)=>{const v=await c.reader.readTransition(a,b);if(++count===2)v.after.revision='0'.repeat(64);return v;}}));
  const d=await coldFixture(),cap=await restoreLineage(d.options,d.reader);d.f.revoke();await assert.rejects(()=>assertFloor(cap,d.next,d.floor,'simulated'));assert.equal(d.f.writes(),0);
+});
+async function spentFixture(){
+ const c=await coldFixture(),hash=(s:string)=>createHash('sha256').update(s).digest('hex'),state={...c.transition.after.data,reservations:[...c.transition.after.data.reservations,{reservationId:'later:r1',taskId:'t01',requestSha256:'d'.repeat(64),requestBytes:100,reservedTokens:50}]},current={revision:hash('3'.repeat(40)),data:state};c.f.save(state,current.revision);
+ const reader={readAcknowledgedTransition:async()=>structuredClone({...c.transition,current})};return {...c,current,reader};
+}
+test('cold acknowledged lineage restores old floors after an additional spent reservation without writes',async()=>{
+ const c=await spentFixture(),cap=await restoreAcknowledged(c.options,c.reader);await assertFloor(cap,c.next,c.floor,'simulated');assert.equal((await c.next.inspect()).used.requests,2);assert.equal(c.f.writes(),0);await assert.rejects(()=>assertFloor(cap,c.next,c.floor,'native'));await assert.rejects(()=>restoreGitHubAcknowledgedDevelopmentGrantLineage({...c.options,token:'offline',reader:c.reader} as any));
+});
+test('cold acknowledged restore refuses missing proof, replaced reservation prefix and mismatching live totals',async()=>{
+ for(const kind of ['missing','prefix','live']){const c=await spentFixture();if(kind==='prefix')c.current.data.reservations[0]={...c.current.data.reservations[0]!,requestSha256:'0'.repeat(64)};if(kind==='live')c.f.save({...c.current.data,reservations:[]},c.current.revision);const reader=kind==='missing'?{readAcknowledgedTransition:async()=>structuredClone(c.transition) as any}:c.reader;await assert.rejects(()=>restoreAcknowledged(c.options,reader));assert.equal(c.f.writes(),0);}
+});
+test('another acknowledged extension inherits both old grant floors only through a genuine parent capability',async()=>{
+ const c=await spentFixture(),parent=await restoreAcknowledged(c.options,c.reader),before=c.current.data,grant={...c.next.grant,grantId:'development-extend-'+projectBudgetStateDigest(before),maxRequests:c.next.grant.maxRequests+1,maxTotalRequestBytes:c.next.grant.maxTotalRequestBytes+12000,maxReservedTokens:c.next.grant.maxReservedTokens+6000},next=await c.f.controller(grant,103),options={previous:c.next,next,expectedRevision:c.current.revision,state:before};
+ let writes=0;const store={read:c.f.read,extend:async(permit:Parameters<typeof consumeProjectBudgetExtensionPermit>[0])=>{writes++;const command=consumeProjectBudgetExtensionPermit(permit,next.projectKey);await command.assertAuthorized();c.f.save(command.after,'f'.repeat(64));return {revision:'f'.repeat(64),data:command.after};}};
+ await assert.rejects(()=>extendLineage({...options,parentLineage:{...parent}},store));assert.equal(writes,0);const cap=await extendLineage({...options,parentLineage:parent},store);assert.equal(writes,1);await assertFloor(cap,next,c.floor,'simulated');await assertFloor(cap,next,{projectKey:next.projectKey,grantSha256:c.next.grantSha256,used:{requests:2,requestBytes:4768,reservedTokens:3062}},'simulated');await assert.rejects(()=>assertFloor(cap,next,{...c.floor,grantSha256:'0'.repeat(64)},'simulated'));c.f.revoke();await assert.rejects(()=>assertFloor(cap,next,c.floor,'simulated'));
 });
