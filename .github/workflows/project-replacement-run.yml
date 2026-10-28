@@ -1,5 +1,5 @@
-# One bounded activation: OWNER comments 6472912771 and 6472916696.
-name: One bounded OSS stopped-recovery replacement
+# One OWNER-approved bounded activation: comments6475553761 and6475556435.
+name: One bounded six-event stopped-recovery replacement
 on:
   push:
     branches: ['feat/calculator-t02-charge-reconcile-20261022']
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '9412cce41b5d5be29083cffea8523d439ba35200'
+          ref: 'a0ce0adcf1fa87ff29ceae8902e7fd22bd819c5a'
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -34,7 +34,7 @@ jobs:
           node-version: 24
       - name: Verify independently reviewed host pin and compile immutable source
         env:
-          EXPECTED_REPLACEMENT_SCOPE_SHA256: '538157527e6058306dbf24d0ac1fe9c89d9ca225656c6b81c29cbff4b2180c34'
+          EXPECTED_REPLACEMENT_SCOPE_SHA256: 'ab8007e8fdefb71235d5077179a340f5b9cdb57ff5f3ea08b4823e64d51897e5'
         run: |
           node --input-type=module - <<'JS'
           import assert from 'node:assert/strict';import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
@@ -52,7 +52,7 @@ jobs:
           JS
       - name: Run exactly one separately approved OSS replacement
         env:
-          EXPECTED_REPLACEMENT_SCOPE_SHA256: '538157527e6058306dbf24d0ac1fe9c89d9ca225656c6b81c29cbff4b2180c34'
+          EXPECTED_REPLACEMENT_SCOPE_SHA256: 'ab8007e8fdefb71235d5077179a340f5b9cdb57ff5f3ea08b4823e64d51897e5'
           FACTORY_REPLACEMENT_MODE: 'run'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
