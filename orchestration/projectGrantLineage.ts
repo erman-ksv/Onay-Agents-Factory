@@ -1,4 +1,6 @@
-import {createProjectModelBudgetGitHubExtensionStore} from '../github/projectModelBudgetStore.js';
+import {createProjectModelBudgetGitHubExtensionStore,createProjectModelBudgetGitHubLineageReader} from '../github/projectModelBudgetStore.js';
+import {verifyProjectStateProtection,type ProjectStateProtection} from '../github/projectStateProtection.js';
+import {createHash} from 'node:crypto';
 import {isAuthorizedProjectBudgetController,type AuthorizedProjectBudgetController} from './projectBudgetAuthorization.js';
 import {authorizeProjectDevelopmentBudgetExtension,inspectProjectDevelopmentBudgetExtension} from './projectBudgetExtensionAuthorization.js';
 import {parseProjectModelBudgetState,type ProjectModelBudgetState,type ProjectModelCharge} from './projectModelBudget.js';
@@ -9,6 +11,31 @@ declare const brand:unique symbol;
 export type ProjectGrantLineage=Readonly<{[brand]:true}>;
 type Entry={previous:AuthorizedProjectBudgetController;next:AuthorizedProjectBudgetController;beforeUsed:ProjectModelCharge;native:boolean};
 const entries=new WeakMap<object,Entry>();
+type RestoreOptions={previous:AuthorizedProjectBudgetController;next:AuthorizedProjectBudgetController;beforeHead:string;afterHead:string;stateProtection:ProjectStateProtection};
+type Reader=ReturnType<typeof createProjectModelBudgetGitHubLineageReader>;
+/** Cold recovery reads the actual committed transition; it never repeats an
+ * extension write, initializes a ledger or starts a task. Both OWNER decisions
+ * must still be valid and the protected state ref must still name this head. */
+export function restoreGitHubProjectDevelopmentGrantLineage(options:RestoreOptions&{token:string}){
+ if(Object.keys(options).some(k=>!['previous','next','beforeHead','afterHead','stateProtection','token'].includes(k)))return Promise.reject(Error('Unverified lineage options'));
+ return restore(options,createProjectModelBudgetGitHubLineageReader({projectKey:options.previous.projectKey,token:options.token}),true);
+}
+export function restoreProjectDevelopmentGrantLineageForTests(options:RestoreOptions,reader:Reader){return restore(options,reader,false);}
+async function restore(o:RestoreOptions,reader:Reader,native:boolean):Promise<ProjectGrantLineage>{try{
+ if(!isAuthorizedProjectBudgetController(o.previous)||!isAuthorizedProjectBudgetController(o.next)||!/^[a-f0-9]{40}$/.test(o.beforeHead)||!/^[a-f0-9]{40}$/.test(o.afterHead)||o.beforeHead===o.afterHead)return refuse();
+ const guard=()=>verifyProjectStateProtection(o.stateProtection,o.next,native?'native':'simulated');await guard();
+ const transition=await reader.readTransition(o.beforeHead,o.afterHead),hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+ if(transition.before.revision!==hash(o.beforeHead)||transition.after.revision!==hash(o.afterHead))return refuse();
+ const before=parseProjectModelBudgetState(transition.before.data),after=parseProjectModelBudgetState(transition.after.data),inspection=inspectProjectDevelopmentBudgetExtension(o.previous,before,o.next.grant);
+ // Reuse the exact two-controller identity/history/profile/approval policy.
+ // The permit is intentionally discarded; no store receives it.
+ await authorizeProjectDevelopmentBudgetExtension(o.previous,o.next,transition.before.revision,before);
+ if(JSON.stringify(after)!==JSON.stringify(inspection.newState)||o.next.grantSha256!==inspection.grantSha256)return refuse();
+ const live=await o.next.inspect();if(live.grantSha256!==inspection.grantSha256||JSON.stringify(live.used)!==JSON.stringify(inspection.used))return refuse();
+ await o.previous.assertAuthorized();await o.next.assertAuthorized();await guard();
+ const again=await reader.readTransition(o.beforeHead,o.afterHead);if(JSON.stringify(again)!==JSON.stringify(transition))return refuse();
+ const cap=Object.freeze({}) as ProjectGrantLineage;entries.set(cap,{previous:o.previous,next:o.next,beforeUsed:inspection.used,native});return cap;
+}catch{return refuse();}}
 /** Actual native CAS acknowledgement followed by an independent read. No
  * capability is returned after an unknown write or mismatching readback. */
 export function extendGitHubProjectDevelopmentBudgetWithLineage(options:Options&{token:string}){

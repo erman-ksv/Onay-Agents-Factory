@@ -22,17 +22,20 @@ function createNativeBudgetStore(options:Readonly<{projectKey:string;token:strin
    return JSON.parse(Buffer.concat(parts).toString('utf8'));
   }catch{return refuse();}
  }
- async function load(){
-  const target=await api(path,'GET',undefined,true);if(target===undefined)return undefined;
-  if(target.ref!==ref||target.object?.type!=='commit'||!SHA.test(target.object.sha))return refuse();
-  const head=target.object.sha as string,commit=await api('/git/commits/'+head);
+ async function loadCommit(head:string){
+  if(!SHA.test(head))return refuse();const commit=await api('/git/commits/'+head);
   if(commit.sha!==head||!SHA.test(commit.tree?.sha)||!Array.isArray(commit.parents)||commit.parents.length>1||commit.parents.some((p:any)=>!SHA.test(p?.sha)||p.sha===head))return refuse();
   const tree=await api('/git/trees/'+commit.tree.sha);if(tree.sha!==commit.tree.sha||tree.truncated!==false||!Array.isArray(tree.tree)||tree.tree.length!==1)return refuse();
   const entry=tree.tree[0];if(entry.path!==FILE||entry.mode!=='100644'||entry.type!=='blob'||!SHA.test(entry.sha))return refuse();
   const expectedTree=gitHash('tree',Buffer.concat([Buffer.from('100644 '+FILE+'\0'),Buffer.from(entry.sha,'hex')]));if(expectedTree!==tree.sha)return refuse();
   const blob=await api('/git/blobs/'+entry.sha);if(blob.sha!==entry.sha||blob.encoding!=='base64'||typeof blob.content!=='string'||blob.content.length>360000)return refuse();
   const encoded=blob.content.replace(/\s/g,''),bytes=Buffer.from(encoded,'base64');if(bytes.length>262144||bytes.toString('base64')!==encoded||gitHash('blob',bytes)!==entry.sha)return refuse();
-  return {head,revision:revision(head),data:parseProjectModelBudgetState(JSON.parse(bytes.toString('utf8')))};
+  return {head,parents:commit.parents.map((p:any)=>p.sha) as string[],revision:revision(head),data:parseProjectModelBudgetState(JSON.parse(bytes.toString('utf8')))};
+ }
+ async function load(){
+  const target=await api(path,'GET',undefined,true);if(target===undefined)return undefined;
+  if(target.ref!==ref||target.object?.type!=='commit'||!SHA.test(target.object.sha))return refuse();
+  return loadCommit(target.object.sha);
  }
  async function writeState(current:Awaited<ReturnType<typeof load>>,state:ProjectModelBudgetState,beforeAdvance?:()=>Promise<void>){
     const content=JSON.stringify(state)+'\n',bytes=Buffer.from(content),blobSha=gitHash('blob',bytes),treeSha=gitHash('tree',Buffer.concat([Buffer.from('100644 '+FILE+'\0'),Buffer.from(blobSha,'hex')]));
@@ -55,7 +58,15 @@ function createNativeBudgetStore(options:Readonly<{projectKey:string;token:strin
    }catch{return refuse();}
   },
  });
- return Object.freeze({normal,async extend(permit:ProjectBudgetExtensionPermit){
+ return Object.freeze({normal,async readTransition(beforeHead:string,afterHead:string){
+  try{
+   if(!SHA.test(beforeHead)||!SHA.test(afterHead)||beforeHead===afterHead)return refuse();
+   const after=await load();if(!after||after.head!==afterHead||after.parents.length!==1||after.parents[0]!==beforeHead)return refuse();
+   const before=await loadCommit(beforeHead),again=await load();
+   if(!again||again.head!==afterHead||JSON.stringify(again.data)!==JSON.stringify(after.data))return refuse();
+   return Object.freeze({before:Object.freeze({revision:before.revision,data:before.data}),after:Object.freeze({revision:after.revision,data:after.data})});
+  }catch{return refuse();}
+ },async extend(permit:ProjectBudgetExtensionPermit){
   const command=consumeProjectBudgetExtensionPermit(permit,projectKey);
   try{if(writes.has(command.expectedRevision))return refuse();writes.add(command.expectedRevision);await command.assertAuthorized();const current=await load();
    if(!current||current.revision!==command.expectedRevision||JSON.stringify(current.data)!==JSON.stringify(command.before)||JSON.stringify(command.after.reservations)!==JSON.stringify(current.data.reservations)||command.after.grantSha256===current.data.grantSha256)return refuse();
@@ -67,3 +78,6 @@ function createNativeBudgetStore(options:Readonly<{projectKey:string;token:strin
 export function createProjectModelBudgetGitHubStore(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>):ProjectModelBudgetStore{return createNativeBudgetStore(options).normal;}
 /** Separate one-use extension API; never returned to the model budget ledger. */
 export function createProjectModelBudgetGitHubExtensionStore(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){const store=createNativeBudgetStore(options);return Object.freeze({read:store.normal.read,extend:store.extend});}
+/** GET-only reader for an exact direct-parent transition at the current head.
+ * Historical JSON or a detached sibling commit cannot establish live lineage. */
+export function createProjectModelBudgetGitHubLineageReader(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){const store=createNativeBudgetStore(options);return Object.freeze({readTransition:store.readTransition});}

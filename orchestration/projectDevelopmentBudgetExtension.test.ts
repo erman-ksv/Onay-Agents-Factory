@@ -1,4 +1,7 @@
 import {extendProjectDevelopmentBudgetWithLineageForTests as extendLineage,assertProjectGrantLineageFloor as assertFloor} from './projectGrantLineage.js';
+import {restoreProjectDevelopmentGrantLineageForTests as restoreLineage,restoreGitHubProjectDevelopmentGrantLineage} from './projectGrantLineage.js';
+import {prepareProjectStateProtectionForTests} from '../github/projectStateProtection.js';
+import {createHash} from 'node:crypto';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {authorizeProjectBudget,reconcileProjectBudgetHistory,projectBudgetApprovalDigest} from './projectBudgetAuthorization.js';
 import {inspectProjectDevelopmentBudgetExtension as inspect,authorizeProjectDevelopmentBudgetExtension as authorize,consumeProjectBudgetExtensionPermit,projectBudgetStateDigest} from './projectBudgetExtensionAuthorization.js';
@@ -30,4 +33,28 @@ test('unknown acknowledgement or wrong readback cannot mint any lineage',async()
 test('stale expected state refuses before extension and later revocation invalidates lineage',async()=>{
  const f=await fixture(),next=await f.controller(f.proposed,102);await assert.rejects(()=>extendLineage({previous:f.previous,next,expectedRevision:'0'.repeat(64),state:f.state},adapter(f)));
  const cap=await extendLineage({previous:f.previous,next,expectedRevision:'e'.repeat(64),state:f.state},adapter(f));f.revoke();await assert.rejects(()=>assertFloor(cap,next,{projectKey:next.projectKey,grantSha256:f.previous.grantSha256,used:{requests:1,requestBytes:4668,reservedTokens:3012}},'simulated'));
+});
+async function coldFixture(){
+ const f=await fixture(),next=await f.controller(f.proposed,102),beforeHead='1'.repeat(40),afterHead='2'.repeat(40),hash=(s:string)=>createHash('sha256').update(s).digest('hex'),inspection=inspect(f.previous,f.state,next.grant);
+ f.save(inspection.newState,hash(afterHead));let bypass=false,reads=0;
+ const transport:typeof fetch=async(url,init)=>{assert.equal(init?.method,'GET');const rules=[{type:'deletion'},{type:'non_fast_forward'}],source='erman-ksv/Onay-Agents-Factory';return Response.json(String(url).includes('/rulesets/')?{id:1,source_type:'Repository',source,target:'branch',enforcement:'active',bypass_actors:bypass?[{actor_id:1}]:[],rules}:rules.map(r=>({...r,ruleset_id:1,ruleset_source_type:'Repository',ruleset_source:source})));};
+ const stateProtection=await prepareProjectStateProtectionForTests({controller:next,token:'offline'},transport),transition={before:{revision:hash(beforeHead),data:f.state},after:{revision:hash(afterHead),data:inspection.newState}},options={previous:f.previous,next,beforeHead,afterHead,stateProtection};
+ const reader={readTransition:async(before:string,after:string)=>{assert.equal(before,beforeHead);assert.equal(after,afterHead);reads++;return structuredClone(transition);}};
+ return {f,next,options,reader,transition,reads:()=>reads,changeRules:()=>{bypass=true;},floor:{projectKey:next.projectKey,grantSha256:f.previous.grantSha256,used:inspection.used}};
+}
+test('cold lineage is recreated from the verified transition without extension, reset or task execution',async()=>{
+ const c=await coldFixture(),cap=await restoreLineage(c.options,c.reader);assert.equal(c.reads(),2);assert.equal(c.f.writes(),0);await assertFloor(cap,c.next,c.floor,'simulated');await assert.rejects(()=>assertFloor(cap,c.next,c.floor,'native'));await assert.rejects(()=>assertFloor({...cap},c.next,c.floor,'simulated'));
+ await assert.rejects(()=>restoreGitHubProjectDevelopmentGrantLineage({...c.options,token:'offline',reader:c.reader} as any));assert.equal(c.reads(),2);
+});
+test('cold lineage refuses wrong revisions, replaced reservations and mismatching live state',async()=>{
+ for(const kind of ['revision','reservation','live']){const c=await coldFixture();if(kind==='revision')c.transition.before.revision='0'.repeat(64);else if(kind==='reservation')c.transition.after.data={...c.transition.after.data,reservations:[]};else c.f.save({...c.transition.after.data,reservations:[]},'f'.repeat(64));await assert.rejects(()=>restoreLineage(c.options,c.reader));assert.equal(c.f.writes(),0);}
+});
+test('cold lineage refuses copied protection, changed rules and revoked OWNER decisions',async()=>{
+ const a=await coldFixture();await assert.rejects(()=>restoreLineage({...a.options,stateProtection:{...a.options.stateProtection}},a.reader));assert.equal(a.reads(),0);
+ const b=await coldFixture();b.changeRules();await assert.rejects(()=>restoreLineage(b.options,b.reader));assert.equal(b.reads(),0);
+ const c=await coldFixture();c.f.revoke();await assert.rejects(()=>restoreLineage(c.options,c.reader));assert.equal(c.reads(),0);
+});
+test('cold lineage refuses a transition changed during verification and checks later revocation',async()=>{
+ const c=await coldFixture();let count=0;await assert.rejects(()=>restoreLineage(c.options,{readTransition:async(a,b)=>{const v=await c.reader.readTransition(a,b);if(++count===2)v.after.revision='0'.repeat(64);return v;}}));
+ const d=await coldFixture(),cap=await restoreLineage(d.options,d.reader);d.f.revoke();await assert.rejects(()=>assertFloor(cap,d.next,d.floor,'simulated'));assert.equal(d.f.writes(),0);
 });
