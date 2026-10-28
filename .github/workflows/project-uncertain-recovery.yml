@@ -1,0 +1,74 @@
+name: One bounded uncertain recovery
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/recovery-host.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-bounded-uncertain-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'f4c220ffbe987054c5a508930f2f424a9c8ed3ef'
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: activation-config
+          sparse-checkout: .factory/recovery-host.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify independently reviewed host pin and compile immutable source
+        env:
+          EXPECTED_RECOVERY_HOST_SHA256: '7d70210be2fbd36ebbcf311d3068591d53a6c528ee9ff1499aae018296250cb9'
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          const expected=process.env.EXPECTED_RECOVERY_HOST_SHA256;assert.match(expected,/^[a-f0-9]{64}$/);const bytes=readFileSync('activation-config/.factory/recovery-host.json');assert.equal(createHash('sha256').update(bytes).digest('hex'),expected);writeFileSync('.factory/recovery-host.json',bytes);
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          const {prepareProjectUncertainRecoveryHost}=await import('./orchestration/projectUncertainRecoveryHost.js');prepareProjectUncertainRecoveryHost(bytes.toString('utf8'),expected,readFileSync('.factory/runtime-project-manifest.json','utf8'),readFileSync('.factory/recovery-preflight.json','utf8'));
+          JS
+      - name: Verify entrypoint refusal before exposing credentials
+        run: node scripts/project-uncertain-recovery.test.mjs
+      - name: Prepare independently pinned Node and browser images
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {execFileSync} from 'node:child_process';
+          const v=JSON.parse(readFileSync('.factory/runtime-project-manifest.json','utf8')),images=[...new Set(v.taskPolicies.flatMap(p=>[p.node.image,...(p.browser?[p.browser.image]:[])]))];assert.ok(images.length<=8);for(const image of images){assert.match(image,/^(?:node|mcr\.microsoft\.com\/playwright)@sha256:[a-f0-9]{64}$/);execFileSync('/usr/bin/docker',['pull',image],{stdio:'inherit',timeout:120000,env:{PATH:'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}});}
+          JS
+      - name: Run exactly one separately approved uncertain recovery
+        env:
+          EXPECTED_RECOVERY_HOST_SHA256: '7d70210be2fbd36ebbcf311d3068591d53a6c528ee9ff1499aae018296250cb9'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: 'qwen/qwen3-32b'
+          AGENT_FACTORY_PROVIDER: 'groq'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
+          AGENT_FACTORY_PROJECT_LIVE_APPROVED: 'ONE_FREE_BOUNDED_RUN'
+        run: node scripts/project-uncertain-recovery.mjs > uncertain-recovery-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bounded-uncertain-recovery-result
+          path: uncertain-recovery-result.json
+          if-no-files-found: warn
+          retention-days: 7
