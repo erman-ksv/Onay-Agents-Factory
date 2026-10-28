@@ -23,7 +23,7 @@ export function createProjectTaskModelTransport(options:Options){
  try{
   const env={...options.env};if(env.AGENT_FACTORY_PROVIDER!=='groq'||env.ONAY_TEAM_FREE_TIER_CONFIRMED!=='true'||env.AGENT_FACTORY_PROJECT_LIVE_APPROVED!=='ONE_FREE_BOUNDED_RUN'||env.AGENT_FACTORY_LEGAL_ENABLED!=='false'||typeof options.assertRequestContext!=='function'||typeof options.checkpoint!=='function')throw Error();
   const config=selectProviderConfig(env);if(config.provider!=='groq'||config.baseURL!=='https://api.groq.com/openai/v1'||!/^[A-Za-z0-9][A-Za-z0-9_./-]{0,119}$/.test(config.model)||secrets(config.model))throw Error();const {apiKey,model}=config;
-  const taskId=options.taskId,bound=consumeProjectExecutionAdmission(options.admission,options.plan,taskId),assertContext=options.assertRequestContext,checkpoint=options.checkpoint,upstream=options.transport??fetch,timing={...options.timing};
+  const taskId=options.taskId,bound=consumeProjectExecutionAdmission(options.admission,options.plan,taskId);if(bound.requiredModel&&bound.requiredModel!==model)throw Error();const assertContext=options.assertRequestContext,checkpoint=options.checkpoint,upstream=options.transport??fetch,timing={...options.timing};
   const clock=timing.now??(()=>performance.now()),wait=timing.wait??(ms=>new Promise<void>(resolve=>setTimeout(resolve,ms))),correctionStart=clock();let correctionCooled=bound.attempt!==2&&!bound.cooldownBeforeFirstRequest;
   if(typeof upstream!=='function')throw Error();let stopped=false,busy=false,providerCallsSent=0,reasonCode='ready',stage='ready';const abort=new AbortController();
   const refuse=(code='request-stopped'):never=>{stopped=true;if(reasonCode==='ready')reasonCode=code;abort.abort();throw Error(PROJECT_TASK_MODEL_ERROR);};
