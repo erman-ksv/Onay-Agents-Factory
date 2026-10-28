@@ -40,6 +40,9 @@ export function prepareProjectRuntimeManifest(body:string,expectedSha256:string)
  const cap=Object.freeze({}) as PreparedProjectRuntimeManifest;records.set(cap,{plan,target,ciPolicy,taskPolicies:Object.freeze(taskPolicies),history:v.history,decision:Object.freeze({...v.decision}),pin:v.archivePin===null?null:Object.freeze({...v.archivePin}),candidateSha:v.candidateSha,mode:v.mode??'continue',sha256:expectedSha256,used:false});return cap;
 }catch{return refuse();}}
 export function projectRuntimeManifestMetadata(value:PreparedProjectRuntimeManifest){const r=records.get(value);if(!r)return refuse();return Object.freeze({manifestSha256:r.sha256,mode:r.mode,repository:r.plan.repository,planFingerprint:r.plan.fingerprint,targetProfileSha256:r.plan.targetProfileSha256,taskIds:r.plan.tasks.map(t=>t.id),candidateSha:r.candidateSha,archivePin:r.pin,executionAuthorized:false as const});}
+/** Read-only host policy handoff. It does not bootstrap an initial task,
+ * consume the manifest or provide any model/budget/task execution authority. */
+export function projectRuntimeManifestInspectionContext(value:PreparedProjectRuntimeManifest){const r=records.get(value);if(!r||r.used)return refuse();return Object.freeze({plan:r.plan,target:r.target,history:JSON.parse(JSON.stringify(r.history)) as ProjectBudgetHistory,decision:r.decision,ciPolicy:r.ciPolicy,taskPolicies:r.taskPolicies});}
 
 /** Native cold bootstrap over existing state only. No storage injection,
  * initialize(), grant extension, synthetic fixture, or key rotation. */

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "kind": "inspect-uncertain-recovery",
+  "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "budgetHead": "2d489136b4e9758133fce6598157feb94743f732",
+  "binding": {
+    "taskId": "calculator-input-repair-202610-29e2a8-t01",
+    "archiveHead": "1e00aed68632320ceaaa36bfd668fd164e08d21c",
+    "archiveSequence": 2,
+    "budgetStateSha256": "87a76b84f0df248fcc0781cff467724163450e366c4e4ba5a1b88ff70b9719fe",
+    "originalRequestSha256": "485f5ea4be24424109302fb0b67c616ca38f75a96449236f5af240dc16d7f662"
+  }
+}
