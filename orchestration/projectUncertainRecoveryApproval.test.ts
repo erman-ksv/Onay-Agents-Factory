@@ -3,6 +3,11 @@ import {createProjectTargetRegistry,registeredProjectTargetProfile} from './proj
 import {authorizeProjectBudget,reconcileProjectBudgetHistory,projectBudgetApprovalDigest} from './projectBudgetAuthorization.js';
 import {proposeProjectUncertainRecoveryApproval as propose,authorizeProjectUncertainRecoveryForTests as approve,consumeProjectUncertainRecoveryApproval as consume,authorizeProjectUncertainRecovery} from './projectUncertainRecoveryApproval.js';
 import {createProjectUncertainRecoveryFixtureForTests as fixture} from '../config/fixtures/projectUncertainRecoveryFixture.js';
+import {verifyProjectUncertainRecoveryApproval as verify} from './projectUncertainRecoveryApproval.js';
+test('pre-extension verification rechecks OWNER without consuming approval or accepting copies',async()=>{
+ const f=await fixture(),cap=await approve(f.options,f.transport),c=f.options.controller,b=f.options.binding;await verify(cap,c,b,'simulated');await assert.rejects(()=>verify({...cap},c,b,'simulated'));await assert.rejects(()=>verify(cap,c,b,'native'));await consume(cap,c,b,'simulated');await assert.rejects(()=>verify(cap,c,b,'simulated'));assert.equal(f.writes(),0);
+ const g=await fixture(),other=await approve(g.options,g.transport);g.revoke();await assert.rejects(()=>verify(other,g.options.controller,g.options.binding,'simulated'));
+});
 
 test('budget approval alone cannot approve recovery; exact separate OWNER decision gives no execution',async()=>{
  const f=await fixture(),cap=await approve(f.options,f.transport);await assert.rejects(()=>consume({...cap},f.options.controller,f.options.binding,'simulated'));await assert.rejects(()=>consume(cap,f.options.controller,f.options.binding,'native'));

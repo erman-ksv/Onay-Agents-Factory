@@ -3,6 +3,14 @@ import {createProjectRecoveryWorkerFixtureForTests as fixture} from '../config/f
 import {createProjectUncertainRecoveryRuntimeForTests,createProjectCiRuntimeForTests} from './projectNextTaskWorker.js';
 import {createProjectCiReaderForTests} from '../github/projectCi.js';import {confirmProjectCandidateCi} from '../github/projectPublisher.js';
 import {materializeProjectRuntimeArchive} from './projectRuntimeRecovery.js';
+import {runProjectCiContinuationForTests} from './projectCiContinuation.js';
+test('changed-grant recovery carries genuine lineage through the bounded CI loop and successor',async()=>{
+ const f=await fixture('normal',true);try{
+  assert.notEqual(f.previous.grantSha256,f.controller.grantSha256);const first=await createProjectUncertainRecoveryRuntimeForTests(f.options,f.injections).recover(f.ticket);assert.equal(f.calls(),4);
+  for(const lineage of [undefined,{...f.lineage!}]){const root=join(f.root,'refuse-'+(lineage?'copy':'missing'));mkdirSync(root,{mode:0o700});await assert.rejects(()=>runProjectCiContinuationForTests({...f.options,directory:root,candidateSha:first.candidate.candidateSha,polling:{maxPolls:4,intervalMs:10000},...(lineage?{lineage:lineage as any}:{})},f.injections,{now:()=>0,wait:async()=>{}}));assert.equal(f.calls(),4);}
+  const root=join(f.root,'bounded-loop');mkdirSync(root,{mode:0o700});const result=await runProjectCiContinuationForTests({...f.options,directory:root,lineage:f.lineage!,candidateSha:first.candidate.candidateSha,polling:{maxPolls:4,intervalMs:10000}},f.injections,{now:()=>0,wait:async()=>{}});assert.equal(result.status,'plan-ci-recorded');assert.equal(f.calls(),8);assert.equal((await f.controller.inspect()).used.requests,9);assert.equal(f.gitCalls.filter(c=>c.includes('push')).length,2);
+ }finally{f.cleanup();}
+});
 test('claimed recovery runs four independent roles, host tests, publication, exact CI and successor',async()=>{
  const f=await fixture();try{
   const runtime=createProjectUncertainRecoveryRuntimeForTests(f.options,f.injections),first=await runtime.recover(f.ticket);assert.equal(f.calls(),4);assert.equal(first.candidate.parentSha,f.baseSha);assert.ok(f.clock()>=60000);assert.equal((await f.controller.inspect()).used.requests,5);

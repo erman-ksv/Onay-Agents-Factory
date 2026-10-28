@@ -2,6 +2,7 @@ import {join} from 'node:path';
 import {projectPlanBudgetIdentity} from './projectPlan.js';
 import {isAuthorizedProjectBudgetController} from './projectBudgetAuthorization.js';
 import {materializeProjectRuntimeArchive} from './projectRuntimeRecovery.js';
+import type {ProjectGrantLineage} from './projectGrantLineage.js';
 import {readProjectHostEnvelopeFile} from './projectCorrectionCheckpoint.js';
 import {createProjectCiDelivery,createProjectCiDeliveryForTests} from './projectCiDelivery.js';
 import {createProjectCiRuntime,createProjectCiRuntimeForTests} from './projectNextTaskWorker.js';
@@ -13,7 +14,7 @@ import {createProjectCiReader,createProjectCiReaderForTests,projectCiEventRunMat
 export const PROJECT_CI_EVENT_ERROR='CI event entrypoint refused or uncertain. Preserve the archive, latest trusted pin and budget; no automatic task replay, new grant or publication retry is authorized.';
 const refuse=():never=>{throw Error(PROJECT_CI_EVENT_ERROR);};
 type RuntimeOptions=Parameters<typeof createProjectCiRuntime>[0];
-type Options=Omit<RuntimeOptions,'directory'|'deliveryDirectory'>&Readonly<{directory:string}>;
+type Options=Omit<RuntimeOptions,'directory'|'deliveryDirectory'>&Readonly<{directory:string;lineage?:ProjectGrantLineage}>;
 type Injections=Parameters<typeof createProjectCiRuntimeForTests>[1];
 type Event=Readonly<{version:1;repository:string;branch:string;candidateSha:string;runId:number;runAttempt:1;conclusion:'success'|'failure'|'cancelled'|'timed_out'}>;
 
@@ -35,7 +36,7 @@ export function runProjectCiEvent(options:Options,body:string){return run(option
 /** Injection never produces native publication/CI authority. */
 export function runProjectCiEventForTests(options:Options,body:string,injections:Injections){return run(options,body,injections);}
 async function run(options:Options,body:string,injections?:Injections){try{
- if(Object.keys(options).some(k=>!['plan','controller','env','ciPolicy','taskPolicies','key','directory','stateProtection','archive'].includes(k)))return refuse();
+ if(Object.keys(options).some(k=>!['plan','controller','env','ciPolicy','taskPolicies','key','directory','stateProtection','archive','lineage'].includes(k)))return refuse();
  const {plan,controller,archive}=options,identity=projectPlanBudgetIdentity(plan),mode=injections?'simulated':'native',event=parseEvent(body);
  if(!isAuthorizedProjectBudgetController(controller)||controller.operationMode!=='development'||plan.status!=='planned'||controller.identity.projectId!==identity.projectId||controller.identity.repository!==identity.repository||controller.identity.planFingerprint!==identity.planFingerprint||controller.identity.ownerFingerprint!==identity.ownerFingerprint||JSON.stringify(controller.identity.taskIds)!==JSON.stringify(identity.taskIds)||controller.targetProfileSha256!==plan.targetProfileSha256||options.ciPolicy.targetProfileSha256!==plan.targetProfileSha256)return refuse();
  assertProjectCheckpointArchive(archive,controller,mode);
@@ -46,7 +47,7 @@ async function run(options:Options,body:string,injections?:Injections){try{
  if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);
  if(!archive.snapshot().pin||archive.snapshot().stopped)return refuse();
  const current=await archive.inspect();if(!current)return refuse();
- const files=await materializeProjectRuntimeArchive(archive,controller,options.key,options.directory,mode);
+ const files=await materializeProjectRuntimeArchive(archive,controller,options.key,options.directory,mode,options.lineage);
  const deliveryOptions={plan,controller,key:options.key,directory:files.journal};
  const journal=await(injections?createProjectCiDeliveryForTests(deliveryOptions):createProjectCiDelivery(deliveryOptions)).inspect();
  // A verified encrypted journal can reject an old duplicate even after the
@@ -66,7 +67,7 @@ async function run(options:Options,body:string,injections?:Injections){try{
  if(evidence.status!=='passed'||!projectCiEventRunMatches(evidence,event.runId,event.runAttempt))return refuse();
  const confirmation=await confirmProjectCandidateCi(candidate,evidence);
  if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);
- const runtimeOptions={...options,directory:files.runtime,deliveryDirectory:files.journal};
+ const {lineage,...withoutLineage}=options;const runtimeOptions={...withoutLineage,directory:files.runtime,deliveryDirectory:files.journal};
  const runtime=injections?createProjectCiRuntimeForTests(runtimeOptions,injections):createProjectCiRuntime(runtimeOptions);
  return Object.freeze({status:'delivered' as const,...await runtime.advance(confirmation),archivePin:archive.snapshot().pin,wholeProjectCompleted:false as const});
 }catch{return refuse();}}

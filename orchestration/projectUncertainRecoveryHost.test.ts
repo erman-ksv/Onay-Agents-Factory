@@ -1,0 +1,17 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync,mkdtempSync,rmSync,chmodSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';import {createHash} from 'node:crypto';
+import {prepareProjectUncertainRecoveryHost as prepare,runProjectUncertainRecoveryHost as run} from './projectUncertainRecoveryHost.js';
+const hash=(s:string)=>createHash('sha256').update(s).digest('hex'),runtime=readFileSync(new URL('../.factory/runtime-project-manifest.json',import.meta.url),'utf8'),preflight=readFileSync(new URL('../.factory/recovery-preflight.json',import.meta.url),'utf8');
+const scope={version:1,kind:'extend-and-recover-uncertain-task',runtimeManifestSha256:hash(runtime),preflightSha256:hash(preflight),extensionDecision:{issueNumber:75,commentId:101,bodySha256:'a'.repeat(64)},recoveryDecision:{issueNumber:75,commentId:102,bodySha256:'b'.repeat(64)}};
+const cap=()=>{const body=JSON.stringify(scope);return prepare(body,hash(body),runtime,preflight);},env={GITHUB_REPOSITORY:'erman-ksv/Onay-Agents-Factory',GITHUB_RUN_ATTEMPT:'1',AGENT_FACTORY_LEGAL_ENABLED:'false',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_PROJECT_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',AGENT_FACTORY_ENABLE_GITHUB_WRITES:'true',AGENT_FACTORY_PROVIDER:'groq',GROQ_MODEL:'qwen/qwen3-32b',GROQ_API_KEY:'offline-only',GITHUB_TOKEN:'offline-only',FACTORY_STATE_TOKEN:'offline-only'};
+test('recovery host requires three pinned scopes and distinct genuine decision references',()=>{
+ const body=JSON.stringify(scope);assert.ok(cap());assert.throws(()=>prepare(body,'0'.repeat(64),runtime,preflight));assert.throws(()=>prepare(body,hash(body),runtime+' ',preflight));assert.throws(()=>prepare(body,hash(body),runtime,preflight+' '));
+ for(const change of [{kind:'first-task'},{extra:true},{extensionDecision:{...scope.extensionDecision,commentId:0}},{recoveryDecision:scope.extensionDecision},{extensionDecision:JSON.parse(runtime).decision}]){const v=JSON.stringify({...scope,...change});assert.throws(()=>prepare(v,hash(v),runtime,preflight));}
+});
+test('copied host scopes, reruns, wrong provider and unprivate roots stop before any HTTP',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'recovery-host-test-')),native=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;throw Error('No HTTP');};try{
+  await assert.rejects(()=>run({...cap()},env,root));for(const change of [{GITHUB_RUN_ATTEMPT:'2'},{AGENT_FACTORY_ENABLE_GITHUB_WRITES:'false'},{GROQ_MODEL:'other'},{AGENT_FACTORY_PROVIDER:'openai'}])await assert.rejects(()=>run(cap(),{...env,...change},root));chmodSync(root,0o755);await assert.rejects(()=>run(cap(),env,root));assert.equal(calls,0);
+ }finally{globalThis.fetch=native;rmSync(root,{recursive:true,force:true});}
+});
+test('native OWNER refusal cannot extend, claim, call models or retry the consumed host scope',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'recovery-host-test-')),native=globalThis.fetch;let calls=0;globalThis.fetch=async(input,init)=>{calls++;assert.ok(String(input).startsWith('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/'));assert.equal(init?.method,'GET');assert.equal(init?.body,undefined);return Response.json({},{status:403});};try{const prepared=cap();await assert.rejects(()=>run(prepared,env,root));assert.ok(calls>0);const before=calls;await assert.rejects(()=>run(prepared,env,root));assert.equal(calls,before);}finally{globalThis.fetch=native;rmSync(root,{recursive:true,force:true});}
+});

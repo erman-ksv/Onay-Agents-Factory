@@ -45,3 +45,8 @@ export async function consumeProjectUncertainRecoveryApproval(cap:ProjectUncerta
  const r=records.get(cap);if(!r||r.used||r.controller!==controller||mode==='native'&&!r.native||projectBudgetApprovalDigest(binding)!==projectBudgetApprovalDigest(r.binding))return refuse();r.used=true;await r.current();
  return Object.freeze({recoveryExecutionId:r.recoveryExecutionId,assertAuthorized:r.current,executionAuthorized:false as const,budgetChangeAuthorized:false as const,replayOriginal:false as const});
 }
+/** Recheck before a separately approved extension; consuming the recovery
+ * decision is reserved for the durable claim after acknowledged extension. */
+export async function verifyProjectUncertainRecoveryApproval(cap:ProjectUncertainRecoveryApproval,controller:AuthorizedProjectBudgetController,binding:Binding,mode:'native'|'simulated'){
+ const r=records.get(cap);if(!r||r.used||r.controller!==controller||mode==='native'&&!r.native||projectBudgetApprovalDigest(binding)!==projectBudgetApprovalDigest(r.binding))return refuse();await r.current();
+}
