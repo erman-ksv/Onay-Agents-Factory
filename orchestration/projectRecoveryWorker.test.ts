@@ -4,6 +4,9 @@ import {createProjectUncertainRecoveryRuntimeForTests,createProjectCiRuntimeForT
 import {createProjectCiReaderForTests} from '../github/projectCi.js';import {confirmProjectCandidateCi} from '../github/projectPublisher.js';
 import {materializeProjectRuntimeArchive} from './projectRuntimeRecovery.js';
 import {runProjectCiContinuationForTests} from './projectCiContinuation.js';
+test('provider rejection and network failure retain charges and emit only the last numeric HTTP status',async()=>{
+ for(const mode of ['provider-401','network-failed']){const f=await fixture(mode),previous=console.error,logs:string[]=[];console.error=(value:unknown)=>{logs.push(String(value));};try{await assert.rejects(()=>createProjectUncertainRecoveryRuntimeForTests(f.options,f.injections).recover(f.ticket));assert.equal(f.calls(),1);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.gitCalls.filter(c=>c.includes('push')).length,0);assert.equal(logs.length,1);const d=JSON.parse(logs[0]!);assert.equal(d.lastProviderHttpStatus,mode==='provider-401'?401:null);assert.equal(d.reasonCode,'transport_error');assert.equal(d.providerCallsSent,1);assert.equal(d.replayAuthorized,false);assert.equal(logs.join('').includes('PRIVATE_PROVIDER_BODY_MUST_NOT_BE_LOGGED'),false);}finally{console.error=previous;f.cleanup();}}
+});
 test('changed-grant recovery carries genuine lineage through the bounded CI loop and successor',async()=>{
  const f=await fixture('normal',true);try{
   assert.notEqual(f.previous.grantSha256,f.controller.grantSha256);const first=await createProjectUncertainRecoveryRuntimeForTests(f.options,f.injections).recover(f.ticket);assert.equal(f.calls(),4);

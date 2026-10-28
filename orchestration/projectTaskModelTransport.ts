@@ -62,7 +62,9 @@ export function createProjectTaskModelTransport(options:Options){
      await bound.assertCurrent();active();stage='done';return Object.freeze({content,model,proposalVerified:false as const,publicationAuthorized:false as const,wholeAppCompleted:false as const});
     }catch{if(!stopped){stopped=true;reasonCode=wire.failure?.code??context.failure?.code??'request-failed';}abort.abort();throw Error(PROJECT_TASK_MODEL_ERROR);}finally{busy=false;}
    },
-   snapshot:()=>Object.freeze({stopped:stopped||!!wire.failure||!!context.failure,reasonCode:reasonCode==='ready'?(wire.failure?.code??context.failure?.code??'ready'):reasonCode,stage,providerCallsSent,attemptedRequests:wire.snapshot().attemptedRequests,totalRequestBytes:wire.snapshot().totalRequestBytes,reservedRunTokens:context.snapshot().reservedRunTokens,publicationAuthorized:false as const,wholeAppCompleted:false as const}),
+   // Last observed numeric status only. A later network throw can leave an
+   // earlier successful status here; null never proves that no HTTP was sent.
+   snapshot:()=>Object.freeze({stopped:stopped||!!wire.failure||!!context.failure,reasonCode:reasonCode==='ready'?(wire.failure?.code??context.failure?.code??'ready'):reasonCode,stage,providerCallsSent,attemptedRequests:wire.snapshot().attemptedRequests,totalRequestBytes:wire.snapshot().totalRequestBytes,reservedRunTokens:context.snapshot().reservedRunTokens,lastProviderHttpStatus:wire.providerHttpStatus??null,publicationAuthorized:false as const,wholeAppCompleted:false as const}),
    stop:()=>{stopped=true;if(reasonCode==='ready')reasonCode='host-stopped';abort.abort();},
   });
  }catch{throw Error(PROJECT_TASK_MODEL_ERROR);}

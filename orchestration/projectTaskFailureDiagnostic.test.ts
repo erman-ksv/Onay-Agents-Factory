@@ -12,3 +12,7 @@ test('private source, provider bodies and arbitrary error text are excluded',()=
 test('malformed or excessive counters cannot masquerade as execution evidence',()=>{
  for(const value of [null,{}, {providerCallsSent:-1,attemptedRequests:Infinity,totalRequestBytes:1.2,reservedRunTokens:16000001}]){const v=diagnostic(value);assert.equal(v.providerCallsSent,null);assert.equal(v.executionAuthorized,false);}
 });
+test('last observed HTTP status is bounded numeric metadata, never provider text or proof of outcome',()=>{
+ for(const status of [200,400,401,429,503])assert.equal(diagnostic({lastProviderHttpStatus:status}).lastProviderHttpStatus,status);
+ for(const status of [undefined,null,99,600,401.5,'401','PRIVATE_SOURCE_SENTINEL']){const r=diagnostic({lastProviderHttpStatus:status});assert.equal(r.lastProviderHttpStatus,null);assert.equal(r.executionAuthorized,false);assert.equal(JSON.stringify(r).includes('PRIVATE_SOURCE_SENTINEL'),false);}
+});
