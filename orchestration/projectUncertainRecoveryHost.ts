@@ -16,6 +16,7 @@ import {createProjectModelBudgetGitHubStore} from '../github/projectModelBudgetS
 import {createProjectCheckpointArchive} from '../github/projectCheckpointArchive.js';
 import {prepareProjectStateProtection,verifyProjectStateProtection} from '../github/projectStateProtection.js';
 import {createProjectCiReader} from '../github/projectCi.js';
+import {inspectProjectGroqReadiness} from './projectProviderReadiness.js';
 const refuse=():never=>{throw Error('Uncertain recovery host stopped. Preserve every grant, claim and charge; no automatic retry or original replay is authorized.');};
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const exact=(v:any,keys:string[])=>v&&Object.getPrototypeOf(v)===Object.prototype&&Object.keys(v).sort().join(',')===[...keys].sort().join(',');
@@ -41,6 +42,7 @@ export async function runProjectUncertainRecoveryHost(cap:PreparedProjectUncerta
  if(env.GITHUB_REPOSITORY!=='erman-ksv/Onay-Agents-Factory'||env.GITHUB_RUN_ATTEMPT!=='1'||env.AGENT_FACTORY_LEGAL_ENABLED!=='false'||env.ONAY_TEAM_FREE_TIER_CONFIRMED!=='true'||env.AGENT_FACTORY_PROJECT_LIVE_APPROVED!=='ONE_FREE_BOUNDED_RUN'||env.AGENT_FACTORY_ENABLE_GITHUB_WRITES!=='true'||env.AGENT_FACTORY_PROVIDER!=='groq'||env.GROQ_MODEL!=='qwen/qwen3-32b'||!env.GROQ_API_KEY||!env.GITHUB_TOKEN||!env.FACTORY_STATE_TOKEN)return refuse();
  if(!isAbsolute(directory)||resolve(directory)!==directory||realpathSync(directory)!==directory)return refuse();const root=lstatSync(directory);
  const guardRoot=()=>{const s=lstatSync(directory);if(!s.isDirectory()||s.ino!==root.ino||s.dev!==root.dev||(s.mode&0o777)!==0o700||process.getuid&&s.uid!==process.getuid()||realpathSync(directory)!==directory)return refuse();};guardRoot();if(readdirSync(directory).length)return refuse();
+ const providerReadiness=await inspectProjectGroqReadiness({model:env.GROQ_MODEL!,apiKey:env.GROQ_API_KEY!});if(providerReadiness.status!=='available')return refuse();guardRoot();
  const {plan,target,history,decision:oldDecision,ciPolicy,taskPolicies}=r.context,identity=projectPlanBudgetIdentity(plan),token=env.FACTORY_STATE_TOKEN!,rulesToken=env.FACTORY_READ_TOKEN||token;
  env.AGENT_FACTORY_TARGET_PROFILE=registeredProjectTargetProfile(target).id;env.AGENT_ALLOWED_REPOSITORIES=plan.repository;
  const previous=await authorizeGitHubProjectBudget({identity,history,decision:oldDecision,token,targetProfile:target}),store=createProjectModelBudgetGitHubStore({projectKey:previous.projectKey,token}),saved=await store.read();

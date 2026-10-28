@@ -18,13 +18,13 @@ jobs:
         run: |
           node --input-type=module - <<'JS'
           import {writeFileSync} from 'node:fs';
-          const model='qwen/qwen3-32b',result={version:1,model,providerMetadataRequests:0,modelGenerationRequests:0,providerHttpStatus:null,modelListed:false,modelActive:null,applicationWrites:0,budgetWrites:0,archiveWrites:0,executionAuthorized:false};
+          const model='qwen/qwen3-32b',candidates=['qwen/qwen3-32b','openai/gpt-oss-120b','openai/gpt-oss-20b','llama-3.3-70b-versatile'],result={version:1,model,providerMetadataRequests:0,modelGenerationRequests:0,providerHttpStatus:null,modelListed:false,modelActive:null,candidates:[],applicationWrites:0,budgetWrites:0,archiveWrites:0,executionAuthorized:false};
           try{
             if(process.env.GITHUB_REPOSITORY!=='erman-ksv/Onay-Agents-Factory'||process.env.GITHUB_RUN_ATTEMPT!=='1'||!process.env.GROQ_API_KEY)throw Error('Unverified readiness host');
             result.providerMetadataRequests=1;const r=await fetch('https://api.groq.com/openai/v1/models',{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+process.env.GROQ_API_KEY,Accept:'application/json'}});result.providerHttpStatus=r.status;
             if(r.status!==200||!r.body){void r.body?.cancel().catch(()=>{});throw Error('Provider metadata unavailable');}
             const reader=r.body.getReader(),parts=[];let size=0;try{for(;;){const p=await reader.read();if(p.done)break;size+=p.value.byteLength;if(size>65536){await reader.cancel();throw Error('Metadata too large');}parts.push(p.value);}}finally{reader.releaseLock();}
-            const v=JSON.parse(Buffer.concat(parts).toString('utf8'));if(!Array.isArray(v.data)||v.data.length>512)throw Error('Invalid metadata');const found=v.data.filter(m=>m?.id===model);if(found.length>1)throw Error('Duplicate model metadata');result.modelListed=found.length===1;result.modelActive=typeof found[0]?.active==='boolean'?found[0].active:null;
+            const v=JSON.parse(Buffer.concat(parts).toString('utf8'));if(!Array.isArray(v.data)||v.data.length>512)throw Error('Invalid metadata');result.candidates=candidates.map(id=>{const rows=v.data.filter(m=>m?.id===id);if(rows.length>1)throw Error('Duplicate metadata');return {model:id,listed:rows.length===1,active:typeof rows[0]?.active==='boolean'?rows[0].active:null};});const found=v.data.filter(m=>m?.id===model);if(found.length>1)throw Error('Duplicate model metadata');result.modelListed=found.length===1;result.modelActive=typeof found[0]?.active==='boolean'?found[0].active:null;
             if(!result.modelListed||result.modelActive===false)throw Error('Reviewed model unavailable');
           }catch{process.exitCode=1;}finally{const body=JSON.stringify(result);writeFileSync('provider-readiness.json',body+'\n');console.log(body);}
           JS
