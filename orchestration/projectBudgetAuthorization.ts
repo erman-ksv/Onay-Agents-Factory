@@ -42,10 +42,19 @@ function carryoverShape(input:unknown):ProjectBudgetCarryover{
  * not relabel old development as new planning or infer missing history as 0.
  * Pins cover the old grant AND every reservation, including failed requests. */
 export async function verifyProjectBudgetCarryover(input:ProjectBudgetCarryover,token:string,transport?:typeof fetch){try{
- const c=carryoverShape(input),store=createProjectModelBudgetGitHubStore({projectKey:c.projectKey,token,...(transport?{transport}:{})}),state=await store.read();if(!state||state.revision!==hash(c.head))return refuse();
+ return await createCarryoverVerifier(input,token,transport)();
+}catch{return refuse();}}
+// Reuse one private immutable-object cache per controller, while every
+// authorization still reads the historical ledger's LIVE ref and exact pin.
+// This does not memoize the carryover proof or the OWNER decision.
+function createCarryoverVerifier(input:ProjectBudgetCarryover,token:string,transport?:typeof fetch){
+ const c=carryoverShape(input),store=createProjectModelBudgetGitHubStore({projectKey:c.projectKey,token,...(transport?{transport}:{})});
+ return async()=>{try{
+ const state=await store.read();if(!state||state.revision!==hash(c.head))return refuse();
  const snapshot=await openProjectModelBudget(c.grant,{read:async()=>state,compareAndSwap:async()=>refuse()}).inspect(),evidenceSha256=projectBudgetApprovalDigest({version:1,projectKey:c.projectKey,head:c.head,grantSha256:state.data&&plain(state.data)?state.data.grantSha256:null,used:snapshot.used,state:state.data});
  if(canonical(snapshot.used)!==canonical(c.used)||evidenceSha256!==c.evidenceSha256)return refuse();return Object.freeze({projectKey:c.projectKey,head:c.head,used:snapshot.used,evidenceSha256,modelCalls:0 as const,stateWrites:0 as const});
-}catch{return refuse();}}
+ }catch{return refuse();}};
+}
 export type ProjectOwnerDecision=Readonly<{issueNumber:number;commentId:number;bodySha256:string}>;
 declare const scopeBrand:unique symbol;
 export type AuthorizedProjectTaskScope=Readonly<{[scopeBrand]:true}>;
@@ -72,10 +81,11 @@ export async function authorizeProjectBudget(options:Readonly<{identity:ProjectB
   const profile=targetBinding({...options,identity}),target=profile?options.targetProfile:undefined;
   if(!safeId(identity.projectId)||!SHA.test(identity.planFingerprint)||!SHA.test(identity.ownerFingerprint)||identity.taskIds.length<1||identity.taskIds.length>64||identity.taskIds.some(id=>!safeId(id))||new Set(identity.taskIds).size!==identity.taskIds.length||!Number.isSafeInteger(decision.issueNumber)||decision.issueNumber<1||!Number.isSafeInteger(decision.commentId)||decision.commentId<1||!SHA.test(decision.bodySha256)||!token)return refuse();
   const historyInput=JSON.parse(canonical(options.history)) as ProjectBudgetHistory,history=reconcileProjectBudgetHistory(historyInput,identity);let lastTime=clock();if(!Number.isFinite(lastTime))return refuse();let expectedDocument:string|undefined;let operationMode:'development'|'read-only-review'|undefined;let expiresAt:number|undefined;let revoked=false;
+  const verifyCarryover=historyInput.carryover?createCarryoverVerifier(historyInput.carryover,token,transport):undefined;
   function touchClock(){lastTime=Math.max(lastTime,clock());if(!Number.isFinite(lastTime))return refuse();return lastTime;}
   async function readApproval(){
    touchClock();
-   if(historyInput.carryover)await verifyProjectBudgetCarryover(historyInput.carryover,token,transport);
+   if(verifyCarryover)await verifyCarryover();
    const r=await transport('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/issues/comments/'+decision.commentId,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'}});
    if(r.status!==200||!r.body){void r.body?.cancel().catch(()=>undefined);return refuse();}const reader=r.body.getReader(),parts:Uint8Array[]=[];let size=0;try{for(;;){const p=await reader.read();if(p.done)break;size+=p.value.byteLength;if(size>32768){await reader.cancel();return refuse();}parts.push(p.value);}}finally{reader.releaseLock();}
    const c=JSON.parse(Buffer.concat(parts).toString('utf8')),base='https://github.com/erman-ksv/Onay-Agents-Factory/';
