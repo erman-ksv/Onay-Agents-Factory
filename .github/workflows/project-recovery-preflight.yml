@@ -44,7 +44,13 @@ jobs:
           FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
           AGENT_FACTORY_LEGAL_ENABLED: 'false'
           ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
-        run: node scripts/project-recovery-preflight.mjs > recovery-preflight-result.json
+        run: |
+          node --input-type=module - <<'JS' > recovery-preflight-result.json
+          const native=globalThis.fetch;
+          globalThis.fetch=async(input,init)=>{const path=new URL(String(input)).pathname,family=path.includes('/rulesets/')?'ruleset':path.includes('/rules/')?'effective-rules':path.includes('/issues/')?'owner-approval':path.includes('/git/')?'git-metadata':path.includes('/actions/')?'ci-metadata':'repository-metadata';const r=await native(input,init);console.error(JSON.stringify({version:1,event:'preflight-http',family,status:r.status}));return r;};
+          const {inspectRecoveryPreflight}=await import('./scripts/project-recovery-preflight.mjs');
+          try{console.log(JSON.stringify(await inspectRecoveryPreflight(process.env)));}catch{console.error('Read-only preflight refused. Preserve all state.');process.exitCode=1;}
+          JS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
