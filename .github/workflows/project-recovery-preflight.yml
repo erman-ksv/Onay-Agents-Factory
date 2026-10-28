@@ -38,7 +38,7 @@ jobs:
       - name: Read native owner, protected budget, base CI and encrypted archive
         env:
           FACTORY_STATE_TOKEN: ${{ github.token }}
-          FACTORY_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
           FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
