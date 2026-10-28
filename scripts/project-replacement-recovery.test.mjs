@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';
+import {runReviewedReplacement} from './project-replacement-recovery.mjs';
+const hash=createHash('sha256').update(readFileSync(new URL('../.factory/replacement-preflight.json',import.meta.url))).digest('hex'),env={FACTORY_REPLACEMENT_MODE:'inspect',EXPECTED_REPLACEMENT_SCOPE_SHA256:hash,GITHUB_REPOSITORY:'erman-ksv/Onay-Agents-Factory',GITHUB_RUN_ATTEMPT:'1',AGENT_FACTORY_LEGAL_ENABLED:'false',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_PROVIDER:'groq',GROQ_MODEL:'openai/gpt-oss-120b',GROQ_API_KEY:'offline-only',GITHUB_TOKEN:'offline-only',FACTORY_STATE_TOKEN:'offline-only'};
+test('missing independent mode or pin refuses before all network operations',async()=>{
+ const native=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;throw Error('No network');};try{await assert.rejects(()=>runReviewedReplacement({}));await assert.rejects(()=>runReviewedReplacement({...env,FACTORY_REPLACEMENT_MODE:'event-controlled'}));assert.equal(calls,0);}finally{globalThis.fetch=native;}
+});
+test('read-only entrypoint allows only metadata GET and restores transport after refusal',async()=>{
+ const native=globalThis.fetch;let calls=0;const mock=async(url,init)=>{calls++;assert.equal(String(url),'https://api.groq.com/openai/v1/models');assert.equal(init?.method,'GET');assert.equal(init?.body,undefined);return Response.json({data:[]});};globalThis.fetch=mock;try{await assert.rejects(()=>runReviewedReplacement(env));assert.equal(calls,1);assert.equal(globalThis.fetch,mock);}finally{globalThis.fetch=native;}
+});
