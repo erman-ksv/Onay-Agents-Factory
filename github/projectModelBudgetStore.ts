@@ -13,6 +13,11 @@ function createNativeBudgetStore(options:Readonly<{projectKey:string;token:strin
  if(!KEY.test(options?.projectKey)||typeof options.token!=='string'||!options.token)return refuse();
  const {projectKey,token}=options,transport=options.transport??fetch,branch='state/project-model-budget/'+projectKey,ref='refs/heads/'+branch,path='/git/ref/heads/'+encodeURIComponent(branch),writes=new Set<string>();
  if(typeof transport!=='function')return refuse();
+ // Only validated immutable Git objects are memoized, never refs or authority.
+ // Every operation still reads the live ref; a different head is validated cold.
+ // Keep this cache private to this credential-bound adapter and bounded.
+ type LoadedCommit=Readonly<{head:string;parents:readonly string[];revision:string;data:ProjectModelBudgetState}>;
+ const verifiedCommits=new Map<string,LoadedCommit>();
  async function api(endpoint:string,method='GET',body?:unknown,allowAbsent=false,allowConflict=false):Promise<any>{
   try{const response=await transport(BASE+endpoint,{method,redirect:'error',signal:AbortSignal.timeout(15000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'},...(body===undefined?{}:{body:JSON.stringify(body)})});
    if((allowAbsent&&response.status===404)||(allowConflict&&[409,422].includes(response.status))){void response.body?.cancel().catch(()=>undefined);return undefined;}
@@ -23,14 +28,15 @@ function createNativeBudgetStore(options:Readonly<{projectKey:string;token:strin
   }catch{return refuse();}
  }
  async function loadCommit(head:string){
-  if(!SHA.test(head))return refuse();const commit=await api('/git/commits/'+head);
+  if(!SHA.test(head))return refuse();const verified=verifiedCommits.get(head);if(verified)return verified;const commit=await api('/git/commits/'+head);
   if(commit.sha!==head||!SHA.test(commit.tree?.sha)||!Array.isArray(commit.parents)||commit.parents.length>1||commit.parents.some((p:any)=>!SHA.test(p?.sha)||p.sha===head))return refuse();
   const tree=await api('/git/trees/'+commit.tree.sha);if(tree.sha!==commit.tree.sha||tree.truncated!==false||!Array.isArray(tree.tree)||tree.tree.length!==1)return refuse();
   const entry=tree.tree[0];if(entry.path!==FILE||entry.mode!=='100644'||entry.type!=='blob'||!SHA.test(entry.sha))return refuse();
   const expectedTree=gitHash('tree',Buffer.concat([Buffer.from('100644 '+FILE+'\0'),Buffer.from(entry.sha,'hex')]));if(expectedTree!==tree.sha)return refuse();
   const blob=await api('/git/blobs/'+entry.sha);if(blob.sha!==entry.sha||blob.encoding!=='base64'||typeof blob.content!=='string'||blob.content.length>360000)return refuse();
   const encoded=blob.content.replace(/\s/g,''),bytes=Buffer.from(encoded,'base64');if(bytes.length>262144||bytes.toString('base64')!==encoded||gitHash('blob',bytes)!==entry.sha)return refuse();
-  return {head,parents:commit.parents.map((p:any)=>p.sha) as string[],revision:revision(head),data:parseProjectModelBudgetState(JSON.parse(bytes.toString('utf8')))};
+  const result=Object.freeze({head,parents:Object.freeze(commit.parents.map((p:any)=>p.sha) as string[]),revision:revision(head),data:parseProjectModelBudgetState(JSON.parse(bytes.toString('utf8')))});
+  if(verifiedCommits.size>=512)verifiedCommits.delete(verifiedCommits.keys().next().value!);verifiedCommits.set(head,result);return result;
  }
  async function load(){
   const target=await api(path,'GET',undefined,true);if(target===undefined)return undefined;

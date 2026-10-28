@@ -28,3 +28,20 @@ test('materialization authenticates the persistent key and refuses wrong keys, c
 test('persistent key configuration has no fallback and forbids provider or Git token reuse',()=>{
  const bytes=randomBytes(32),value=bytes.toString('base64'),valid={FACTORY_RECOVERY_KEY_ID:'runtime-host-key',FACTORY_RECOVERY_KEY_BASE64:value},key=loadProjectRuntimeRecoveryKey(valid);destroyProjectCorrectionRecoveryKey(key);for(const env of [{}, {...valid,FACTORY_RECOVERY_KEY_BASE64:'invalid'}, {...valid,FACTORY_RECOVERY_KEY_ID:''}, {...valid,GITHUB_TOKEN:value}, {...valid,GROQ_API_KEY:value}])assert.throws(()=>loadProjectRuntimeRecoveryKey(env));bytes.fill(0);
 });
+test('warm history reuses validated immutable records but rechecks the live ref and OWNER each time',async()=>{
+ const f=await fixture();try{const a=f.open();for(let i=0;i<6;i++)await a.persist(f.checkpoint());const pin=a.snapshot().pin!,b=f.open(pin),history=await b.history(),before=f.storage.requests.length;
+  for(let i=0;i<8;i++)assert.deepEqual(await b.history(),history);
+  const warm=f.storage.requests.slice(before);assert.equal(warm.length,8);assert.ok(warm.every(r=>r.method==='GET'&&r.path.startsWith('/git/ref/heads/')));
+  assert.throws(()=>{(history[0] as any).sequence=99;},TypeError);
+  f.state.owner=false;const count=f.storage.requests.length;await assert.rejects(()=>b.history(),refused);assert.equal(f.storage.requests.length,count);
+ }finally{f.cleanup();}
+});
+test('warm archive sees appended records, refuses deletion and rollback, and validates unseen objects cold',async()=>{
+ const f=await fixture();try{const a=f.open(),first=await a.persist(f.checkpoint()),second=await a.persist(f.checkpoint()),b=f.open(second);await b.history();
+  const third=await a.persist(f.checkpoint()),before=f.storage.requests.length;assert.equal((await b.history()).length,3);const reads=f.storage.requests.slice(before);assert.equal(reads.filter(r=>r.path.startsWith('/git/commits/')).length,1);
+  const missing=f.open(third);await missing.history();f.storage.state.head=undefined;await assert.rejects(()=>missing.history(),refused);f.storage.state.head=third.head;
+  const rollback=f.open(third);await rollback.history();f.storage.state.head=first.head;await assert.rejects(()=>rollback.history(),refused);f.storage.state.head=third.head;
+  const corrupted=f.open(third);await corrupted.history();await a.persist(f.checkpoint());f.storage.state.wrongBlob=true;await assert.rejects(()=>corrupted.history(),refused);
+ }finally{f.cleanup();}
+});
+

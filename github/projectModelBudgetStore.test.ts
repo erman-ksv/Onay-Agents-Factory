@@ -32,7 +32,7 @@ function server(key=projectKey){
   if(method==='PATCH'&&path==='/git/refs/heads/'+branch){assert.equal(body.force,false);const commit=commits.get(body.sha);if(body.sha!==head&&commit.parents[0]?.sha!==head)return reply({message:'Non fast forward'},422);head=body.sha;if(lostAck)throw Error('PRIVATE_REMOTE_ERROR '+token);return reply({ref,object:{type:'commit',sha:head}});}
   assert.fail('Unexpected endpoint or write');
  };
- return {transport,trace,store:()=>createProjectModelBudgetGitHubStore({projectKey:key,token,transport}),lost:()=>{lostAck=true;},hook:(fn:typeof hook)=>{hook=fn;}};
+ return {transport,trace,store:()=>createProjectModelBudgetGitHubStore({projectKey:key,token,transport}),lost:()=>{lostAck=true;},deleteRef:()=>{head=undefined;},hook:(fn:typeof hook)=>{hook=fn;}};
 }
 test('remote metadata survives a completely fresh adapter instance',async()=>{const f=server(),a=f.store();await a.compareAndSwap(undefined,initial);const before=(await a.read())!;await a.compareAndSwap(before.revision,{...initial,reservations:[entry()]});const saved=await f.store().read();assert.equal((saved!.data as ProjectModelBudgetState).reservations.length,1);assert.notEqual(saved!.revision,before.revision);assert.ok(!f.trace.some(r=>r.path.includes('/main')));});
 test('fresh remote ledgers share persisted charges and duplicate rejection',async()=>{const f=server(),a=openProjectModelBudget(grant,f.store());await a.initialize();await a.reserve(entry());const b=openProjectModelBudget(grant,f.store());assert.equal((await b.inspect()).used.requests,1);await assert.rejects(()=>b.reserve(entry()));assert.equal((await b.inspect()).used.requests,1);});
@@ -74,3 +74,21 @@ test('extension request cannot smuggle owner authority through inspect, same-com
 
 test('a legitimate prior reservation racing an extension is retained and prevents stale grant replacement',async()=>{const f=await extensionFixture(false,1),permit=await f.mint();await f.ledger.reserve({...entry('old:r2'),taskId:'task-one'});const before=(await f.f.store().read())!,count=f.f.trace.filter(r=>r.method!=='GET').length;await assert.rejects(()=>f.extension().extend(permit));assert.deepEqual(await f.f.store().read(),before);assert.equal(f.f.trace.filter(r=>r.method!=='GET').length,count);assert.equal((before.data as ProjectModelBudgetState).reservations.length,2);});
 test('development mode in either owner grant cannot authorize read-only budget extension',async()=>{for(const index of [0,1]){const f=await extensionFixture();f.docs[index].mode='development';f.comments[index].body=JSON.stringify(f.docs[index]);const changed=await f.auth(index);await assert.rejects(()=>authorizeProjectBudgetExtension(index===0?changed:f.previous,index===1?changed:f.next,f.before.revision,f.before.data));assert.deepEqual(await f.f.store().read(),f.before);}});
+test('warm ledger reads only the live ref, keeps cached data immutable and follows a new charge',async()=>{
+ const f=server(),a=f.store();await a.compareAndSwap(undefined,initial);const old=(await a.read())!,before=f.trace.length;
+ for(let i=0;i<8;i++)assert.deepEqual(await a.read(),old);
+ const warm=f.trace.slice(before);assert.equal(warm.length,8);assert.ok(warm.every(r=>r.method==='GET'&&r.path==='/git/ref/heads/'+branch));
+ assert.throws(()=>{(old.data as any).reservations.push(entry());},TypeError);
+ await f.store().compareAndSwap(old.revision,{...initial,reservations:[entry()]});const count=f.trace.length,next=(await a.read())!;
+ assert.notEqual(next.revision,old.revision);assert.equal((next.data as ProjectModelBudgetState).reservations.length,1);assert.equal(f.trace.slice(count).filter(r=>r.method==='GET').length,4);
+ const writes=f.trace.filter(r=>r.method!=='GET').length;assert.equal(await a.compareAndSwap(old.revision,{...initial,reservations:[entry('stale:r1')]}),undefined);assert.equal(f.trace.filter(r=>r.method!=='GET').length,writes);
+});
+test('warm budget cache cannot hide a deleted or malformed ref or an unvalidated new blob',async()=>{
+ for(const kind of ['missing','ref','blob']){const f=server(),a=f.store();await a.compareAndSwap(undefined,initial);const old=(await a.read())!;
+  if(kind==='missing'){f.deleteRef();assert.equal(await a.read(),undefined);continue;}
+  if(kind==='blob')await f.store().compareAndSwap(old.revision,{...initial,reservations:[entry()]});
+  f.hook((path,method,data)=>{if(method!=='GET')return data;if(path.startsWith('/git/ref/')){if(kind==='ref')data.ref='refs/heads/main';}if(kind==='blob'&&path.startsWith('/git/blobs/'))data.content=Buffer.from('PRIVATE_SOURCE').toString('base64');return data;});
+  await assert.rejects(()=>a.read(),e=>e instanceof Error&&e.message===PROJECT_MODEL_BUDGET_ERROR);
+ }
+});
+
