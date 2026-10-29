@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "kind": "inspect-stopped-recovery-replacement",
+  "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "beforeBudgetHead": "b0eab60fe92c0759ae9f8f3e57d05e6fb8e95b0e",
+  "currentDecision": {
+    "issueNumber": 75,
+    "commentId": 6489983869,
+    "bodySha256": "5e161b4abe2a5d5015e6e06a4dbf5eb4a46b5ef0994965c0b88d59b2c6e242e0"
+  },
+  "acknowledged": {
+    "beforeHead": "93eb498e73e6854e3bb4bd80546a9fdb51adc221",
+    "afterHead": "5e1429105b5696ad668ad372fecdb274ee7620c0"
+  },
+  "parentAcknowledged": {
+    "decision": {
+      "issueNumber": 75,
+      "commentId": 6475553761,
+      "bodySha256": "ed4d24ac18310cc879c500d873019d0066977686414450670949f9382dde37a5"
+    },
+    "beforeHead": "cf561df5381c65522f9691aa0fe0f420624f4906",
+    "afterHead": "d609b51c328b76d71a83c9a5be2280c379a6f983"
+  },
+  "binding": {
+    "taskId": "calculator-input-repair-202610-29e2a8-t01",
+    "archiveHead": "c364324e7a5011e983e08615bbdb7a2218043b3c",
+    "archiveSequence": 10,
+    "budgetStateSha256": "c356c2caa74416b4b716012cb5c1cd30d0bc845a697b7e8b50ddb1aba94fc19d",
+    "originalRequestSha256": "485f5ea4be24424109302fb0b67c616ca38f75a96449236f5af240dc16d7f662",
+    "model": "openai/gpt-oss-120b",
+    "failedRunId": 40831669000,
+    "failedRunSha": "a8015d324a549eae0741458fa383b228c953dee6"
+  },
+  "ancestorAcknowledged": {
+    "decision": {
+      "issueNumber": 75,
+      "commentId": 6472912771,
+      "bodySha256": "55eb8e7a35f956030f856884d7e677ba62371a3ecb559a2857ad76e2c187a923"
+    },
+    "beforeHead": "1f37b8b99a69e27fa5d583655db77763e95fb937",
+    "afterHead": "fb08d7eb3c919068a93ed0a61495b3e22c6ece62"
+  },
+  "oldestAcknowledged": {
+    "decision": {
+      "issueNumber": 75,
+      "commentId": 6459178751,
+      "bodySha256": "b464d742bd6820440fd1669d0595d4979ebf5e858ab08fff04f62c86f5d101c3"
+    },
+    "beforeHead": "2d489136b4e9758133fce6598157feb94743f732",
+    "afterHead": "3e2710a55558dc82b3e65fc62d39791e6a21bd7a"
+  }
+}
