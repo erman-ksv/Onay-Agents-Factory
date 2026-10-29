@@ -16,3 +16,7 @@ test('last observed HTTP status is bounded numeric metadata, never provider text
  for(const status of [200,400,401,429,503])assert.equal(diagnostic({lastProviderHttpStatus:status}).lastProviderHttpStatus,status);
  for(const status of [undefined,null,99,600,401.5,'401','PRIVATE_SOURCE_SENTINEL']){const r=diagnostic({lastProviderHttpStatus:status});assert.equal(r.lastProviderHttpStatus,null);assert.equal(r.executionAuthorized,false);assert.equal(JSON.stringify(r).includes('PRIVATE_SOURCE_SENTINEL'),false);}
 });
+test('post-HTTP rejection exposes only whitelisted host stage and reason, never the rejected response',()=>{
+ const value={stage:'done',lastProviderHttpStatus:200,failedReplyStage:'author-proposal',failedReplyRole:'author',replyRejectionReason:'reply-rejected',changeRejectionCode:'bounded-patch',rejectedReplyCheckpoint:'persisted',content:'PRIVATE_REPLY_MARKER'},d=diagnostic(value);assert.equal(d.failedReplyStage,'author-proposal');assert.equal(d.changeRejectionCode,'bounded-patch');assert.equal(d.rejectedReplyCheckpoint,'persisted');assert.equal(d.executionAuthorized,false);assert.equal(JSON.stringify(d).includes('PRIVATE_REPLY_MARKER'),false);
+ for(const key of ['failedReplyStage','failedReplyRole','replyRejectionReason','changeRejectionCode','rejectedReplyCheckpoint'])assert.equal(JSON.stringify(diagnostic({...value,[key]:'PRIVATE_REPLY_MARKER'})).includes('PRIVATE_REPLY_MARKER'),false);
+});
