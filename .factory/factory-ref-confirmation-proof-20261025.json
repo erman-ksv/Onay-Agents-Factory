@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "status": "authoritative-ref-and-published-snapshot-verified-readonly",
+  "runtimeSha": "27825106ab1db73ca109bbb6a147207b0354b2a5",
+  "branch": "feat/calculator-agent/calculator-pilot-step7-v1",
+  "headSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+  "nativeRefSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+  "commitEndpointSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+  "observedCommitLookupAgrees": true,
+  "snapshotFile": {
+    "path": "styles.css",
+    "exists": true,
+    "blobSha": "2b91427a8d85dfa565bb47fe5c480c63b2ff044b",
+    "sourceSha256": "d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f"
+  },
+  "adapterEndpoints": [
+    "/repos/erman-ksv/Onay-Factory-Calculator/git/ref/heads/feat%2Fcalculator-agent%2Fcalculator-pilot-step7-v1",
+    "/repos/erman-ksv/Onay-Factory-Calculator/git/commits/eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "/repos/erman-ksv/Onay-Factory-Calculator/git/trees/fed470f9a2eda05f675b739167c688ad37ef9609",
+    "/repos/erman-ksv/Onay-Factory-Calculator/git/blobs/2b91427a8d85dfa565bb47fe5c480c63b2ff044b",
+    "/repos/erman-ksv/Onay-Factory-Calculator/git/ref/heads/feat%2Fcalculator-pilot-bootstrap"
+  ],
+  "modelCalls": 0,
+  "pushes": 0,
+  "pullRequestWrites": 0,
+  "originalHistoricalFailureCauseProven": false,
+  "newLivePushVerified": false,
+  "legalEnabled": false,
+  "sourceCiRunId": 40149424637,
+  "readonlyRunId": 40149545858,
+  "readonlyJobId": 121037973170,
+  "sourceTests": {
+    "total": 2158,
+    "passed": 2158,
+    "failed": 0,
+    "typecheck": "passed"
+  },
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9"
+}

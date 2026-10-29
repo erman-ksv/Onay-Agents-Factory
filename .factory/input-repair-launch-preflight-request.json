@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "mode": "readonly-package-audit-no-models",
+  "proposedPlanFingerprint": "02b1e1662ef8ef4d7483db9e9ea65bed67e73cce15fcab1db42b284f1f2b6110",
+  "ownerApprovalCreated": false,
+  "modelCallsAuthorized": 0,
+  "budgetInitializationAuthorized": false,
+  "applicationWritesAuthorized": false,
+  "legalEnabled": false
+}

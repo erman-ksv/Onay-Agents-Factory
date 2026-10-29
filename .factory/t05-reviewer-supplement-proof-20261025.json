@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "date": "2026-10-25",
+  "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+  "status": "queued-task-candidate-verified-after-readonly-reconciliation",
+  "scope": "frozen-T05-reviewer-only-continuation",
+  "wholeAppCompleted": false,
+  "legalEnabled": false,
+  "factory": {
+    "runtimeSha": "f70d8d5dbd4f63c892f026d21f08a9ce45db83b3",
+    "sourceCiRunId": 40177852571,
+    "sourceTests": {
+      "passed": 2188,
+      "total": 2188,
+      "typecheck": "passed"
+    },
+    "eventSha": "0162c23fd8564b25b5d7f2468f7e4281b5e06758",
+    "eventCiRunId": 40178004463,
+    "liveRunId": 40178004365,
+    "executeJobId": 121122784485,
+    "replayJobId": 121123169637,
+    "artifact": [
+      {
+        "id": 12592614215,
+        "digest": "sha256:c05e24f62333d17896956d53ac42eae4b1bbfefc73a7f40041ffc04c1ba09656"
+      }
+    ],
+    "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9"
+  },
+  "budget": {
+    "ownerAllowance": {
+      "id": "owner-t05-eleven-free-calls-48000-reviewer-only-20261025",
+      "maxRequests": 11,
+      "maxReservedTokens": 48000,
+      "maxRepairs": 3
+    },
+    "inherited": {
+      "attemptedRequests": 10,
+      "totalRequestBytes": 89244,
+      "reservedRunTokens": 38023,
+      "elapsedMs": 349052
+    },
+    "final": {
+      "attemptedRequests": 11,
+      "totalRequestBytes": 102088,
+      "reservedRunTokens": 43761,
+      "elapsedMs": 351220
+    },
+    "newModelCalls": 1,
+    "newAuthorCalls": 0,
+    "newSecurityCalls": 0,
+    "newTesterCalls": 0,
+    "newReviewerCalls": 1,
+    "remainingModelCalls": 0,
+    "request": {
+      "requestBytes": 12844,
+      "unchangedProposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b"
+    },
+    "preflight": {
+      "requestBytes": 12844,
+      "conservativeReservedTokens": 5738,
+      "modelCalls": 0,
+      "beforeRemoteClaim": true
+    },
+    "automaticRetry": false
+  },
+  "proposal": {
+    "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "digest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+    "file": "test/ui.test.mjs",
+    "sha256": "5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930",
+    "bytes": 5464,
+    "exactFrozenAgentBytesVerified": true
+  },
+  "assessments": {
+    "security": {
+      "role": "security",
+      "ready": true,
+      "summary": "UI tests cover core calculator functions and error handling; no evident security flaws in input handling or DOM injection were observed in the provided test code. Lack of visibility into the core calculation module leaves arithmetic safety and server‑side concerns unverified.",
+      "findings": [],
+      "unverifiedAreas": [
+        "Potential injection or unsafe eval in src/calculator.mjs not shown",
+        "Server‑side enforcement of input validation absent in client‑only context",
+        "Rate‑limiting or DoS mitigation not applicable to static UI",
+        "Session or authentication mechanisms not present in calculator",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    },
+    "previousReviewer": {
+      "role": "reviewer",
+      "ready": false,
+      "summary": "UI test suite has a syntax issue causing test file parsing failure, blocking CI validation. The concatenated test definitions lack a separating newline, resulting in invalid JavaScript. This must be fixed before the PR can be considered ready.",
+      "findings": [
+        {
+          "severity": "blocker",
+          "message": "Missing newline before the 'backspace' test causes a syntax error in test/ui.test.mjs, preventing the test suite from loading and executing.",
+          "evidenceRefs": [
+            "changes@eac625e5830612c64fb8dafbd3d239c72adbeafd"
+          ],
+          "evidenceStatus": "supplied"
+        }
+      ],
+      "unverifiedAreas": [
+        "Potential runtime behavior of zero‑division recovery without explicit clearAll after error",
+        "Availability of helper functions (mockKeyboardEvent, handleKey) in test scope",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    },
+    "reviewer": {
+      "role": "reviewer",
+      "ready": true,
+      "summary": "All UI integration tests compile and pass; the earlier newline syntax concern is resolved as the test file remains syntactically correct. No blockers remain for the acceptance criteria.",
+      "findings": [],
+      "unverifiedAreas": [
+        "Potential layout behavior on actual devices and browsers beyond the simulated Chrome instance not covered by the current tests",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    },
+    "tester": {
+      "role": "tester",
+      "ready": true,
+      "summary": "All listed UI acceptance scenarios are exercised and passed per host evidence; no blocker findings detected.",
+      "findings": [],
+      "unverifiedAreas": [
+        "Unshown unchanged source beyond the verified arithmetic export signature",
+        "Other viewport widths, browsers, physical phones and accessibility beyond the supplied scenarios",
+        "Independent model verdicts, publication, exact-candidate CI and overall completion",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    },
+    "reusedFrom": "5e22b27158ea3fc170e3c9b0a419240edf1095c6d46312974ddffc24bbf4cb00"
+  },
+  "checks": {
+    "syntax": {
+      "kind": "node-check-exact-proposed-test-module",
+      "nodeVersion": "v24.21.0",
+      "sourceSha256": "5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930",
+      "proposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+      "exitCode": 0,
+      "sourceBytes": 5464,
+      "executesApplicationCode": false
+    },
+    "node": {
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+      "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+      "proposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+      "status": "passed",
+      "testsExecuted": true,
+      "failures": []
+    },
+    "isolatedChrome": "passed in authenticated live artifact",
+    "candidateCi": {
+      "runId": 40178095158,
+      "jobId": 121123061295,
+      "status": "completed",
+      "conclusion": "success",
+      "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314"
+    },
+    "replay": {
+      "status": "duplicate-refused-before-model",
+      "modelCalls": 0
+    },
+    "historicalReceiptsUnchanged": true
+  },
+  "publication": {
+    "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+    "parentSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "changedPaths": [
+      "test/ui.test.mjs"
+    ],
+    "pullRequest": {
+      "url": "https://github.com/erman-ksv/Onay-Factory-Calculator/pull/1",
+      "state": "open",
+      "draft": true,
+      "head": "558993981c9bbb7c6100c8335860ac5668768314",
+      "base": "2c1218f2b020962ad93adf68d902a847271a7e72",
+      "baseRef": "feat/calculator-pilot-bootstrap"
+    },
+    "originalExecution": {
+      "status": "needs-review",
+      "reasonCode": "publication_or_ci_uncertain_inspect_no_replay",
+      "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+      "attempts": 1,
+      "repairs": 0,
+      "publicationDiagnostic": {
+        "operation": "publish",
+        "phase": "pr_detail",
+        "writeAttempted": true,
+        "pushAcknowledged": true,
+        "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+        "httpStatus": 200
+      },
+      "proposalTestsExecuted": true,
+      "candidateTestsExecuted": false,
+      "wholeAppCompleted": false,
+      "finalCalculatorCiVerified": false,
+      "legalEnabled": false
+    },
+    "readonlyReconciliation": {
+      "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+      "proposalDigest": "f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b",
+      "ciRunIds": [
+        40178095158
+      ],
+      "sourceReceiptPreserved": true,
+      "writes": 0
+    },
+    "republishAttempts": 0
+  },
+  "remainingProblems": [
+    "Publisher PR-detail acknowledgement returned HTTP 200 but was not accepted; original needs-review receipt preserved. This generic publisher issue is not claimed fixed.",
+    "No model requests remain within the approved T05 allowance.",
+    "General unattended CI subscription on the default branch and full Onay application readiness are not demonstrated by this bounded pilot."
+  ]
+}

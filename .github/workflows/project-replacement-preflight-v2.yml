@@ -1,0 +1,56 @@
+name: Read-only six-event stopped recovery preflight
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.github/workflows/project-replacement-preflight-v2.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'a0ce0adcf1fa87ff29ceae8902e7fd22bd819c5a'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify independent preflight pin and compile immutable source
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,writeFileSync,readdirSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          assert.equal(createHash('sha256').update(readFileSync('.factory/replacement-preflight-v2.json')).digest('hex'),'b3a6f60b60986c705d08127f8af072272ffae2fca1ac15ac47dc6e3161e7991c');
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Verify offline entrypoint refusal before exposing credentials
+        run: node scripts/project-replacement-recovery.test.mjs
+      - name: Inspect native model, history, failed run, source CI and encrypted stopped state
+        env:
+          FACTORY_REPLACEMENT_MODE: 'inspect'
+          FACTORY_REPLACEMENT_PREFLIGHT_VERSION: '2'
+          EXPECTED_REPLACEMENT_SCOPE_SHA256: 'b3a6f60b60986c705d08127f8af072272ffae2fca1ac15ac47dc6e3161e7991c'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: 'openai/gpt-oss-120b'
+          AGENT_FACTORY_PROVIDER: 'groq'
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+        run: |
+          node --input-type=module - <<'JS' > replacement-preflight-result.json
+          const native=globalThis.fetch;globalThis.fetch=async(input,init)=>{const u=new URL(String(input)),path=u.pathname,family=u.origin==='https://api.groq.com'?'provider-model-metadata':path.includes('/rulesets/')?'ruleset':path.includes('/rules/')?'effective-rules':path.includes('/issues/')?'owner-approval':path.includes('/git/')?'git-metadata':path.includes('/actions/')?'ci-metadata':'repository-metadata';const r=await native(input,init);console.error(JSON.stringify({version:1,event:'replacement-preflight-http',family,status:r.status}));return r;};
+          const {runReviewedReplacement}=await import('./scripts/project-replacement-recovery.mjs');try{console.log(JSON.stringify(await runReviewedReplacement(process.env)));}catch{console.error('Read-only replacement preflight stopped; no generation or state writes permitted.');process.exitCode=1;}
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: readonly-six-event-recovery-preflight
+          path: replacement-preflight-result.json
+          if-no-files-found: warn
+          retention-days: 7

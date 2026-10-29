@@ -1,0 +1,28 @@
+import {createProjectNextWorkerFixtureForTests} from '../config/fixtures/projectNextWorkerFixture.js';
+import test from 'node:test';import assert from 'node:assert/strict';
+import {mkdirSync,readFileSync} from 'node:fs';import {join} from 'node:path';
+import {restoreProjectPublicationForTests} from '../github/projectPublisher.js';
+import {createProjectCheckpointArchiveForTests} from '../github/projectCheckpointArchive.js';
+import {createProjectCiDeliveryForTests} from './projectCiDelivery.js';
+import {createProjectCiRuntimeForTests,createProjectCiRuntime,createProjectNextTaskWorkerForTests,PROJECT_NEXT_WORKER_ERROR} from './projectNextTaskWorker.js';
+import {materializeProjectRuntimeArchive} from './projectRuntimeRecovery.js';
+
+const fixture=createProjectNextWorkerFixtureForTests;
+test('CI invokes the next four-role task, encrypted persistence, tests, publication and final candidate CI',async()=>{
+ const f=await fixture();try{const runtime=createProjectCiRuntimeForTests(f.options,f.injections),first=await f.confirm(),result=await runtime.advance(first);assert.equal(result.delivery.status,'notified');assert.ok(result.candidate);assert.equal(result.candidate.parentSha,f.candidate.candidateSha);assert.equal(result.candidate.provenance,'simulated');assert.equal(f.calls(),4);assert.equal(f.nodeCalls(),1);assert.ok(f.clock()>=60000);assert.equal((await f.controller.inspect()).used.requests,8);assert.equal(f.gitCalls.filter(a=>a.includes('push')).length,2);
+  const last=await runtime.advance(await f.confirm(result.candidate));assert.equal(last.delivery.status,'complete');assert.equal((await runtime.advance(first)).delivery.status,'already-recorded');assert.equal(f.calls(),4);const history=await f.archive.history();assert.equal(history.length,9);assert.deepEqual(history.map(v=>v.kind),['ci-claim','before-http','before-http','before-http','before-http','before-push','after-push','candidate-published','ci-claim']);assert.ok(!JSON.stringify(f.storage.requests).includes('PRIVATE_SOURCE_MARKER'));assert.ok(!JSON.stringify(f.storage.requests).includes('offline-next-worker-token'));
+  const reopened=createProjectCheckpointArchiveForTests({controller:f.controller,token:'offline-archive-token',pin:f.archive.snapshot().pin},f.storage.transport),fresh=join(f.root,'fresh-host');mkdirSync(fresh,{mode:0o700});const restored=await materializeProjectRuntimeArchive(reopened,f.controller,f.key,fresh,'simulated');assert.equal(restored.encryptedFiles,9);const records=await createProjectCiDeliveryForTests({plan:f.plan,controller:f.controller,key:f.key,directory:restored.journal}).inspect();assert.equal(records.length,2);assert.equal(records[1]!.dispatch,'complete');const intent=history.find(v=>v.kind==='before-push')!,recovered=await restoreProjectPublicationForTests({plan:f.plan,controller:f.controller,key:f.key,path:join(restored.runtime,intent.name),sha256:intent.sha256,token:f.env.GITHUB_TOKEN,transport:f.transport});assert.equal(recovered.candidateSha,result.candidate.candidateSha);assert.equal(f.calls(),4);
+ }finally{f.cleanup();}
+});
+test('failed dependency CI and terminal 429 stop without duplicate calls or a second push',async()=>{
+ for(const mode of ['ci-failed','429']){const f=await fixture(mode);try{const runtime=createProjectCiRuntimeForTests(f.options,f.injections),c=await f.confirm(),before=(await f.controller.inspect()).used.requests,result=await runtime.advance(c);assert.equal(result.delivery.status,'dispatch-uncertain');assert.equal(result.candidate,undefined);assert.equal(f.calls(),mode==='429'?1:0);assert.equal((await f.controller.inspect()).used.requests,before+(mode==='429'?1:0));assert.equal((await runtime.advance(c)).delivery.status,'already-recorded');assert.equal(f.gitCalls.filter(a=>a.includes('push')).length,1);}finally{f.cleanup();}}
+});
+test('a failed durable pre-HTTP acknowledgement preserves its charge but sends no model HTTP',async()=>{
+ const f=await fixture('persist-failure');try{const runtime=createProjectCiRuntimeForTests(f.options,f.injections),c=await f.confirm();assert.equal((await runtime.advance(c)).delivery.status,'dispatch-uncertain');assert.equal(f.calls(),0);assert.equal((await f.controller.inspect()).used.requests,5);assert.equal((await runtime.advance(c)).delivery.status,'already-recorded');assert.equal(f.calls(),0);assert.equal(f.archive.snapshot().stopped,true);}finally{f.cleanup();}
+});
+test('negative independent review or unavailable host isolation cannot publish the successor',async()=>{
+ for(const mode of ['review-failed','node-unverified']){const f=await fixture(mode);try{const result=await createProjectCiRuntimeForTests(f.options,f.injections).advance(await f.confirm());assert.equal(result.delivery.status,'dispatch-uncertain');assert.equal(result.candidate,undefined);assert.equal(f.calls(),mode==='review-failed'?2:4);assert.equal(f.nodeCalls(),mode==='review-failed'?0:1);assert.equal(f.gitCalls.filter(a=>a.includes('push')).length,1);}finally{f.cleanup();}}
+});
+test('copied dispatch cannot reach models and a simulated archive cannot enter native composition',async()=>{
+ const f=await fixture();try{assert.throws(()=>createProjectCiRuntime(f.options));const delivery=createProjectCiDeliveryForTests({plan:f.plan,controller:f.controller,key:f.key,directory:f.deliveryDirectory});let notice:any;await delivery.deliver(await f.confirm(),async v=>{notice=v;});const {archive,deliveryDirectory,...options}=f.options,worker=createProjectNextTaskWorkerForTests({...options,persist:async()=>{}},f.injections);await assert.rejects(()=>worker.execute({...notice}),e=>e instanceof Error&&e.message===PROJECT_NEXT_WORKER_ERROR);assert.equal(f.calls(),0);}finally{f.cleanup();}
+});

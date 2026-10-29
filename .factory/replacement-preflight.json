@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "kind": "inspect-stopped-recovery-replacement",
+  "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "beforeBudgetHead": "1f37b8b99a69e27fa5d583655db77763e95fb937",
+  "currentDecision": {
+    "issueNumber": 75,
+    "commentId": 6459178751,
+    "bodySha256": "b464d742bd6820440fd1669d0595d4979ebf5e858ab08fff04f62c86f5d101c3"
+  },
+  "acknowledged": {
+    "beforeHead": "2d489136b4e9758133fce6598157feb94743f732",
+    "afterHead": "3e2710a55558dc82b3e65fc62d39791e6a21bd7a"
+  },
+  "binding": {
+    "taskId": "calculator-input-repair-202610-29e2a8-t01",
+    "archiveHead": "1b5f623159f2b8ffecd6fd104da9786677d8ea15",
+    "archiveSequence": 4,
+    "budgetStateSha256": "f825f034e485e048bdc21c3715d0b44c576c5772561efdc71e55d85c7da04126",
+    "originalRequestSha256": "485f5ea4be24424109302fb0b67c616ca38f75a96449236f5af240dc16d7f662",
+    "model": "openai/gpt-oss-120b",
+    "failedRunId": 40622596712,
+    "failedRunSha": "cdf5d457c0783d802ba2086d01aa5fe93e93207b"
+  }
+}

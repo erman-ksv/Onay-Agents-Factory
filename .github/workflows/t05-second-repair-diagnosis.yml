@@ -1,0 +1,58 @@
+name: Inspect saved second T05 repair without model replay
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/t05-second-repair-diagnosis.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 6b9f20545a3f06947afe78cbefd1cd5066eeeee6
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12590215574'
+          run-id: '40170650367'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-repair2-stopped
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Diagnose exact refusal without patch rewrites, model calls or target writes
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/t05-repair2-stopped
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/t05-second-repair-diagnosis.mjs <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';import {createCalculatorSnapshotReader,loadCalculatorSnapshot,calculatorSources} from '../github/calculatorSnapshot.js';import {calculatorProposalDiagnostics} from '../orchestration/calculatorProposalDiagnostics.js';import {prepareCalculatorRoleChanges} from '../commander/calculatorTeam.js';import {prepareCalculatorSavedPatchMetadata,assertCalculatorExecutableTestChange} from '../orchestration/calculatorSavedPatchMetadata.js';import {calculatorProposalDigest} from '../orchestration/calculatorExecutionEvidence.js';import {createCalculatorModelTeam} from '../orchestration/calculatorModelTeam.js';import {createCalculatorLiveBarrier} from '../orchestration/calculatorLiveBarrier.js';
+          assert.equal(process.env.GROQ_API_KEY,undefined);const root=process.env.SOURCE_ROOT,base='eac625e5830612c64fb8dafbd3d239c72adbeafd',sha=b=>createHash('sha256').update(b).digest('hex'),fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal),task=plan.tasks[4],reader=createCalculatorSnapshotReader(),report=JSON.parse(readFileSync(root+'/report.json'));
+          const response=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12590215574',{headers:{Authorization:'Bearer '+process.env.FACTORY_STATE_TOKEN},redirect:'error'});assert.equal(response.status,200);const artifact=await response.json();assert.equal(artifact.workflow_run.id,40170650367);assert.equal(artifact.workflow_run.head_sha,'b773a3ce819e6ce32920f14cd58d7a1c873ecca8');assert.equal(artifact.digest,'sha256:4ef461e173bcb8e5b32824d24dd5343bbf2e8d154f92c8ffcdcfbd6a9fce4e97');assert.equal(artifact.expired,false);
+          assert.equal(report.currentCharge.attemptedRequests,6);assert.equal(report.secondCodeCorrectionConsumed,true);assert.equal(report.lastCheckpoint.publicationStarted,false);assert.equal(await reader.getHead(plan.branch),base);const saved=JSON.parse(readFileSync(root+'/private-agent-second-correction.json'));assert.equal(saved.taskId,task.id);
+          const snapshot=await loadCalculatorSnapshot({repository:plan.owner.repository,baseRef:plan.branch,baseSha:base,changePaths:task.paths},reader),raw=saved.result,diagnostics=calculatorProposalDiagnostics(raw,snapshot);let prepared=false,metadataDescriptionAdded=false,executableChange=false,originalPrefixPreserved=false,restored=false,phase='proposal_validation',proposal;
+          try{try{proposal=prepareCalculatorRoleChanges('frontend',raw,snapshot);}catch{const meta=prepareCalculatorSavedPatchMetadata(task,raw,snapshot,sha(JSON.stringify(raw)));proposal=meta.changes;metadataDescriptionAdded=true;}prepared=true;phase='executable_delta';assertCalculatorExecutableTestChange(task,snapshot,proposal);executableChange=true;phase='original_prefix';const original=calculatorSources(snapshot).get('test/ui.test.mjs'),updated=proposal.files.find(f=>f.path==='test/ui.test.mjs').content;originalPrefixPreserved=updated.startsWith(original.trimEnd());if(originalPrefixPreserved){phase='proposal_restore';const team=createCalculatorModelTeam(plan.request,{AGENT_FACTORY_TARGET_PROFILE:'calculator',AGENT_FACTORY_PROVIDER:'groq',GROQ_API_KEY:'offline-not-a-real-key',CALCULATOR_MODEL_LIVE_APPROVED:'ONE_FREE_BOUNDED_RUN',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',AGENT_FACTORY_LEGAL_ENABLED:'false'},async()=>{throw Error('Model transport forbidden');});team.restoreProposal(plan,task.id,snapshot,proposal,calculatorProposalDigest(proposal),[]);restored=true;phase='restored_without_model';assert.equal(team.checkpointCharge().attemptedRequests,0);}}catch{/* Never print source or upstream messages. */}
+          const claims=[];for(const [runtimeSha,sourceCiRunId,suffix]of [['6b9f20545a3f06947afe78cbefd1cd5066eeeee6',40170515610,'-t05-repair2']]){const b=createCalculatorLiveBarrier({runtimeSha,sourceCiRunId,planFingerprint:plan.fingerprint,previousTaskId:plan.tasks[3].id+suffix,candidateSha:base},process.env);assert.equal(await b.inspectAbsent(),false);claims.push({ref:b.ref,duplicateRefused:true,modelCalls:0});}
+          const result={version:1,status:'saved-t05-second-repair-inspected-readonly',sourceRunId:40170650367,sourceArtifactId:12590215574,taskId:task.id,baseSha:base,rawSha256:sha(JSON.stringify(raw)),capsuleSha256:sha(readFileSync(root+'/execution-private/'+task.id+'.execution.json')),topLevelFields:Object.keys(raw).sort(),changeMetadata:Array.isArray(raw.changes)?raw.changes.map(c=>({operation:c.operation,path:task.paths.includes(c.path)?c.path:'unapproved',fields:Object.keys(c).sort(),edits:Array.isArray(c.edits)?c.edits.map(e=>({fields:Object.keys(e).sort(),beforeLength:typeof e.before==='string'?e.before.length:null,afterLength:typeof e.after==='string'?e.after.length:null,retainsBeforePrefix:typeof e.before==='string'&&typeof e.after==='string'&&e.after.startsWith(e.before),addedSuffixBytes:typeof e.before==='string'&&typeof e.after==='string'&&e.after.startsWith(e.before)?Buffer.byteLength(e.after.slice(e.before.length)):null})):undefined})):[],proposalDiagnostics:diagnostics,prepared,metadataDescriptionAdded,executableChange,originalPrefixPreserved,restored,phase,currentCharge:report.currentCharge,remainingRequests:9-report.currentCharge.attemptedRequests,remainingReservedTokens:48000-report.currentCharge.reservedRunTokens,secondCodeCorrectionConsumed:true,claims,modelCalls:0,writes:0,legalEnabled:false};
+          writeFileSync(process.env.RUNNER_TEMP+'/t05-second-repair-diagnosis.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
+          JS
+          pnpm exec tsx scripts/t05-second-repair-diagnosis.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t05-second-repair-diagnosis-${{ github.run_id }}
+          path: ${{ runner.temp }}/t05-second-repair-diagnosis.json
+          if-no-files-found: ignore
+          retention-days: 14

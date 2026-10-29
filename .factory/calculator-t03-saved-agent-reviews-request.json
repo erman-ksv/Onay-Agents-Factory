@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "allowanceId": "owner-four-additional-free-calls-20261024",
+  "phase": "saved-agent-draft-real-tests-then-remaining-three-reviews",
+  "runtimeSha": "7491f58c9cd017e8c8255f38ff2b257da9068b5e",
+  "sourceCiRunId": 40104310711,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceDraftRunId": 40102210646,
+  "sourceProposalRunId": 39993060116,
+  "sourceChargeRunId": 40103757771,
+  "priorRequests": 12,
+  "priorReservedTokens": 49797,
+  "maxNewRequests": 3,
+  "maxNewAuthorRequests": 0,
+  "maxNewReservedTokens": 18901,
+  "maxTotalT03Requests": 15,
+  "maxTotalT03ReservedTokens": 68698,
+  "maxFurtherRepairs": 0,
+  "publicationOnlyAfterAllFreshGates": true,
+  "automaticReplay": false,
+  "legalEnabled": false
+}

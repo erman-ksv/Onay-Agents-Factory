@@ -1,0 +1,50 @@
+name: Read-only native UTF8 review context probe
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.github/workflows/project-context-utf8-probe.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'd9a555c300c6bef218ca1fbeda772227559c8d0d'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Compile immutable source
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync,writeFileSync,readdirSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Probe actual source context without generation or state writes
+        env:
+          FACTORY_CONTEXT_PROBE_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: |
+          node --input-type=module - <<'JS' > context-probe-result.json
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';
+          const native=globalThis.fetch,start=performance.now();let requests=0;globalThis.fetch=async(input,init)=>{const u=new URL(String(input));assert.equal(u.origin,'https://api.github.com');assert.ok(u.pathname.startsWith('/repos/erman-ksv/Onay-Factory-Calculator/'));assert.equal(init?.method,'GET');assert.equal(init?.redirect,'error');assert.equal(init?.body,undefined);assert.ok(++requests<=120&&performance.now()-start<=180000);return native(input,init);};
+          try{
+          const {prepareProjectRuntimeManifest,projectRuntimeManifestInspectionContext}=await import('./orchestration/projectRuntimeManifest.js'),{loadGitHubProjectTaskSnapshot,projectSnapshotSources}=await import('./github/projectSourceSnapshot.js'),{prepareProjectChanges}=await import('./commander/projectChanges.js'),{resolveProjectContextSelections}=await import('./orchestration/projectContextSelection.js'),{prepareProjectModelContext,projectContextRequestBody}=await import('./orchestration/projectModelContext.js');
+          const body=readFileSync('.factory/runtime-project-manifest.json','utf8');assert.equal(createHash('sha256').update(body).digest('hex'),'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284');
+          const context=projectRuntimeManifestInspectionContext(prepareProjectRuntimeManifest(body,'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284')),plan=context.plan,task=plan.tasks[0],policy=context.taskPolicies.find(p=>p.taskId===task.id);assert.equal(plan.request.baseSha,'558993981c9bbb7c6100c8335860ac5668768314');
+          const snapshot=await loadGitHubProjectTaskSnapshot({plan,taskId:task.id,token:process.env.FACTORY_CONTEXT_PROBE_TOKEN}),base=projectSnapshotSources(snapshot).get('src/app.mjs');assert.ok(base.includes('expression+=char'));const sourceSha256=snapshot.files.find(f=>f.path==='src/app.mjs').sourceSha256;
+          // Equivalent formatting proposal DATA only; never actual AI authorship,
+          // execution, runtime acceptance, candidate publication or replay.
+          const changes=await prepareProjectChanges(plan,task.id,snapshot,{summary:'Probe excerpt encoding with equivalent expression spacing only.',changes:[{operation:'patch',path:'src/app.mjs',sourceSha256,edits:[{before:'expression+=char',after:'expression = expression + char'}],message:'Read-only host context diagnostic data.'}]}),roles=[];
+          for(const role of ['security','reviewer','tester']){const selections=resolveProjectContextSelections(snapshot,changes,policy.reviewSelections),packet=await prepareProjectModelContext(plan,task.id,snapshot,{role,model:'openai/gpt-oss-120b',changes,selections}),payload=JSON.parse(JSON.parse(projectContextRequestBody(packet)).messages[1].content);for(const f of payload.fragments){assert.equal(Buffer.from(f.text).toString('utf8'),f.text);assert.equal(Buffer.byteLength(f.text),f.bytes);assert.ok(f.bytes<=Math.min(1024,2048,Math.floor(Buffer.byteLength(base)*0.6)));}roles.push({role,contextRequestSha256:packet.requestSha256,excerptBytes:payload.fragments.reduce((n,f)=>n+f.bytes,0)});}
+          console.log(JSON.stringify({version:1,status:'native-source-context-probe-passed',sourceSha:'d9a555c300c6bef218ca1fbeda772227559c8d0d',baseSha:snapshot.baseSha,baseBytes:Buffer.byteLength(base),roles,requests,modelGenerationRequests:0,budgetWrites:0,archiveWrites:0,appWrites:0,independentAiReviews:false,runtimeTestsExecuted:false,executionAuthorized:false,replayAuthorized:false,wholeProjectCompleted:false}));
+          }catch{console.error('Read-only source context probe stopped; no model or state writes permitted.');process.exitCode=1;}finally{globalThis.fetch=native;}
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: readonly-native-utf8-context-probe
+          path: context-probe-result.json
+          retention-days: 7

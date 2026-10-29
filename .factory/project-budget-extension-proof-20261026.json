@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "sourceSha": "b1d7f906517fdedf959b23f8f8503294a626b9dd",
+  "operatorWorkflowSha": "23fa5a263796a5e6a38eca1b692b94a2d73ea437",
+  "sourceCi": {
+    "runId": 40303983534,
+    "jobId": 121508435184,
+    "typecheck": "passed",
+    "tests": 2414,
+    "passed": 2414,
+    "failed": 0
+  },
+  "localRelatedTests": {
+    "tests": 73,
+    "passed": 73
+  },
+  "nativeInspection": {
+    "runId": 40304937816,
+    "jobId": 121511674633,
+    "request": "success",
+    "inspect": "success",
+    "extend": "skipped",
+    "result": {
+      "version": 1,
+      "status": "extension-awaiting-new-owner-decision",
+      "modelCalls": 0,
+      "sourceChanged": false,
+      "legalEnabled": false,
+      "projectKey": "30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+      "previousRevision": "cb9126fbd4fb648a4a6580d1be1d9fa3a04e9cd6f498e2fb8ffe426c53b677d5",
+      "priorStateSha256": "3a775f3a0edb6270c7f346b61d4e59ca6711d2e44637f35253112956205295ca",
+      "previousGrantSha256": "cd317be0675c6660d080e0ac8c7f85f178d9f62805734de93b20741a8ad52cb9",
+      "proposedGrantSha256": "1b3fd6d70279e3fd03bfeb0efbb7ea627de9eec88d18adeb897031f922bc622a",
+      "reservationsPreserved": 3,
+      "resets": 0,
+      "refunds": 0,
+      "ownerApprovalVerified": false,
+      "used": {
+        "requests": 62,
+        "requestBytes": 590219,
+        "reservedTokens": 246886
+      },
+      "stateWrites": 0,
+      "additionalRequestsAuthorized": 0,
+      "proposedAdditionalRequests": 3,
+      "runtimeSha": "b1d7f906517fdedf959b23f8f8503294a626b9dd",
+      "sourceCiRunId": 40303983534,
+      "githubReads": 16,
+      "githubApiMutationRequests": 0
+    }
+  },
+  "proposal": {
+    "active": false,
+    "bodySha256": "c258f075d6f0d5aabd81ed272a9cfd5a7d5b7cbd768ab9179e0e60585773a916",
+    "path": ".factory/proposed-project-budget-extension-approval.json",
+    "maxAdditionalRequests": 3,
+    "maxAdditionalRequestBytes": 72000,
+    "maxAdditionalReservedTokens": 18000,
+    "newUneditedOwnerCommentRequired": true
+  },
+  "integrity": {
+    "ledgerCommitUnchanged": "906deeb59bc1c67c11da677be7ba3c8424c98e26",
+    "mainUnchanged": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculatorUnchanged": "558993981c9bbb7c6100c8335860ac5668768314"
+  },
+  "step9Closed": false,
+  "newModelCallsAuthorized": 0,
+  "legalEnabled": false
+}

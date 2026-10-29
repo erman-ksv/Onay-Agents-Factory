@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "allowanceId": "owner-approved-t03-correction-2-20261023",
+  "runtimeSha": "b8fe5112dc20ae4a426d56fd0c905bb2c22b75c1",
+  "sourceCiRunId": 39977967494,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceCapsuleSha256": "0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7",
+  "priorFailedRunId": 39966515860,
+  "priorFailedReportSha256": "63b2c524dc65074a455e061db1e614081e2eec8f8b2f6a61fb5ecb05b39e25df",
+  "priorRequests": 6,
+  "maxNewRequests": 3,
+  "maxTotalT03Requests": 9,
+  "maxTotalT03ReservedTokens": 34000,
+  "maxFurtherRepairs": 0,
+  "automaticReplay": false,
+  "legalEnabled": false,
+  "maxNewAuthorRequests": 0,
+  "savedAgentResponseRunId": 39973872603,
+  "savedAgentResponseSha256": "cb1f22efc82523cca64e086da10ac7c455d4d5c799c079a9ba774ce9961eb2dd"
+}

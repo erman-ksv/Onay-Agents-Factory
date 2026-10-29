@@ -1,0 +1,183 @@
+name: Frozen T05 Reviewer supplement within eleven-call owner allowance
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-t05-reviewer-supplement.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: calculator-t05-owner-20261025
+  cancel-in-progress: false
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          path: request
+          sparse-checkout: .factory/calculator-t05-reviewer-supplement.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate exact new owner allowance and immutable source pin
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');const r=JSON.parse(readFileSync('request/.factory/calculator-t05-reviewer-supplement.json'));
+          assert.deepEqual(r,{version:1,taskId:'calculator-pilot-step7-v1-34ee03-t05',ownerAllowance:{id:'owner-t05-eleven-free-calls-48000-reviewer-only-20261025',maxRequests:11,maxReservedTokens:48000,maxRepairs:3,freeTierConfirmed:true},executionRuntimeSha:'f70d8d5dbd4f63c892f026d21f08a9ce45db83b3',executionSourceCiRunId:40177852571});
+          JS
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'f70d8d5dbd4f63c892f026d21f08a9ce45db83b3'
+          path: runtime
+          persist-credentials: false
+      - name: Download exact verified T04 completion
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580304973'
+          run-id: '40148177866'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-completion
+          merge-multiple: true
+      - name: Download immutable prior execution and receipts as data
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12580874431'
+          run-id: '40147390593'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-previous
+          merge-multiple: true
+      - name: Download exact rejected T05 generation without re-running it
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12581447641'
+          run-id: '40150058778'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-rejected
+          merge-multiple: true
+      - name: Download exact frozen agent correction as data only
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12581564613'
+          run-id: '40150387309'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-corrected
+          merge-multiple: true
+      - name: Download exact saved negative T05 reviews and inherited charge
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12589941962'
+          run-id: '40169007596'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-reviewed
+          merge-multiple: true
+      - name: Download exact saved second response without an author replay
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12590215574'
+          run-id: '40170650367'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-second-reply
+          merge-multiple: true
+      - name: Download actual failed-test checkpoint without replaying its model call
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12590631312'
+          run-id: '40171597668'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-failed-test
+          merge-multiple: true
+      - name: Download immutable ten-call proposal and exact-code approvals as data
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12592016488'
+          run-id: '40174428096'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-frozen
+          merge-multiple: true
+      - name: Download exact pre-HTTP context refusal without replaying any model
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12592897739'
+          run-id: '40177572948'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-context-refusal
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+        working-directory: runtime
+      - name: Prepare exact isolated runtime images
+        run: |
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Parse frozen bytes, run actual checks and request only one Reviewer supplement
+        working-directory: runtime
+        env:
+          T05_CONTEXT_REFUSAL_DIRECTORY: ${{ runner.temp }}/t05-context-refusal
+          T05_FROZEN_DIRECTORY: ${{ runner.temp }}/t05-frozen
+          T05_FAILED_TEST_DIRECTORY: ${{ runner.temp }}/t05-failed-test
+          T05_SECOND_REPLY_DIRECTORY: ${{ runner.temp }}/t05-second-reply
+          T05_REVIEWED_DIRECTORY: ${{ runner.temp }}/t05-reviewed
+          T05_CORRECTED_DIRECTORY: ${{ runner.temp }}/t05-corrected
+          T05_REJECTED_DIRECTORY: ${{ runner.temp }}/t05-rejected
+          T05_COMPLETION_DIRECTORY: ${{ runner.temp }}/t05-completion
+          T05_PREVIOUS_DIRECTORY: ${{ runner.temp }}/t05-previous
+          FACTORY_RUNTIME_SHA: 'f70d8d5dbd4f63c892f026d21f08a9ce45db83b3'
+          FACTORY_SOURCE_CI_RUN: '40177852571'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CALCULATOR_QUEUED_T05_APPROVED: OWNER_ELEVEN_CALLS_48000_REVIEWER_ONLY
+          CALCULATOR_EXECUTION_LIVE_APPROVED: RUN_ONE_FREE_CALCULATOR_TASK
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: groq
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
+        run: pnpm exec tsx scripts/calculator-t05-reviewer-supplement.mjs
+      - name: Preserve private checkpoint, reviews, actual checks and charged attempts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-t05-reviewer-supplement-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-t05-reviewer-supplement/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+  replay_check:
+    if: ${{ always() }}
+    needs: execute
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'f70d8d5dbd4f63c892f026d21f08a9ce45db83b3'
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: A fresh read-only worker cannot consume the same T05 grant
+        env:
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+        run: |
+          pnpm exec tsx --eval "import assert from 'node:assert/strict';import {createCalculatorLiveBarrier} from './orchestration/calculatorLiveBarrier.ts';(async()=>{assert.equal(process.env.GROQ_API_KEY,undefined);const b=createCalculatorLiveBarrier({runtimeSha:'f70d8d5dbd4f63c892f026d21f08a9ce45db83b3',sourceCiRunId:40177852571,planFingerprint:'1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2',previousTaskId:'calculator-pilot-step7-v1-34ee03-t04-t05-review1-context-fit',candidateSha:'eac625e5830612c64fb8dafbd3d239c72adbeafd'},process.env);assert.equal(await b.inspectAbsent(),false);console.log(JSON.stringify({status:'duplicate-refused-before-model',modelCalls:0,legalEnabled:false}));})();"

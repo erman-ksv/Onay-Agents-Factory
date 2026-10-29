@@ -1,0 +1,52 @@
+name: Audit latest saved agent failure without models
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-t03-failed-candidate-audit.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: calculator-readonly-failed-candidate-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 16e4b9612dc0b1a0f4808e9c0c899713ccfceb7a
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12513747660'
+          run-id: '39981896290'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/saved-failed-agent-repair
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install locked trusted host dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prepare exact isolated runtime image
+        run: docker pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Recover saved model reply and diagnose actual failed tests without model calls
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CALCULATOR_FAILED_REPAIR_DIRECTORY: ${{ runner.temp }}/saved-failed-agent-repair
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: pnpm exec tsx scripts/calculator-t03-failed-candidate-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: saved-agent-failure-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/failed-candidate-audit/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

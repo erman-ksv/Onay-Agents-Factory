@@ -102,7 +102,7 @@ export function createCalculatorSnapshotReader(env: NodeJS.ProcessEnv = process.
   async function read(path: string): Promise<unknown> {
     try {
       const response = await transport("https://api.github.com/repos/" + repository + path, {
-        method: "GET", headers: { Accept: "application/vnd.github+json", Authorization: "Bearer " + token,
+        method: "GET", redirect: "error", headers: { Accept: "application/vnd.github+json", Authorization: "Bearer " + token,
           "X-GitHub-Api-Version": "2022-11-28" }, signal: AbortSignal.timeout(15_000),
       });
       if (!response.ok || !response.body) return refuseCalculatorChange();
@@ -127,7 +127,10 @@ export function createCalculatorSnapshotReader(env: NodeJS.ProcessEnv = process.
     getHead: async ref => {
       try { validateCalculatorScope({ repository, baseRef: ref, baseSha: "a".repeat(40), changePaths: ["index.html"] }); }
       catch { return refuseCalculatorChange(); }
-      return digest(object(await read("/commits/" + encodeURIComponent(ref))).sha);
+      const value=object(await read("/git/ref/heads/" + encodeURIComponent(ref)));
+      const target=object(value.object);
+      if(value.ref!=="refs/heads/"+ref||target.type!=="commit")return refuseCalculatorChange();
+      return digest(target.sha);
     },
     readCommit: async sha => {
       const data = object(await read("/git/commits/" + digest(sha)));

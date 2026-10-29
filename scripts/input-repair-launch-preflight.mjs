@@ -1,0 +1,20 @@
+// Native read-only audit. No provider keys, model execution or mutation API.
+import assert from 'node:assert/strict';import {readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';
+import {verifyProjectBudgetCarryover} from '../orchestration/projectBudgetAuthorization.js';
+import {createProjectTargetRegistry} from '../orchestration/projectTargetRegistry.js';
+import {prepareProjectGoal,createProjectPlan} from '../orchestration/projectPlan.js';
+import {loadGitHubProjectTaskSnapshot} from '../github/projectSourceSnapshot.js';
+import {createProjectCiPolicy,createProjectCiReader} from '../github/projectCi.js';
+import {prepareProjectModelContext} from '../orchestration/projectModelContext.js';
+const native=globalThis.fetch;let requests=0;
+globalThis.fetch=async(input,init)=>{assert.equal(typeof input,'string');const u=new URL(input);assert.equal(u.origin,'https://api.github.com');assert.ok(['/repos/erman-ksv/Onay-Agents-Factory/','/repos/erman-ksv/Onay-Factory-Calculator/'].some(p=>u.pathname.startsWith(p)));assert.equal(init?.method,'GET');assert.equal(init?.redirect,'error');assert.equal(init?.body,undefined);assert.ok(++requests<=200);return native(input,init);};
+try{
+ for(const k of ['GROQ_API_KEY','GEMINI_API_KEY','CLOUDFLARE_API_KEY'])assert.equal(process.env[k],undefined);
+ const p=JSON.parse(readFileSync('.factory/input-repair-launch-package-20261027.json','utf8')),d=p.draftManifest,token=process.env.FACTORY_AUDIT_TOKEN;assert.ok(token);assert.equal(p.ownerDecision,null);assert.equal(p.modelCallsAuthorized,0);
+ const carryover=await verifyProjectBudgetCarryover(d.history.carryover,token),target=createProjectTargetRegistry([d.profile]).select(d.profile.id),goal=prepareProjectGoal(target,d.goal),plan=createProjectPlan(goal,d.proposal);assert.equal(plan.fingerprint,p.identity.planFingerprint);
+ const env={GITHUB_TOKEN:token,AGENT_FACTORY_TARGET_PROFILE:d.profile.id,AGENT_ALLOWED_REPOSITORIES:plan.repository},policy=createProjectCiPolicy(target,d.workflowPins),ci=await createProjectCiReader(policy,env)({repository:plan.repository,branch:plan.request.baseRef,candidateSha:plan.request.baseSha});assert.equal(ci.status,'passed');
+ const contexts=[];for(const task of plan.tasks){const snapshot=await loadGitHubProjectTaskSnapshot({plan,taskId:task.id,token}),selection=d.taskPolicies.find(v=>v.taskId===task.id),packet=await prepareProjectModelContext(plan,task.id,snapshot,{role:'author',model:'qwen/qwen3-32b',selections:selection.authorSelections});contexts.push({taskId:task.id,requestBytes:packet.requestBytes,estimatedReservedTokens:packet.estimatedReservedTokens,readOnlyDependencies:snapshot.files.filter(v=>v.readOnly).map(v=>({path:v.path,sourceSha256:v.sourceSha256})),writablePaths:snapshot.changePaths});}
+ for(const prefix of ['state/project-model-budget/','state/project-checkpoints/']){const response=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/git/ref/heads/'+encodeURIComponent(prefix+p.projectKey),{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'}});assert.equal(response.status,404);void response.body?.cancel();}
+ await verifyProjectBudgetCarryover(d.history.carryover,token);
+ const proof={version:1,status:'native-launch-package-preflight-verified-no-owner-approval',planFingerprint:plan.fingerprint,projectKey:p.projectKey,carryover,contexts,baseCiRunIds:ci.verifiedRunIds,newBudgetAbsent:true,newArchiveAbsent:true,proposedAdditionalMaximum:p.additionalMaximum,ownerApprovalVerified:false,providerCalls:0,applicationWrites:0,budgetWrites:0,stateWrites:0,nativeRequests:requests,nativeMethods:['GET'],legalEnabled:false};writeFileSync(join(process.env.RUNNER_TEMP,'input-repair-launch-preflight.json'),JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));
+}catch{console.error('Read-only launch package audit is unverified. No owner approval, allowance, initialization, replay or model request is authorized.');process.exitCode=1;}

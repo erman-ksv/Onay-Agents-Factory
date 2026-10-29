@@ -1,3 +1,4 @@
+import {calculatorTestDiagnosticFailures} from './calculatorTestDiagnostics.js';
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { chmodSync, chownSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -10,7 +11,7 @@ import { calculatorProposalDigest, type CalculatorProposalTests } from "./calcul
 import type { CalculatorExecutionTools } from "./calculatorExecution.js";
 
 export type CalculatorSandboxConfig = Readonly<{
-  image: string; baseSha: string; baseSources: ReadonlyMap<string, string>; timeoutMs?: number;
+  image: string; baseSha: string; baseSources: ReadonlyMap<string, string>; timeoutMs?: number; includeFailureDetails?: boolean;
 }>;
 export type CalculatorSandboxReadiness = Readonly<{
   ready: boolean; reasonCode: "ready" | "configuration_unverified" | "docker_unavailable" | "image_unavailable" | "runtime_unverified";
@@ -50,7 +51,7 @@ export const runCalculatorSandboxProcess: CalculatorSandboxProcess = (args, opti
 export function createCalculatorSandbox(config: CalculatorSandboxConfig, env: NodeJS.ProcessEnv = process.env,
   processRunner: CalculatorSandboxProcess = runCalculatorSandboxProcess) {
   const image = config.image, baseSha = config.baseSha, timeoutMs = config.timeoutMs ?? 20_000;
-  const baseSources = new Map(config.baseSources);
+  const baseSources = new Map(config.baseSources), includeFailureDetails=config.includeFailureDetails===true;
   // Preserve the Docker client's own configuration without passing provider keys.
   const clientEnv: NodeJS.ProcessEnv = {};
   for (const name of ["PATH", "HOME", "DOCKER_CONFIG", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR"])
@@ -116,7 +117,8 @@ export function createCalculatorSandbox(config: CalculatorSandboxConfig, env: No
         const destination = join(root, path); mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
         writeFileSync(destination, source, { mode: 0o600, flag: "wx" });
       }
-      const harnessPath = join(directory, "harness.mjs"), manifestPath = join(directory, "manifest.json");
+      const harnessPath = join(directory, "harness.mjs"), manifestPath = join(directory, "manifest.json"), diagnosticPath=join(directory,"diagnose.mjs");
+      if(includeFailureDetails)writeFileSync(diagnosticPath,readFileSync(new URL("../config/calculator-harness/diagnose.mjs",import.meta.url)),{mode:0o600,flag:"wx"});
       const expected = ["syntax", ...(sources.has("src/calculator.mjs") ? ["fixed-arithmetic"] : []),
         ...([...sources.keys()].some(path => path.startsWith("test/")) ? ["project-tests"] : []), ...(task.role === "frontend" ? ["ui-structure"] : [])];
       writeFileSync(harnessPath, harness, { mode: 0o600, flag: "wx" });
@@ -128,7 +130,7 @@ export function createCalculatorSandbox(config: CalculatorSandboxConfig, env: No
       if (uid === 0) {
         for (const path of [...sources.keys()].map(path => join(root, path))) chownSync(path, user, group);
         for (const path of [join(root, "src"), join(root, "test")]) if ([...sources.keys()].some(key => key.startsWith(path.endsWith("src") ? "src/" : "test/"))) chownSync(path, user, group);
-        for (const path of [root, harnessPath, manifestPath, directory]) chownSync(path, user, group);
+        for (const path of [root, harnessPath, manifestPath, directory,...(includeFailureDetails?[diagnosticPath]:[])]) chownSync(path, user, group);
       }
       name = "onay-calculator-check-" + randomBytes(10).toString("hex");
       const run = await processRunner([...dockerPrefix, "run", "--rm", "--name=" + name, ...containerLimits, "--user=" + user + ":" + group,
@@ -143,8 +145,16 @@ export function createCalculatorSandbox(config: CalculatorSandboxConfig, env: No
           record.failures.some(value => typeof value !== "string" || !failureNames.includes(value)) || new Set(record.failures).size !== record.failures.length ||
           (run.code === 0 ? record.status !== "passed" || record.failures.length !== 0 : record.status !== "failed" || record.failures.length === 0))
         return answer("unverified", false, [unavailable]);
-      return answer(run.code === 0 ? "passed" : "failed", true,
-        record.failures.slice(0, 6).map(value => "Trusted isolated task check failed: " + value + "."));
+      const failures=record.failures.slice(0,6).map(value=>"Trusted isolated task check failed: "+value+".");
+      if(run.code===1&&includeFailureDetails&&record.failures.includes('project-tests')){
+        try{
+          const diagnostic=await processRunner([...dockerPrefix,'run','--rm','--name='+name,...containerLimits,'--user='+user+':'+group,
+            '--mount=type=bind,src='+root+',dst=/app,readonly','--mount=type=bind,src='+diagnosticPath+',dst=/diagnose.mjs,readonly',
+            '--mount=type=bind,src='+manifestPath+',dst=/manifest.json,readonly','--workdir=/app','--entrypoint=/usr/local/bin/node',image,'--disable-sigusr1','/diagnose.mjs'],processOptions);
+          if(diagnostic.code===0&&!diagnostic.timedOut)failures.push(...calculatorTestDiagnosticFailures(diagnostic.stdout,[...sources.keys()]));
+        }catch{/* Diagnostics never authorize success or replace the original failing verdict. */}
+      }
+      return answer(run.code===0?'passed':'failed',true,failures.slice(0,6));
     } catch { return answer("unverified", false, [unavailable]); }
     finally {
       if (name) try { await processRunner([...dockerPrefix, "rm", "--force", name], processOptions); } catch { /* Fixed source-free evidence only. */ }

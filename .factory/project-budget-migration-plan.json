@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "status": "migration-prepared-no-new-allowance",
+  "identity": {
+    "projectId": "calculator-pilot-step7-v1",
+    "repository": "erman-ksv/Onay-Factory-Calculator",
+    "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+    "ownerFingerprint": "34ee0369da08ad7b0c83551481d9e87baa6dcd8b9d68021f0b18ac6c6533fdd8",
+    "taskIds": [
+      "calculator-pilot-step7-v1-34ee03-t01",
+      "calculator-pilot-step7-v1-34ee03-t02",
+      "calculator-pilot-step7-v1-34ee03-t03",
+      "calculator-pilot-step7-v1-34ee03-t04",
+      "calculator-pilot-step7-v1-34ee03-t05"
+    ]
+  },
+  "historyDigest": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+  "historicalCharge": {
+    "requests": 59,
+    "requestBytes": 553908,
+    "reservedTokens": 230413
+  },
+  "coveredScopes": [
+    "planning",
+    "calculator-pilot-step7-v1-34ee03-t01",
+    "calculator-pilot-step7-v1-34ee03-t02",
+    "calculator-pilot-step7-v1-34ee03-t03",
+    "calculator-pilot-step7-v1-34ee03-t04",
+    "calculator-pilot-step7-v1-34ee03-t05"
+  ],
+  "projectKey": "30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+  "targetRepository": "erman-ksv/Onay-Agents-Factory",
+  "targetRef": "refs/heads/state/project-model-budget/30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+  "ownerDecision": null,
+  "actualLedgerInitialized": false,
+  "additionalRequestsAuthorized": 0,
+  "additionalReservedTokensAuthorized": 0,
+  "modelCalls": 0,
+  "repositoryWrites": 0,
+  "legalEnabled": false
+}

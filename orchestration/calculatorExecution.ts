@@ -1,3 +1,6 @@
+import {calculatorPublicationDiagnostic,type CalculatorPublicationDiagnostic} from '../github/calculatorPublisher.js';
+import {claimCalculatorQueuedSuccessor,type CalculatorQueuedPermit} from './calculatorQueuedSuccessor.js';
+import { claimCalculatorT03RepairContinuation, type CalculatorT03RepairPermit } from './calculatorT03RepairContinuation.js';
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { prepareCalculatorRoleChanges } from "../commander/calculatorTeam.js";
@@ -6,15 +9,21 @@ import { evaluateTestExecutionEvidence } from "../agents/tester/agent.js";
 import type { WorkflowRun } from "../github/githubClient.js";
 import type { CiJob } from "../github/ciGate.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
+import {claimCalculatorRuntimeRecovery,type CalculatorRuntimeRecoveryPermit} from './calculatorRuntimeRecovery.js';
+import type {CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
 import type { CalculatorSnapshot } from "../github/calculatorSnapshot.js";
 import type { CalculatorCheckRunner, CalculatorWorkspace } from "./calculatorWorkspace.js";
 import { calculatorWorkspacePlan, claimCalculatorWorkspaceTask, loadCalculatorWorkspaceTask,
-  assertCalculatorWorkspaceCurrent, assertCalculatorPublishedCandidate } from "./calculatorWorkspace.js";
+  assertCalculatorWorkspaceCurrent, assertCalculatorPublishedCandidate, claimHistoricalCalculatorT03 } from "./calculatorWorkspace.js";
+import type { CalculatorT02ExecutionPermit } from "./calculatorT02Admission.js";
 import { calculatorProposalDigest, validateCalculatorProposalTests, refuseCalculatorExecution,
   type CalculatorProposalTests, type CalculatorRepairRequest } from "./calculatorExecutionEvidence.js";
 import type { TeamTaskPublication, TeamTaskStore } from "./teamTaskStore.js";
 
 export type CalculatorExecutionTeam = {
+  /** Host-owned failure capability; carries complete feedback separately from bounded issue labels. */
+  prepareRepairFeedback?(plan: CalculatorPlan, id: string, previous: PreparedCalculatorChanges,
+    tests?: CalculatorProposalTests): CalculatorRepairRequest;
   generate(plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot): Promise<PreparedCalculatorChanges>;
   repair(plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot, request: CalculatorRepairRequest): Promise<PreparedCalculatorChanges>;
   assess(role: "security" | "reviewer" | "tester", plan: CalculatorPlan, id: string, changes: PreparedCalculatorChanges): Promise<CalculatorAssessment>;
@@ -32,6 +41,7 @@ export type CalculatorExecutionReport = Readonly<{
   status: "blocked" | "needs-review" | "candidate-verified"; reasonCode: string; taskId?: string;
   attempts: number; repairs: number; publication?: Readonly<TeamTaskPublication>;
   proposalTestsExecuted: boolean; candidateTestsExecuted: boolean;
+  publicationDiagnostic?: CalculatorPublicationDiagnostic;
   wholeAppCompleted: false; finalCalculatorCiVerified: false; legalEnabled: false;
 }>;
 /** Private host evidence, persisted before advancing. This is data, never replay
@@ -52,16 +62,22 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
   restoreProposal?: (plan: CalculatorPlan, id: string, snapshot: CalculatorSnapshot) => PreparedCalculatorChanges | Promise<PreparedCalculatorChanges>;
   /** Only canonical assessments revalidated by the host team are eligible. */
   restoreAssessments?: (plan: CalculatorPlan, id: string, changes: PreparedCalculatorChanges) => readonly CalculatorAssessment[] | Promise<readonly CalculatorAssessment[]>;
+  queuedSuccessorPermit?: CalculatorQueuedPermit;
+  historicalT03Permit?: CalculatorT02ExecutionPermit;
+  repairContinuationPermit?: CalculatorT03RepairPermit;
+  rejectedProposalPermit?:CalculatorRuntimeRecoveryPermit;
+  verifiedCorrections?:readonly CalculatorVerifiedCorrection[];
   env?: NodeJS.ProcessEnv; execution?: "live" | "offline-test";
 }): Promise<CalculatorExecutionReport> {
   let receipt: TeamTaskStore | undefined, publication: TeamTaskPublication | undefined, task: CalculatorPlanTask | undefined;
+  let publicationDiagnostic:CalculatorPublicationDiagnostic|undefined;
   let attempts = 0, repairs = 0, proposalTestsExecuted = false, candidateTestsExecuted = false;
   let activeStage: string | undefined, publicationStarted = false;
   let activeAttempt: 1 | 2 = 1, checkpointProposal: PreparedCalculatorChanges | undefined;
   let assessments: CalculatorAssessment[] = [];
   const answer = (status: CalculatorExecutionReport["status"], reasonCode: string): CalculatorExecutionReport => Object.freeze({
     status, reasonCode, ...(task ? { taskId: task.id } : {}), attempts, repairs,
-    ...(publication ? { publication: Object.freeze({ ...publication }) } : {}), proposalTestsExecuted, candidateTestsExecuted,
+    ...(publication ? { publication: Object.freeze({ ...publication }) } : {}), ...(publicationDiagnostic?{publicationDiagnostic}:{}),proposalTestsExecuted, candidateTestsExecuted,
     wholeAppCompleted: false, finalCalculatorCiVerified: false, legalEnabled: false,
   });
   async function checkpoint(stageName: string, status: CalculatorExecutionCheckpointEvent["status"]) {
@@ -87,6 +103,9 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     if (options.restoreProposal !== undefined && (typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
     if (options.restoreAssessments !== undefined && (typeof options.restoreAssessments !== "function" ||
         typeof options.restoreProposal !== "function" || options.maxRepairs !== 0)) return refuseCalculatorExecution();
+    if (options.repairContinuationPermit && (options.maxRepairs !== 0 || options.historicalT03Permit || options.restoreProposal || options.restoreAssessments)) return refuseCalculatorExecution();
+    if(options.queuedSuccessorPermit&&(options.repairContinuationPermit||options.historicalT03Permit||options.restoreProposal||options.restoreAssessments))return refuseCalculatorExecution();
+    if(options.rejectedProposalPermit&&(options.maxRepairs!==0||options.queuedSuccessorPermit||options.repairContinuationPermit||options.historicalT03Permit||options.restoreProposal||options.restoreAssessments))return refuseCalculatorExecution();
     const maxRepairs = options.maxRepairs ?? 1;
     const env = options.env ?? process.env;
     if ((options.execution ?? "live") === "live" && (env.CALCULATOR_EXECUTION_LIVE_APPROVED !== "RUN_ONE_FREE_CALCULATOR_TASK" ||
@@ -97,9 +116,13 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     if (!options.team || !options.tools || [options.tools.checkProposal, options.tools.publish, options.tools.ci,
         options.team.generate, options.team.repair, options.team.assess].some(value => typeof value !== "function")) return refuseCalculatorExecution();
     const plan = await calculatorWorkspacePlan(workspace);
-    const claimed = await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies);
+    const claimed = options.rejectedProposalPermit ? await claimCalculatorRuntimeRecovery(workspace,options.rejectedProposalPermit) : options.queuedSuccessorPermit ? await claimCalculatorQueuedSuccessor(workspace,options.queuedSuccessorPermit) : options.repairContinuationPermit ?
+      await claimCalculatorT03RepairContinuation(workspace,options.repairContinuationPermit) : options.historicalT03Permit ?
+      await claimHistoricalCalculatorT03(workspace,options.historicalT03Permit,options.verifyDependencies) :
+      await claimCalculatorWorkspaceTask(workspace, options.verifyDependencies,options.verifiedCorrections);
     receipt = claimed.store; task = claimed.selection.task;
     if (!receipt || !task) return answer(claimed.selection.status === "blocked" ? "blocked" : "needs-review", claimed.selection.reasonCode);
+    if(options.rejectedProposalPermit){activeAttempt=2;repairs=1;}
     const snapshot = await stage("load_current_source", () => loadCalculatorWorkspaceTask(workspace, task!.id));
     function validateChanges(changes: PreparedCalculatorChanges): PreparedCalculatorChanges {
       // Rebuild static/policy/secret gates before storing a successful proposal.
@@ -117,7 +140,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         return refuseCalculatorExecution();
       return changes;
     }
-    let changes = await stage(options.restoreProposal ? "restore_proposal_1" : "generate_1", async () => {
+    let changes = await stage(options.rejectedProposalPermit?'repair_2':options.restoreProposal ? "restore_proposal_1" : "generate_1", async () => {
       await assertCalculatorWorkspaceCurrent(workspace); attempts++;
       const result = options.restoreProposal ? await options.restoreProposal(plan, task!.id, snapshot) : await options.team.generate(plan, task!.id, snapshot);
       await assertCalculatorWorkspaceCurrent(workspace);
@@ -126,7 +149,7 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
     const restored: readonly CalculatorAssessment[] = options.restoreAssessments ? await options.restoreAssessments(plan, task.id, changes) : [];
     if (options.restoreAssessments && (!Array.isArray(restored) || restored.length !== 2 ||
         restored.some((value, index) => value.role !== (["security", "reviewer"] as const)[index]))) return refuseCalculatorExecution();
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = activeAttempt; attempt <= 2; attempt++) {
       const issues: string[] = [];
       for (const role of ["security", "reviewer", "tester"] as const) {
         const prior: CalculatorAssessment | undefined = restored.find(value => value.role === role);
@@ -160,9 +183,11 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
         activeAttempt = 2; attempts++; repairs++;
         changes = await stage("repair_2", async () => {
           await assertCalculatorWorkspaceCurrent(workspace);
-          const result = await options.team.repair(plan, task!.id, snapshot, {
-            previous: changes, proposalDigest: calculatorProposalDigest(changes), issues: Object.freeze([...issues]),
-          });
+          const request = options.team.prepareRepairFeedback ?
+            options.team.prepareRepairFeedback(plan, task!.id, changes, checks) : {
+              previous: changes, proposalDigest: calculatorProposalDigest(changes), issues: Object.freeze([...issues]),
+            };
+          const result = await options.team.repair(plan, task!.id, snapshot, request);
           await assertCalculatorWorkspaceCurrent(workspace);
           checkpointProposal = validateChanges(result); assessments = []; return checkpointProposal;
         });
@@ -192,7 +217,8 @@ export async function runCalculatorExecution(workspace: CalculatorWorkspace, opt
       return await finish("needs-review", "task_candidate_verified_not_whole_app", "candidate-verified");
     }
     return await finish("blocked", "repair_limit_reached");
-  } catch {
+  } catch (error) {
+    publicationDiagnostic=calculatorPublicationDiagnostic(error);
     if (!receipt) return answer("blocked", "workspace_or_configuration_unverified");
     const candidateUnverified = publication !== undefined && activeStage === "publish_candidate";
     // A failed write is itself terminal: preserve the previous private evidence

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "step": "9.3",
+  "status": "code-history-ready-owner-activation-pending",
+  "runtimeSha": "88b6e5c8d5b7db8cf46ed65f5215a9bf2baebd21",
+  "ci": {
+    "runId": 40201000286,
+    "jobId": 121191965253,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2274,
+      "passed": 2274,
+      "failed": 0
+    }
+  },
+  "local": {
+    "authorizationTests": 20,
+    "parsedTypeScriptModules": 6,
+    "gitDiffCheck": "passed-isolated-index-comparison"
+  },
+  "history": {
+    "requests": 59,
+    "requestBytes": 553908,
+    "reservedTokens": 230413,
+    "digest": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+    "auditRunId": 40199463712,
+    "artifactId": 12601940306
+  },
+  "proposal": {
+    "active": false,
+    "mode": "read-only-review",
+    "additionalMaxRequests": 3,
+    "additionalMaxReservedTokens": 18000,
+    "digest": "afaf23c899abbd5349787e912e6249092a5e6690d66abc1f3eb5d1adbc8318b6"
+  },
+  "ownerDecision": null,
+  "actualLedgerInitialized": false,
+  "newProviderCalls": 0,
+  "legacyT05": {
+    "requests": 11,
+    "maxRequests": 11,
+    "reservedTokens": 43761,
+    "maxReservedTokens": 48000
+  },
+  "legalEnabled": false,
+  "mainChanged": false,
+  "calculatorSourceChanged": false,
+  "onaySourceChanged": false,
+  "merge": false,
+  "deployment": false,
+  "remaining": [
+    "native owner approval",
+    "explicit history migration into real ledger",
+    "immutable live workflow through required entry",
+    "bounded real cycle under separate owner allowance"
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "id": "calculator-repeated-operators-20261026",
+  "status": "reproduced-repair-not-dispatched",
+  "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "reproduction": {
+    "version": 1,
+    "sourceSha": "558993981c9bbb7c6100c8335860ac5668768314",
+    "verification": "Node calls original UI handlers with mocked DOM; not a browser replay",
+    "normal": {
+      "input": "2+3",
+      "before": "2+3",
+      "after": "5"
+    },
+    "repeated": {
+      "input": "6**2",
+      "before": "6**2",
+      "after": "Enter two numbers and an operator"
+    },
+    "changed": {
+      "input": "6*+2",
+      "before": "6*+2",
+      "after": "Enter two numbers and an operator"
+    },
+    "screenshotLike": "636.3--*********////*",
+    "recovered": {
+      "input": "1+1",
+      "before": "1+1",
+      "after": "2"
+    },
+    "confirmedDefect": "Repeated or changed binary operators are appended verbatim; unsupported input is only rejected on equals.",
+    "unverified": [
+      "Real-browser long-input overflow",
+      "Final desired unary-minus and operator replacement interaction"
+    ],
+    "applicationChanged": false,
+    "modelCalls": 0
+  },
+  "cause": "src/app.mjs append() concatenates input without validating operand/operator state; evaluate() only accepts two numeric operands and one binary operator.",
+  "proposedRepairChecks": [
+    {
+      "input": "6**2",
+      "expected": "12",
+      "policy": "Repeated multiplication selects one multiplication."
+    },
+    {
+      "input": "6*+2",
+      "expected": "8",
+      "policy": "Changing the pending binary operation replaces it."
+    },
+    {
+      "input": "2*-3",
+      "expected": "-6",
+      "policy": "Preserve currently valid negative right operands."
+    },
+    {
+      "input": "7-10",
+      "expected": "-3",
+      "policy": "Preserve existing negative-result criterion."
+    }
+  ],
+  "unchangedRequirements": "All original11 criteria remain required; add new defect-specific checks without editing their expected answers.",
+  "unverified": [
+    "Real mobile long-input layout",
+    "New-task plan and native development allowance",
+    "Live agent repair and fresh independent reviews/host tests/candidate CI"
+  ],
+  "remainingAuthorizedModelCalls": 0,
+  "newModelCalls": 0,
+  "applicationChanged": false,
+  "existingT05MustNotBeReplayed": true,
+  "legalEnabled": false,
+  "additionalObservedDefects": [
+    {
+      "id": "leading-zero-input",
+      "actual": "00005",
+      "expected": "5",
+      "verification": "owner screenshot and original handlers with mocked DOM",
+      "regressionToPreserve": {
+        "input": "0.05",
+        "expected": "0.05"
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+name: Read-only uncertain recovery preflight
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.github/workflows/project-recovery-preflight.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-readonly-recovery-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'a95c7929c69f7db06ae7cd06e58096b8997dfc46'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify immutable configuration bytes and compile reviewed runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          for(const [path,pin] of [
+            ['.factory/runtime-project-manifest.json','97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284'],
+            ['.factory/recovery-preflight.json','a1db5810a723d018c52d2160213f534dc8b521a1caee55a75f03d97d93555ecd'],
+            ['scripts/project-recovery-preflight.mjs','1ef62c8097a6a3f3e92eb399fe455aeafb828dd69f7916358b39f3df3e514368'],
+            ['scripts/project-recovery-preflight.test.mjs','39afd57eab9cddf14f34efbc9e3c71b806bfe570b6c8290f22b840052c920441']
+          ])assert.equal(createHash('sha256').update(readFileSync(path)).digest('hex'),pin);
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Verify entrypoint refusals without credentials
+        run: node scripts/project-recovery-preflight.test.mjs
+      - name: Read native owner, protected budget, base CI and encrypted archive
+        env:
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+        run: |
+          node --input-type=module - <<'JS' > recovery-preflight-result.json
+          const native=globalThis.fetch;
+          globalThis.fetch=async(input,init)=>{const path=new URL(String(input)).pathname,family=path.includes('/rulesets/')?'ruleset':path.includes('/rules/')?'effective-rules':path.includes('/issues/')?'owner-approval':path.includes('/git/')?'git-metadata':path.includes('/actions/')?'ci-metadata':'repository-metadata';const r=await native(input,init);console.error(JSON.stringify({version:1,event:'preflight-http',family,status:r.status}));return r;};
+          const {inspectRecoveryPreflight}=await import('./scripts/project-recovery-preflight.mjs');
+          try{console.log(JSON.stringify(await inspectRecoveryPreflight(process.env)));}catch{console.error('Read-only preflight refused. Preserve all state.');process.exitCode=1;}
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: readonly-recovery-preflight
+          path: recovery-preflight-result.json
+          if-no-files-found: warn
+          retention-days: 7

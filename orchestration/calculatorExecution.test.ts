@@ -1,3 +1,4 @@
+import {createCalculatorPublisher} from "../github/calculatorPublisher.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -405,4 +406,11 @@ test("restored assessments require an explicit proposal restore and cannot enabl
       assert.equal(f.requests.length, 0); assert.deepEqual(f.counts(), { generations: 0, checks: 0, publishes: 0, ciReads: 0 });
     } finally { f.cleanup(); }
   });
+});
+
+test("publisher stage diagnostics survive in the stopped execution report without leaking upstream text or replaying models",async()=>{
+ const f=await fixture();try{let attempts=0;const publisher=createCalculatorPublisher({plan:f.plan,reader:f.reader,env:{...env,GITHUB_TOKEN:"fixture-publish-token",CALCULATOR_EXECUTION_LIVE_APPROVED:"RUN_ONE_FREE_CALCULATOR_TASK",AGENT_FACTORY_ENABLE_GITHUB_WRITES:"true",AGENT_ALLOWED_REPOSITORIES:CALCULATOR_PROFILE.repository},runGit:async()=>{attempts++;throw Error("PRIVATE_UPSTREAM_BODY fixture-publish-token");}});
+ const result=await runCalculatorExecution(f.workspace,{...f,tools:{...f.tools,publish:input=>publisher.publish(input)},maxRepairs:0});
+ assert.equal(result.status,"needs-review");assert.equal(result.publicationDiagnostic?.phase,"git_prepare");assert.equal(result.publicationDiagnostic?.pushAcknowledged,false);assert.equal(attempts,1);assert.equal(f.requests.length,4);assert.equal(f.counts().ciReads,0);assert.ok(!JSON.stringify(result).includes("PRIVATE_UPSTREAM_BODY"));assert.ok(!JSON.stringify(result).includes("fixture-publish-token"));
+ }finally{f.cleanup();}
 });

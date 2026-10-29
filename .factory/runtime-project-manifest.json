@@ -1,0 +1,402 @@
+{
+  "version": 1,
+  "mode": "first-task",
+  "profile": {
+    "version": 1,
+    "id": "calculator-input-repair",
+    "repository": "erman-ksv/Onay-Factory-Calculator",
+    "writablePaths": [
+      "src/app.mjs",
+      "test/ui.test.mjs"
+    ],
+    "readOnlyPaths": [
+      "index.html",
+      "src/calculator.mjs",
+      "styles.css"
+    ],
+    "appendOnlyPaths": [
+      "test/ui.test.mjs"
+    ],
+    "branchPrefix": "feat/calculator-agent/",
+    "requiredCiNames": [
+      "Calculator task CI"
+    ],
+    "requiredCiSteps": [
+      "Syntax",
+      "Task tests"
+    ],
+    "requiredActors": [
+      "security",
+      "reviewer",
+      "tester"
+    ],
+    "maxFiles": 2,
+    "maxSourceBytes": 131072,
+    "maxNewFileBytes": 8192,
+    "maxChangedCharacters": 6000,
+    "maxReviewBytes": 12000,
+    "legalEnabled": false,
+    "mergesEnabled": false
+  },
+  "goal": {
+    "acceptance": [
+      {
+        "id": "calculator-acceptance",
+        "scenario": "Preserve the original eleven criteria, pass all 25 fixed input and five existing browser checks, and append regression tests without changing previous test bytes."
+      }
+    ],
+    "baseRef": "feat/calculator-agent/calculator-pilot-step7-v1",
+    "baseSha": "558993981c9bbb7c6100c8335860ac5668768314",
+    "goal": "Repair repeated or changed operators and leading zeros in the existing Calculator, preserving all original arithmetic and UI criteria. Then append regression tests without modifying any existing test bytes. Agents author both changes; no deployment or merge.",
+    "id": "calculator-input-repair-20261027",
+    "provider": "groq",
+    "readOnlyPaths": [
+      "index.html",
+      "src/calculator.mjs",
+      "styles.css"
+    ],
+    "requiredPaths": [
+      "src/app.mjs",
+      "test/ui.test.mjs"
+    ],
+    "version": 1
+  },
+  "proposal": {
+    "tasks": [
+      {
+        "id": "calculator-input-repair-202610-29e2a8-t01",
+        "role": "frontend",
+        "goal": "Fix repeat/change of pending operators and leading zeros in app input. Preserve 2*-3=-6, 7-10=-3 and 0.05. Use the same behavior for buttons and keyboard; all immutable host checks must pass.",
+        "paths": [
+          "src/app.mjs"
+        ],
+        "acceptanceIds": [
+          "calculator-acceptance"
+        ],
+        "dependsOn": []
+      },
+      {
+        "id": "calculator-input-repair-202610-29e2a8-t02",
+        "role": "frontend",
+        "goal": "Append executable regression tests for the fixed repeated/changed operators and leading zeros. Preserve every byte of the existing UI tests. Do not modify app code or expected host answers.",
+        "paths": [
+          "test/ui.test.mjs"
+        ],
+        "acceptanceIds": [
+          "calculator-acceptance"
+        ],
+        "dependsOn": [
+          "calculator-input-repair-202610-29e2a8-t01"
+        ]
+      }
+    ],
+    "blockers": [],
+    "unverifiedAreas": [
+      "The actual model repair and its new candidate browser/CI results have not been verified."
+    ]
+  },
+  "history": {
+    "version": 1,
+    "projectId": "calculator-input-repair-20261027",
+    "repository": "erman-ksv/Onay-Factory-Calculator",
+    "planFingerprint": "02b1e1662ef8ef4d7483db9e9ea65bed67e73cce15fcab1db42b284f1f2b6110",
+    "observations": [
+      {
+        "scopeId": "planning",
+        "kind": "cumulative-scope-total",
+        "charge": {
+          "requests": 0,
+          "requestBytes": 0,
+          "reservedTokens": 0
+        },
+        "evidenceSha256": "6133e35b6abc5a8c14ffcbe6d63e8ddd31302e94164d1decc330a6b2fde988bb"
+      },
+      {
+        "scopeId": "calculator-input-repair-202610-29e2a8-t01",
+        "kind": "cumulative-scope-total",
+        "charge": {
+          "requests": 0,
+          "requestBytes": 0,
+          "reservedTokens": 0
+        },
+        "evidenceSha256": "fc8426c645b42319ac8929985c1230c2ae79df2560fe3e78243897c0979faaf5"
+      },
+      {
+        "scopeId": "calculator-input-repair-202610-29e2a8-t02",
+        "kind": "cumulative-scope-total",
+        "charge": {
+          "requests": 0,
+          "requestBytes": 0,
+          "reservedTokens": 0
+        },
+        "evidenceSha256": "ba3dc9dc90ce24cc14745feca49274d8d7f5580845e8a032917fc52f5ef9349d"
+      }
+    ],
+    "carryover": {
+      "projectKey": "30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+      "head": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+      "grant": {
+        "version": 1,
+        "projectId": "calculator-pilot-step7-v1",
+        "repository": "erman-ksv/Onay-Factory-Calculator",
+        "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+        "grantId": "extend-3a775f3a0edb6270c7f346b61d4e59ca6711d2e44637f35253112956205295ca",
+        "maxRequests": 65,
+        "maxRequestBytes": 24000,
+        "maxTotalRequestBytes": 662219,
+        "maxReservedTokens": 264886,
+        "historical": {
+          "requests": 59,
+          "requestBytes": 553908,
+          "reservedTokens": 230413
+        },
+        "historicalEvidenceSha256": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+        "provider": "groq",
+        "freeTierConfirmed": true,
+        "legalEnabled": false
+      },
+      "used": {
+        "requests": 65,
+        "requestBytes": 626530,
+        "reservedTokens": 263359
+      },
+      "evidenceSha256": "154e7efd80d452febb36239d7e7abc8fe437177c0c8a877ce0de341d67becf4c"
+    }
+  },
+  "workflowPins": [
+    {
+      "id": 390241255,
+      "path": ".github/workflows/calculator-task-ci.yml",
+      "blobSha": "45fae4a292a04e89a631ad7ff2469a3af7265e70"
+    }
+  ],
+  "taskPolicies": [
+    {
+      "taskId": "calculator-input-repair-202610-29e2a8-t01",
+      "node": {
+        "image": "node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392",
+        "checks": [
+          {
+            "id": "contract-addition",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              2,
+              "+",
+              3
+            ],
+            "expected": 5,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-negative",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              7,
+              "-",
+              10
+            ],
+            "expected": -3,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-multiplication",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              6,
+              "*",
+              2
+            ],
+            "expected": 12,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-division",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              8,
+              "/",
+              2
+            ],
+            "expected": 4,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-decimals",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              0.1,
+              "+",
+              0.2
+            ],
+            "expected": 0.3,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-negative-operand",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              2,
+              "*",
+              -3
+            ],
+            "expected": -6,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          }
+        ]
+      },
+      "browser": {
+        "image": "mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a"
+      },
+      "authorSelections": [
+        {
+          "path": "src/app.mjs",
+          "version": "base",
+          "start": 0,
+          "end": 800
+        }
+      ],
+      "reviewSelections": [
+        {
+          "path": "src/app.mjs",
+          "version": "proposed",
+          "changedWindow": 1024
+        }
+      ]
+    },
+    {
+      "taskId": "calculator-input-repair-202610-29e2a8-t02",
+      "node": {
+        "image": "node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392",
+        "checks": [
+          {
+            "id": "contract-addition",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              2,
+              "+",
+              3
+            ],
+            "expected": 5,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-negative",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              7,
+              "-",
+              10
+            ],
+            "expected": -3,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-multiplication",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              6,
+              "*",
+              2
+            ],
+            "expected": 12,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-division",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              8,
+              "/",
+              2
+            ],
+            "expected": 4,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-decimals",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              0.1,
+              "+",
+              0.2
+            ],
+            "expected": 0.3,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          },
+          {
+            "id": "contract-negative-operand",
+            "path": "src/calculator.mjs",
+            "exportName": "calculate",
+            "args": [
+              2,
+              "*",
+              -3
+            ],
+            "expected": -6,
+            "acceptanceIds": [
+              "calculator-acceptance"
+            ]
+          }
+        ]
+      },
+      "browser": {
+        "image": "mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a"
+      },
+      "authorSelections": [
+        {
+          "path": "test/ui.test.mjs",
+          "version": "base",
+          "start": 4254,
+          "end": 5454
+        }
+      ],
+      "reviewSelections": [
+        {
+          "path": "test/ui.test.mjs",
+          "version": "proposed",
+          "changedWindow": 1600
+        }
+      ]
+    }
+  ],
+  "archivePin": null,
+  "candidateSha": null,
+  "decision": {
+    "issueNumber": 75,
+    "commentId": 6448721815,
+    "bodySha256": "ec8845caa21760f8f1293e9a272790c14ca56c5814f3044a4fa8eff08b094a37"
+  }
+}

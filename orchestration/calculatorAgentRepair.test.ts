@@ -285,7 +285,13 @@ test("pre-HTTP persistence and exported checkpoints retain old plus newly reserv
   await team.generate(plan, task.id, f.snapshot);
   assert.equal(calls, 1); assert.equal(persisted.length, 1);
   assert.equal(team.checkpointCharge()!.attemptedRequests, priorCharge.attemptedRequests + 1);
-  assert.deepEqual(team.checkpointCharge(), team.snapshot().aggregateCharge);
+  // Two consecutive timing snapshots may legitimately differ by 1+ ms.
+  // Require exact cost accounting and monotonically retained elapsed time.
+  const before = team.checkpointCharge()!, after = team.snapshot().aggregateCharge!;
+  assert.equal(after.attemptedRequests, before.attemptedRequests);
+  assert.equal(after.totalRequestBytes, before.totalRequestBytes);
+  assert.equal(after.reservedRunTokens, before.reservedRunTokens);
+  assert.ok(after.elapsedMs >= before.elapsedMs);
   assert.equal(team.snapshot().modelBudget.attemptedRequests, 1);
 });
 test("a failed cumulative checkpoint write prevents HTTP without refunding old or new charges", async () => {
@@ -585,4 +591,19 @@ test("actual isolated proposal-check failure blocks browser proof, specialists a
     assert.equal(calls, 1); assert.equal(isolation.browserChecks(), 0); assert.equal(isolation.harnessChecks(), 1);
     assert.equal(team.checkpointCharge()!.attemptedRequests, 10);
   } finally { rmSync(archive.directory, { recursive: true, force: true }); }
+});
+
+test('keyboard repair context can be inspected before admission without HTTP, reservations or reusable client state',async()=>{
+ const f=await fixture(),keyboard=plan.tasks[2]!;
+ const snapshot=await loadCalculatorSnapshot({repository:plan.owner.repository,baseRef:plan.branch,baseSha:A,changePaths:keyboard.paths},f.reader);
+ const previous=prepareCalculatorRoleChanges('frontend',{summary:'Unpublished keyboard protocol fixture',changes:keyboard.paths.map(path=>({operation:'create',path,content:'export const fixture=1;',message:'Fixture'}))},snapshot);
+ let calls=0;
+ const team=createCalculatorModelTeam(saved.request,env,async()=>{calls++;throw Error('No HTTP permitted');},{},undefined,undefined,'calculator-restored-repair-four-roles');
+ const restored=team.restoreProposal(plan,keyboard.id,snapshot,previous,calculatorProposalDigest(previous),[]);
+ const request=team.importRepairFeedback(plan,keyboard.id,restored,f.assessments,undefined,f.dependency);
+ const preview=await team.inspectRepairContext(plan,keyboard.id,snapshot,request);
+ assert.equal(preview.status,'ready');assert.ok(preview.estimatedInputTokens+preview.reservedOutputTokens<=6000);
+ assert.equal(calls,0);assert.equal(team.diagnostic().httpRequestsAttempted,0);assert.equal(team.diagnostic().httpRequestsSent,0);
+ assert.equal(team.checkpointCharge()!.reservedRunTokens,0);
+ await assert.rejects(()=>team.repair(plan,keyboard.id,snapshot,request));assert.equal(calls,0);
 });

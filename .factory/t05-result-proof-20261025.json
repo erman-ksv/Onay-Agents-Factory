@@ -1,0 +1,244 @@
+{
+  "version": 1,
+  "status": "t05-blocked-outcome-verified-readonly",
+  "sourceRunId": 40169007596,
+  "sourceArtifactId": 12589941962,
+  "executableTestsChanged": false,
+  "beforeExecutableSha256": "903bc8d9266ff2d1eb1e686ad7021d20d0f549fe926361a5914786dfd4d7ac36",
+  "afterExecutableSha256": "903bc8d9266ff2d1eb1e686ad7021d20d0f549fe926361a5914786dfd4d7ac36",
+  "sourceCapsuleSha256": "d85c290bd5465f7c84e112731965059ee26b642bb72484b7d3c79df3c3a7a7d2",
+  "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+  "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+  "proposalDigest": "fb9b7af7b84571663c5181465473538025c7a0c6688619e9b654f5537f6d9cb7",
+  "assessments": [
+    {
+      "role": "security",
+      "ready": true,
+      "summary": "UI integration test patch adds comprehensive scenarios but does not introduce observable security concerns; arithmetic logic remains unchanged per verified signature. No evidence of authentication, injection, or data leakage issues in the scoped UI test changes.",
+      "findings": [],
+      "unverifiedAreas": [
+        "Unshown unchanged source beyond the verified arithmetic export signature",
+        "Other viewport widths, browsers, physical phones and accessibility beyond the supplied scenarios",
+        "Independent model verdicts, publication, exact-candidate CI and overall completion",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    },
+    {
+      "role": "reviewer",
+      "ready": false,
+      "summary": "UI integration tests are incomplete; the patch only adds comments without implementing the required test scenarios, risking uncovered regressions and missing validation of error handling and layout behavior.",
+      "findings": [
+        {
+          "severity": "blocker",
+          "message": "The ui.test.mjs file only contains added comment lines; no actual test code for the listed acceptance scenarios (addition, negative-result, etc.) is present, so the required UI coverage is not provided.",
+          "evidenceRefs": [
+            "changes@eac625e5830612c64fb8dafbd3d239c72adbeafd"
+          ],
+          "evidenceStatus": "supplied"
+        },
+        {
+          "severity": "high",
+          "message": "Zero-division error handling is specified in acceptance criteria but there is no test asserting the error display or subsequent input recovery, leaving a critical functional path unverified.",
+          "evidenceRefs": [
+            "changes@eac625e5830612c64fb8dafbd3d239c72adbeafd"
+          ],
+          "evidenceStatus": "supplied"
+        }
+      ],
+      "unverifiedAreas": [
+        "Actual UI test implementations beyond added comments",
+        "Behavior of calculator component for error states and layout under narrow screens",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    },
+    {
+      "role": "tester",
+      "ready": false,
+      "summary": "Evidence confirms UI tests for backspace, clear, keyboard consistency, and narrow‑screen layout passed, but no evidence is provided for addition, negative result, multiplication, division, decimals, decimal‑display, and zero‑recovery scenarios. Without verified execution of these core arithmetic cases, the acceptance criteria are not fully satisfied.",
+      "findings": [
+        {
+          "severity": "blocker",
+          "message": "No host evidence of UI tests for addition (2 + 3 = 5) execution and result verification.",
+          "evidenceRefs": [],
+          "evidenceStatus": "missing"
+        },
+        {
+          "severity": "blocker",
+          "message": "No host evidence of UI tests for negative result (7 - 10 = -3) execution and result verification.",
+          "evidenceRefs": [],
+          "evidenceStatus": "missing"
+        },
+        {
+          "severity": "blocker",
+          "message": "No host evidence of UI tests for multiplication (6 * 4 = 24) execution and result verification.",
+          "evidenceRefs": [],
+          "evidenceStatus": "missing"
+        },
+        {
+          "severity": "blocker",
+          "message": "No host evidence of UI tests for division (9 / 3 = 3) execution and result verification.",
+          "evidenceRefs": [],
+          "evidenceStatus": "missing"
+        },
+        {
+          "severity": "blocker",
+          "message": "No host evidence of UI tests for decimal multiplication (0.5 * 4 = 2) execution and result verification.",
+          "evidenceRefs": [],
+          "evidenceStatus": "missing"
+        },
+        {
+          "severity": "blocker",
+          "message": "No host evidence of UI tests for decimal display precision (0.1 + 0.2 = 0.3) execution and result verification.",
+          "evidenceRefs": [],
+          "evidenceStatus": "missing"
+        },
+        {
+          "severity": "blocker",
+          "message": "No host evidence of UI tests for zero‑division error handling and subsequent input recovery.",
+          "evidenceRefs": [],
+          "evidenceStatus": "missing"
+        },
+        {
+          "severity": "low",
+          "message": "The provided evidence does not cover viewport widths other than 360 px, other browsers, or accessibility concerns, which remain unverified.",
+          "evidenceRefs": [
+            "host-checks@fb9b7af7b84571663c5181465473538025c7a0c6688619e9b654f5537f6d9cb7"
+          ],
+          "evidenceStatus": "supplied"
+        }
+      ],
+      "unverifiedAreas": [
+        "Arithmetic scenarios (addition, negative result, multiplication, division, decimals, decimal display, zero‑recovery) lack execution evidence",
+        "Broader viewport widths, browsers, and accessibility beyond the 360 px narrow‑screen test",
+        "7 findings lack supplied evidence references; their asserted behavior remains unverified.",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    }
+  ],
+  "preReviewNodeChecks": {
+    "repository": "erman-ksv/Onay-Factory-Calculator",
+    "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+    "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "proposalDigest": "fb9b7af7b84571663c5181465473538025c7a0c6688619e9b654f5537f6d9cb7",
+    "status": "passed",
+    "testsExecuted": true,
+    "failures": []
+  },
+  "preReviewBrowserChecks": {
+    "repository": "erman-ksv/Onay-Factory-Calculator",
+    "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+    "baseSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "proposalDigest": "fb9b7af7b84571663c5181465473538025c7a0c6688619e9b654f5537f6d9cb7",
+    "dependencySha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+    "status": "passed",
+    "testsExecuted": true,
+    "browser": "Chrome/141.0.7390.37",
+    "sandboxDisabled": false,
+    "pageErrors": 0,
+    "blockedRequests": 0,
+    "scenarios": [
+      "Entering 123 then deleting the last digit displays 12",
+      "Clear permits a new calculation after input",
+      "Clear permits a new calculation after a result",
+      "Keyboard and button calculations give the same result",
+      "At 360px controls and result work without horizontal scrolling"
+    ],
+    "domSelectors": [
+      {
+        "selector": ".calculator",
+        "matches": 1
+      },
+      {
+        "selector": ".display",
+        "matches": 1
+      },
+      {
+        "selector": ".keys",
+        "matches": 1
+      },
+      {
+        "selector": ".key",
+        "matches": 18
+      }
+    ]
+  },
+  "execution": {
+    "status": "blocked",
+    "reasonCode": "repair_limit_reached",
+    "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+    "attempts": 1,
+    "repairs": 0,
+    "proposalTestsExecuted": false,
+    "candidateTestsExecuted": false,
+    "wholeAppCompleted": false,
+    "finalCalculatorCiVerified": false,
+    "legalEnabled": false
+  },
+  "metadataRepair": {
+    "sourceRawSha256": "96f5f4de0ac2a661096e0c5e121c93e172463611e31af1e106fe6039b40bb7d5",
+    "patchSha256": "1b48e4715d976fe37aab2f651e5e3cd7d0b8dac04d9a099665314245bc1b3db6",
+    "messageOrigin": "host-only-description",
+    "modelCodeChanged": false,
+    "newAuthorCalls": 0
+  },
+  "currentCharge": {
+    "attemptedRequests": 5,
+    "totalRequestBytes": 42174,
+    "reservedRunTokens": 18674,
+    "elapsedMs": 140885
+  },
+  "remainingRequests": 3,
+  "remainingReservedTokens": 29326,
+  "codeCorrectionConsumed": true,
+  "historicalReceiptsCompared": [
+    "calc-calculator-pilot-step7-v1-34ee03-t01.json",
+    "calc-calculator-pilot-step7-v1-34ee03-t02.json",
+    "calc-calculator-pilot-step7-v1-34ee03-t03.json",
+    "calc-calculator-pilot-step7-v1-34ee03-t04.json",
+    "calc-calculator-pilot-step7-v1-34ee03-t05.json",
+    "calc-plan-calculator-pilot-step7-v1.json",
+    "calculator-pilot-step7-v1.calculator-plan.json"
+  ],
+  "claims": [
+    {
+      "ref": "refs/heads/state/calculator-live-event/e81b8662db2eb6fc6134473b11349cb635e72d77181cf6b482229de85342ee32",
+      "duplicateRefused": true,
+      "modelCalls": 0
+    },
+    {
+      "ref": "refs/heads/state/calculator-live-event/9992794ceee470c90da92e4d79854bcc32abe15ccb39cb95c9e2c35702423b64",
+      "duplicateRefused": true,
+      "modelCalls": 0
+    },
+    {
+      "ref": "refs/heads/state/calculator-live-event/c1d2cc7833d027104f02bd0593893e3c4d507241e9043fcd6c91922bc85776f4",
+      "duplicateRefused": true,
+      "modelCalls": 0
+    }
+  ],
+  "publicationStarted": false,
+  "calculatorUnchanged": true,
+  "modelCalls": 0,
+  "writes": 0,
+  "legalEnabled": false,
+  "readonlyVerificationRunId": 40169494298,
+  "readonlyVerificationJobId": 121097270440,
+  "factorySourceSha": "1e69e2be1556ae1216a7e74cfd93943cb9e7061c",
+  "factorySourceCiRunId": 40169611601,
+  "factoryTypecheck": "passed",
+  "factoryTests": {
+    "tests": 2165,
+    "passed": 2165,
+    "failed": 0
+  },
+  "whitespaceCheckExitCode": 0
+}

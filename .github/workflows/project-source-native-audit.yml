@@ -1,0 +1,46 @@
+name: Verify generic source and bound context without models
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/project-source-audit-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: generic-source-native-readonly-audit
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable tested source reader
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'b597f4dfc31a9dd093d9ac4b7fe55ff7d74c133c'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform trusted modules without package installation
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Verify source, absence and selected context without model credentials
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: 'b597f4dfc31a9dd093d9ac4b7fe55ff7d74c133c'
+          FACTORY_SOURCE_CI_RUN: '40350249664'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/project-source-native-audit.mjs
+      - name: Preserve metadata only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generic-source-native-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/project-source-native-audit/result.json
+          if-no-files-found: warn
+          retention-days: 7

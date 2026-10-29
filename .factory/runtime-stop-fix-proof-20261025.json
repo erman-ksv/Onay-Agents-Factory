@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "status": "terminal-runtime-stop-regressions-fixed",
+  "runtimeSha": "2332bcd3df587845e23049b8690043dbb3672637",
+  "sourceCi": {
+    "runId": 40219124855,
+    "jobId": 121246659437,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2302,
+      "passed": 2302,
+      "failed": 0
+    }
+  },
+  "reproduction": {
+    "baselineSha": "2a77a69bbd9bd56809af5bb0e54afc34561bd551",
+    "before": {
+      "tests": 3,
+      "failed": 3,
+      "error": "Missing expected rejection"
+    },
+    "after": {
+      "tests": 4,
+      "passed": 4
+    },
+    "localModelSuite": {
+      "total": 158,
+      "passed": 158,
+      "failed": 0
+    },
+    "dependenciesInstalled": false,
+    "testIsolation": "none",
+    "externalProviderCalls": 0,
+    "evidenceDigests": {
+      "regressions-before.txt": "35865b8bdd6e771881e3c21f3903d5b2d7590ccf4c7e0a14a33f3fa2ee0d135c",
+      "regressions-after.txt": "6acac36c82727e183b451527bc11058acdc02f4a7335635c81da1dcba4e6d035",
+      "model-suite-after.txt": "8ef1c13bd4a615f95279e2310a81a1e7b69a587fe180d4d4a2b996f5e6db1500"
+    }
+  },
+  "checks": {
+    "diffCheck": "passed-isolated-index-comparison",
+    "scenariosAndExpectedCalculatorAnswersChanged": false,
+    "requestAccountingPreserved": true,
+    "authorizationPreserved": true,
+    "roleGatesPreserved": true,
+    "ciGatesPreserved": true
+  },
+  "modelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "previousPilotReplayed": false,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "applicationSourceChanged": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Next useful goal and owner-approved allowance",
+    "Explicit history initialization",
+    "Invoke required runtime in pinned useful-task workflow"
+  ]
+}

@@ -1,0 +1,29 @@
+name: Calculator bounded DOM reply metadata inspection
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-dom-reply-inspection.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12565240405'
+          run-id: '40106311123'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/dom-reply
+          merge-multiple: true
+      - name: Inspect JSON schema metadata only without model calls or source output
+        env:
+          READ_TOKEN: ${{ github.token }}
+          ROOT: ${{ runner.temp }}/dom-reply
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync} from 'node:fs';import assert from 'node:assert/strict';assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');const headers={Authorization:'Bearer '+process.env.READ_TOKEN};const a=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12565240405',{headers,redirect:'error'});assert.equal(a.status,200);const artifact=await a.json();assert.equal(artifact.workflow_run.id,40106311123);assert.equal(artifact.digest,'sha256:2f591b546b5f13eef140f482200278ebb9be4695c029125a1802c77400a72e20');const raw=readFileSync(process.env.ROOT+'/private-rejected-proposal.json');assert.ok(raw.length<262144);const x=JSON.parse(raw),r=x.result;const obj=v=>!!v&&typeof v==='object'&&!Array.isArray(v);const names=['summary','changes','operation','path','sourceSha256','edits','message','content','before','after'];const shape=v=>({object:obj(v),knownKeys:obj(v)?Object.keys(v).filter(k=>names.includes(k)):[],extraKeyCount:obj(v)?Object.keys(v).filter(k=>!names.includes(k)).length:0,extraKeys:obj(v)?Object.keys(v).filter(k=>!names.includes(k)).map(k=>({name:/^[A-Za-z_][A-Za-z_0-9]{0,31}$/.test(k)&&!/(?:gsk_|gh[pousr]_)/.test(k)?k:'redacted',type:typeof v[k]})):[]});console.log(JSON.stringify({version:1,providerCalls:0,kind:['repair','generate'].includes(x.kind)?x.kind:'other',result:shape(r),summaryType:typeof r?.summary,summaryLength:typeof r?.summary==='string'?r.summary.length:null,changesArray:Array.isArray(r?.changes),changeCount:Array.isArray(r?.changes)?r.changes.length:null,changes:(Array.isArray(r?.changes)?r.changes:[]).slice(0,3).map(c=>({...shape(c),path:['src/app.mjs','test/ui.test.mjs'].includes(c?.path)?c.path:'other',operation:['patch','create'].includes(c?.operation)?c.operation:'other',messageType:typeof c?.message,contentType:typeof c?.content,contentLength:typeof c?.content==='string'?c.content.length:null,shaType:typeof c?.sourceSha256,shaValid:typeof c?.sourceSha256==='string'&&/^[a-f0-9]{64}$/.test(c.sourceSha256),editsArray:Array.isArray(c?.edits),edits:(Array.isArray(c?.edits)?c.edits:[]).slice(0,8).map(e=>({...shape(e),beforeType:typeof e?.before,afterType:typeof e?.after,beforeLength:typeof e?.before==='string'?e.before.length:null,afterLength:typeof e?.after==='string'?e.after.length:null,unchanged:typeof e?.before==='string'&&e.before===e.after}))}))}));
+          const test=r.changes.find(c=>c.path==='test/ui.test.mjs').content;assert.ok(test.length<=4096);console.log(JSON.stringify({version:1,inspection:'test-import-order',providerCalls:0,length:test.length,head:test.slice(0,500),tail:test.slice(-250),globalDocumentIndex:test.indexOf('globalThis.document'),globalWindowIndex:test.indexOf('globalThis.window'),dynamicImportIndex:test.indexOf('import('),hasStaticAppImport:/import[^;\n]*['\"][^'\"]*app\.mjs['\"]/.test(test)}));
+          JS

@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "date": "2026-10-24",
+  "advisoryOnly": true,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "status": "blocked_exact_syntax_scope_and_request_budget_exhausted",
+  "wholeStep8Closed": false,
+  "completedStep8Criteria": 1,
+  "totalStep8Criteria": 4,
+  "legalEnabled": false,
+  "publicationStarted": false,
+  "automaticReplay": false,
+  "provider": "groq",
+  "freeTierConfirmed": true,
+  "priorCharge": {
+    "attemptedRequests": 10,
+    "totalRequestBytes": 86409,
+    "reservedRunTokens": 43612,
+    "elapsedMs": 291564
+  },
+  "zeroHttpDiagnostic": {
+    "runId": 40101817295,
+    "artifactId": 12562803408,
+    "digest": "sha256:d7fcc88187bef0e66df8f2587d0e4236bb950d48c1536b3736854f9f5065497e",
+    "providerCalls": 0,
+    "charge": {
+      "attemptedRequests": 10,
+      "totalRequestBytes": 86409,
+      "reservedRunTokens": 43612,
+      "elapsedMs": 299552
+    }
+  },
+  "currentCharge": {
+    "attemptedRequests": 11,
+    "totalRequestBytes": 87362,
+    "reservedRunTokens": 44698,
+    "elapsedMs": 314026
+  },
+  "approvedCeiling": {
+    "requests": 11,
+    "reservedTokens": 45000
+  },
+  "lastAttempt": {
+    "runId": 40102210646,
+    "jobId": 120896506683,
+    "eventSha": "911953370a198114b66493bd51328716516d6184",
+    "artifactId": 12562824077,
+    "artifactDigest": "sha256:136bbd34596a82725b0c44cff576b37fa143b9d3fd4b3a2303960db0cfc495a0",
+    "httpStatus": 200,
+    "finishReason": "stop",
+    "newProviderCalls": 1,
+    "publicationStarted": false
+  },
+  "diagnostic": {
+    "version": 1,
+    "providerCalls": 0,
+    "publicationStarted": false,
+    "sourceRunId": 40102210646,
+    "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+    "patchIsObject": true,
+    "requiredKeysPresent": true,
+    "extraKeysCount": 0,
+    "shaMatchesCurrentApp": true,
+    "editsArray": true,
+    "editCount": 1,
+    "edits": [
+      {
+        "requiredKeysPresent": true,
+        "extraKeysCount": 0,
+        "beforeAndAfterStrings": true,
+        "beforeLength": 176,
+        "afterLength": 117,
+        "unchanged": false,
+        "anchorOccurrencesAtMostThree": 1,
+        "wordsNumbersOperatorsPreserved": false
+      }
+    ],
+    "currentCharge": {
+      "attemptedRequests": 11,
+      "totalRequestBytes": 87362,
+      "reservedRunTokens": 44698,
+      "elapsedMs": 314026
+    }
+  },
+  "diagnosticRunId": 40102416432,
+  "diagnosticJobId": 120897104465,
+  "sourceProposal": {
+    "runId": 39993060116,
+    "artifactId": 12518816662,
+    "digest": "2e2a55352feeedad6475b21cb29fa6694b0426b00500552c321c0675790edb1f",
+    "baseSha": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+    "artifactDigest": "sha256:e7df7d3816b5ba336b28bb68e4ee6aa507af3aea5ba705dffb8e0647f75267de",
+    "syntaxFailure": {
+      "path": "src/app.mjs",
+      "line": 41,
+      "column": 44
+    }
+  },
+  "sourceCi": {
+    "sourceSha": "4ebf082cfe676406454a91a5d672bb7145460a82",
+    "runId": 40102034894,
+    "jobId": 120895998603,
+    "typecheck": "passed",
+    "tests": 2112,
+    "pass": 2112,
+    "fail": 0
+  },
+  "diffCheck": {
+    "runId": 40102210646,
+    "jobId": 120896506683,
+    "command": "git diff --check 6f6700d93a75e129053fc706e2fce70dd4fd6450 HEAD",
+    "status": "passed"
+  },
+  "immutableClaim": {
+    "ref": "refs/heads/state/calculator-live-event/d0b1ade4db9777dc9ba1989bb5dbfd19c8e147dddd19bee61e9cfe860e5ef7b1",
+    "sha": "d93fa43167f066ad06cf98e2f50877b800d4127f",
+    "mustPreserve": true
+  },
+  "pending": [
+    "valid agent-authored correction within explicitly renewed allowance",
+    "fresh Security, Reviewer and Tester assessments on exact corrected proposal",
+    "real Node and browser success then publication and exact-candidate CI",
+    "automatic authenticated CI delivery from Calculator to Factory",
+    "real exactly-once next-task transition with duplicate/failure/restart coverage"
+  ],
+  "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorHead": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+  "cautions": [
+    "Reserved tokens are conservative budget accounting, not measured provider usage or money.",
+    "The legacy modelsRun field is initialized to zero; use modelCalls/newProviderCalls and durable charge for accounting.",
+    "Do not replay live run or delete any immutable claim.",
+    "Private patch may be broader than punctuation-only; semantic correctness has not been assessed."
+  ]
+}

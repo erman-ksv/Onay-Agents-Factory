@@ -1,0 +1,178 @@
+name: Calculator saved DOM reply checks and three fresh reviews
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-t03-dom-reviews-request.json']
+# Explicit host-only scope: Factory writes only metadata objects and an atomic state reference.
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: calculator-protected-live-plan-step7
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-t03-dom-reviews-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate the fixed host request
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          const value=JSON.parse(readFileSync('request/.factory/calculator-t03-dom-reviews-request.json','utf8'));
+          assert.deepEqual(value,{"version":1,"allowanceId":"owner-five-additional-free-calls-20261024","phase":"verify-saved-dom-reply-and-three-fresh-reviews-no-author-replay","runtimeSha":"62a99eb21932b7ca26c3d2a4f3cae16810f48da2","sourceCiRunId":40106869548,"taskId":"calculator-pilot-step7-v1-34ee03-t03","sourceReplyRunId":40106311123,"sourceReplyArtifactId":12565240405,"priorRequests":13,"priorReservedTokens":55286,"maxNewRequests":3,"maxNewAuthorRequests":0,"maxNewReservedTokens":16000,"maxTotalT03Requests":16,"maxTotalT03ReservedTokens":74698,"maxFurtherRepairs":0,"publicationOnlyAfterAllFreshGates":true,"modelChecksumClaimsAreAdvisory":true,"automaticReplay":false,"legalEnabled":false});
+          JS
+      - name: Checkout immutable live runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 62a99eb21932b7ca26c3d2a4f3cae16810f48da2
+          path: runtime
+          persist-credentials: false
+      - name: Download exact stopped t03 evidence without execution
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12497425333'
+          run-id: '39942417242'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-prior
+          merge-multiple: true
+      - name: Download exact zero-HTTP context-stop proof
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12499003755'
+          run-id: '39949567538'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-context-stop
+          merge-multiple: true
+      - name: Download prior rejected correction report without replay
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12507835270'
+          run-id: '39966515860'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-last-repair
+          merge-multiple: true
+      - name: Download exact saved agent correction without another author request
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12509264527'
+          run-id: '39973872603'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-t03-owner-reply
+          merge-multiple: true
+      - name: Download exact audited latest failed proposal and diagnostics
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12514596755'
+          run-id: '39983292798'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-precise-failure
+          merge-multiple: true
+      - name: Download stopped explicit decline and immutable costs
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12516625382'
+          run-id: '39987019627'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-explicit-decline
+          merge-multiple: true
+      - name: Download rejected author draft and exact immutable costs
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12516549326'
+          run-id: '39990331498'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-validation-failure
+          merge-multiple: true
+      - name: Download exact latest failed agent proposal
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12518816662'
+          run-id: '39993060116'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-latest-proposal
+          merge-multiple: true
+      - name: Download exact latest conserved charge and rejected response
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12562824077'
+          run-id: '40102210646'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-latest-charge
+          merge-multiple: true
+      - name: Download exact syntactically corrected failed proposal and conserved charge
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12563873339'
+          run-id: '40104435920'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-dom-failure
+          merge-multiple: true
+      - name: Download exact saved DOM reply and immutable charge
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12565240405'
+          run-id: '40106311123'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-dom-reply
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install trusted runtime dependencies
+        working-directory: runtime
+        run: pnpm install --frozen-lockfile
+      - name: Prepare exact isolated runtime images
+        run: |
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Run one agent repair from real test failure then three independent reviews
+        working-directory: runtime
+        env:
+          CALCULATOR_LATEST_PROPOSAL_DIRECTORY: ${{ runner.temp }}/calculator-latest-proposal
+          CALCULATOR_LATEST_CHARGE_DIRECTORY: ${{ runner.temp }}/calculator-latest-charge
+          CALCULATOR_DOM_FAILURE_DIRECTORY: ${{ runner.temp }}/calculator-dom-failure
+          CALCULATOR_DOM_REPLY_DIRECTORY: ${{ runner.temp }}/calculator-dom-reply
+          CALCULATOR_T03_REPAIR_APPROVED: SAVED_DOM_REPLY_THREE_REVIEWS_WITHIN_FIVE_CALL_LIMIT
+          CALCULATOR_T03_EVIDENCE_DIRECTORY: ${{ runner.temp }}/calculator-t03-prior
+          CALCULATOR_T03_CONTEXT_STOP_DIRECTORY: ${{ runner.temp }}/calculator-t03-context-stop
+          CALCULATOR_T03_LAST_REPAIR_DIRECTORY: ${{ runner.temp }}/calculator-t03-last-repair
+          CALCULATOR_T03_OWNER_REPLY_DIRECTORY: ${{ runner.temp }}/calculator-t03-owner-reply
+          CALCULATOR_PRECISE_FAILURE_DIRECTORY: ${{ runner.temp }}/calculator-precise-failure
+          CALCULATOR_EXPLICIT_DECLINE_DIRECTORY: ${{ runner.temp }}/calculator-explicit-decline
+          CALCULATOR_VALIDATION_FAILURE_DIRECTORY: ${{ runner.temp }}/calculator-validation-failure
+          FACTORY_RUNTIME_SHA: 62a99eb21932b7ca26c3d2a4f3cae16810f48da2
+          FACTORY_SOURCE_CI_RUN: '40106869548'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          CALCULATOR_GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CALCULATOR_EXECUTION_LIVE_APPROVED: RUN_ONE_FREE_CALCULATOR_TASK
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: groq
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
+        run: pnpm exec tsx scripts/calculator-t03-dom-reviews.mjs
+      - name: Preserve immutable evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-t03-dom-reviews-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-t03-dom-reviews/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14

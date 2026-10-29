@@ -1,0 +1,117 @@
+name: Bounded project CI continuation
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/runtime-continuation-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-bounded-project-continuation
+  cancel-in-progress: false
+jobs:
+  continuation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'de8825f2246c397d830210619030b804ae862e87'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform immutable trusted source without installing dependencies
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Checkout the reviewed activation configuration
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: activation-config
+          sparse-checkout: |
+            .factory/runtime-project-manifest.json
+            scripts/project-input-repair-activation.mjs
+            scripts/project-input-repair-activation.test.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify configuration bytes before loading activation code
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';
+          for(const [path,pin] of [
+            ['.factory/runtime-project-manifest.json','97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284'],
+            ['scripts/project-input-repair-activation.mjs','c522ac6e10cfa950cb801aedadbef125e106e7b92cd549caef2434154cbda395'],
+            ['scripts/project-input-repair-activation.test.mjs','ccd42eeb0a7ef3b6711c11f1e2164e2715f6c184bdb23c6e96b4a1d3267ad5b7']
+          ]){const bytes=readFileSync('activation-config/'+path);assert.equal(createHash('sha256').update(bytes).digest('hex'),pin);writeFileSync(path,bytes);}
+          JS
+      - name: Verify independently pinned host configuration before exposing credentials
+        id: config
+        env:
+          # Reviewed literal, independent of trigger marker/model/artifact.
+          EXPECTED_RUNTIME_MANIFEST_SHA256: '97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284'
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync,writeFileSync,appendFileSync} from 'node:fs';
+          const expected=process.env.EXPECTED_RUNTIME_MANIFEST_SHA256;
+          if(!expected){const proof={version:1,status:'blocked-host-manifest-not-configured',runtimeActivated:false,providerCalls:0,applicationWrites:0,budgetWrites:0,stateWrites:0,newAllowance:0,legalEnabled:false};writeFileSync('continuation-readiness.json',JSON.stringify(proof,null,2)+'\n');appendFileSync(process.env.GITHUB_OUTPUT,'ready=false\n');console.log(JSON.stringify(proof));}
+          else{const {prepareProjectRuntimeManifest,projectRuntimeManifestMetadata}=await import('./orchestration/projectRuntimeManifest.js'),body=readFileSync('.factory/runtime-project-manifest.json','utf8'),cap=prepareProjectRuntimeManifest(body,expected),v=JSON.parse(body);appendFileSync(process.env.GITHUB_OUTPUT,'ready=true\nmanifest-sha='+expected+'\nprofile='+v.profile.id+'\nrepository='+v.profile.repository+'\n');writeFileSync('continuation-readiness.json',JSON.stringify({version:1,status:'host-manifest-verified-development-authorization-still-required',manifest:projectRuntimeManifestMetadata(cap),runtimeActivated:false,legalEnabled:false},null,2)+'\n');}
+          JS
+      - name: Check activation refusal cases without native writes or provider credentials
+        if: steps.config.outputs.ready == 'true'
+        run: node scripts/project-input-repair-activation.test.mjs
+      - name: Prepare immutable host test image
+        if: steps.config.outputs.ready == 'true'
+        run: docker pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Prepare host browser images from the verified immutable manifest
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync} from 'node:fs';import {execFileSync} from 'node:child_process';
+          const v=JSON.parse(readFileSync('.factory/runtime-project-manifest.json','utf8')),images=[...new Set(v.taskPolicies.flatMap(p=>p.browser?[p.browser.image]:[]))];
+          if(images.length>8)throw Error('Browser image count refused');
+          for(const image of images){if(typeof image!=='string'||!/^mcr\.microsoft\.com\/playwright@sha256:[a-f0-9]{64}$/.test(image))throw Error('Unpinned browser image refused');execFileSync('/usr/bin/docker',['pull',image],{stdio:'inherit',timeout:120000,env:{PATH:'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}});}
+          JS
+      - name: Initialize only the approved new metadata ledger before exposing model credentials
+        if: steps.config.outputs.ready == 'true'
+        env:
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/project-input-repair-activation.mjs > activation-readiness.json
+      - name: Run bounded continuation with native owner and existing-budget checks
+        if: steps.config.outputs.ready == 'true'
+        env:
+          EXPECTED_RUNTIME_MANIFEST_SHA256: ${{ steps.config.outputs.manifest-sha }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          AGENT_FACTORY_PROVIDER: 'groq'
+          GROQ_MODEL: 'qwen/qwen3-32b'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_PROJECT_LIVE_APPROVED: 'ONE_FREE_BOUNDED_RUN'
+          AGENT_FACTORY_TARGET_PROFILE: ${{ steps.config.outputs.profile }}
+          AGENT_ALLOWED_REPOSITORIES: ${{ steps.config.outputs.repository }}
+        run: node scripts/project-ci-continuation.mjs > continuation-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bounded-continuation-readiness
+          path: |
+            continuation-readiness.json
+            activation-readiness.json
+            continuation-result.json
+          if-no-files-found: error
+          retention-days: 7

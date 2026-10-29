@@ -1,0 +1,85 @@
+name: Diagnose saved agent test failure without model calls
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-saved-correction-diagnostic.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: b8fe5112dc20ae4a426d56fd0c905bb2c22b75c1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12509264527'
+          run-id: '39973872603'
+          github-token: ${{ github.token }}
+          path: evidence
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12497425333'
+          run-id: '39942417242'
+          github-token: ${{ github.token }}
+          path: prior
+          merge-multiple: true
+      - name: Prepare pinned isolated diagnostic image
+        run: docker pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Diagnose failed agent tests in isolated container without model calls
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync,writeFileSync,mkdirSync,readdirSync,statSync,chmodSync} from 'node:fs';import {spawnSync} from 'node:child_process';
+          import {stripTypeScriptTypes} from 'node:module';import {join,dirname} from 'node:path';
+          import {createHash} from 'node:crypto';import assert from 'node:assert/strict';
+          const out=join(process.env.RUNNER_TEMP,'adapter-diagnostic');mkdirSync(out);
+          function copy(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){if(entry.name==='.git'||entry.name==='node_modules'||entry.name==='evidence'||entry.name==='prior')continue;const p=join(dir,entry.name);if(entry.isDirectory())copy(p);else if(p.endsWith('.ts')&&!p.endsWith('.d.ts')){const dest=join(out,p.replace(/\.ts$/,'.js'));mkdirSync(dirname(dest),{recursive:true});writeFileSync(dest,stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}else if(p.endsWith('.json')){const dest=join(out,p);mkdirSync(dirname(dest),{recursive:true});writeFileSync(dest,readFileSync(p));}}}copy('.');
+          writeFileSync(join(out,'package.json'),'{"type":"module"}');
+          const {loadCalculatorSnapshot,createCalculatorSnapshotReader,calculatorSources}=await import(join(out,'github/calculatorSnapshot.js'));
+          const {prepareCalculatorRoleChanges}=await import(join(out,'commander/calculatorTeam.js'));
+          const {prepareUnpublishedCalculatorCorrection}=await import(join(out,'orchestration/calculatorUnpublishedCorrection.js'));
+          const hash=b=>createHash('sha256').update(b).digest('hex');
+          const bytes=readFileSync('prior/execution-private/calculator-pilot-step7-v1-34ee03-t03.execution.json');assert.equal(hash(bytes),'0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7');
+          const reply=readFileSync('evidence/private-rejected-proposal.json');assert.equal(hash(reply),'cb1f22efc82523cca64e086da10ac7c455d4d5c799c079a9ba774ce9961eb2dd');
+          const previous=JSON.parse(bytes).payload.proposal,raw=JSON.parse(reply).result;
+          const result={modelsRun:false,targetWrites:false};
+          let stage='snapshot';
+          try{
+          const snapshot=await loadCalculatorSnapshot({repository:previous.repository,baseRef:previous.baseRef,baseSha:previous.baseSha,changePaths:['src/app.mjs','test/ui.test.mjs']},createCalculatorSnapshotReader(process.env));
+          const evidence=JSON.parse(previous.reviewEvidence);
+          const input={summary:previous.summary,changes:evidence.changes.map(c=>c.operation==='create'?{operation:c.operation,path:c.path,content:c.content,message:previous.files.find(f=>f.path===c.path).message}:{operation:c.operation,path:c.path,sourceSha256:c.sourceSha256,edits:c.edits,message:previous.files.find(f=>f.path===c.path).message})};
+          stage='prior_rebuild';const rebuilt=prepareCalculatorRoleChanges('frontend',input,snapshot);result.previousEvidenceMatches=rebuilt.reviewEvidence===previous.reviewEvidence;
+          result.anchors=raw.changes.map(c=>{const p=previous.files.find(f=>f.path===c.path);return{sourceShaMatches:c.sourceSha256===hash(p.content),exact:c.edits[0].before===p.content,canonical:c.edits[0].before===p.content.replace(/\\/g,'\\\\'),originalBackslashes:[...p.content].filter(c=>c==='\\').length};});
+          stage='adapter';const adopted=prepareUnpublishedCalculatorCorrection(raw,previous,snapshot);result.adapterPassed=true;result.paths=adopted.files.map(f=>f.path);
+          stage='isolated_test_diagnostic';
+          const reader=createCalculatorSnapshotReader(process.env);
+          const baseSources=new Map();
+          for(const paths of [['src/calculator.mjs','test/calculator.test.mjs'],['index.html','styles.css','src/app.mjs']]){
+           const base=await loadCalculatorSnapshot({repository:previous.repository,baseRef:previous.baseRef,baseSha:previous.baseSha,changePaths:paths},reader);
+           for(const [path,content] of calculatorSources(base))baseSources.set(path,content);
+          }
+          for(const f of adopted.files)baseSources.set(f.path,f.content);
+          const app=join(process.env.RUNNER_TEMP,'isolated-saved-candidate');mkdirSync(app,{mode:0o755});
+          for(const [path,content] of baseSources){const dest=join(app,path);mkdirSync(dirname(dest),{recursive:true,mode:0o755});writeFileSync(dest,content,{mode:0o644});}
+          const command=['--host=unix:///var/run/docker.sock','run','--rm','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=32','--memory=256m','--memory-swap=256m','--cpus=1','--user=65534:65534','--tmpfs=/tmp:rw,noexec,nosuid,size=16m,mode=1777','--mount=type=bind,src='+app+',dst=/app,readonly','--workdir=/app','--entrypoint=/usr/local/bin/node','node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392','--disable-sigusr1','--permission','--allow-fs-read=/app','/app/test/ui.test.mjs'];
+          const test=spawnSync('docker',command,{encoding:'utf8',timeout:15000,maxBuffer:32768,env:{PATH:process.env.PATH,HOME:process.env.HOME}});
+          const output=(test.stdout??'')+'\n'+(test.stderr??'');
+          result.testDiagnostic={path:'test/ui.test.mjs',exitCode:test.status,signal:test.signal,outputSha256:hash(output),errorKinds:[...new Set(output.match(/(?:AssertionError|ReferenceError|SyntaxError|TypeError|ERR_[A-Z_]+)/g)??[])],tapCounters:output.split('\n').filter(l=>/^# (tests|pass|fail) [0-9]+$/.test(l.trim())).slice(-3),locations:[...new Set(output.match(/(?:file:\/\/)?\/app\/[a-zA-Z0-9_./-]+:\d+:\d+/g)??[])].slice(0,5)};
+          const safe=output.split('\n').filter(l=>/^\s*(error:|code:|operator:|expected:|actual:|message:|name:)/.test(l)&&l.length<240&&!/gsk_|gh[pousr]_/.test(l)).slice(0,12);
+          result.testDiagnostic.boundedFailureFields=safe;
+
+          }catch{result.failedStage=stage;result.adapterPassed=false;}
+          console.log(JSON.stringify(result));
+          JS

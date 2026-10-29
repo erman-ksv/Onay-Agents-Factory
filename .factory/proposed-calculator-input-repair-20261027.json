@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "status": "proposed-task-not-dispatched-not-runtime-manifest",
+  "repository": "erman-ksv/Onay-Factory-Calculator",
+  "baseRef": "feat/calculator-agent/calculator-pilot-step7-v1",
+  "baseSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "goal": "Agents repair repeated/changed operators and leading-zero input without breaking existing arithmetic, negative operands, clear/backspace or keyboard behavior.",
+  "newTaskRequired": true,
+  "completedT05ReplayAuthorized": false,
+  "proposedWritablePaths": [
+    "src/app.mjs",
+    "test/ui.test.mjs"
+  ],
+  "readOnlyDependencies": [
+    "index.html",
+    "styles.css",
+    "src/calculator.mjs"
+  ],
+  "immutableHostCases": "config/calculator-input-browser/cases.json",
+  "hostProbe": "orchestration/calculatorInputBrowserProbe.ts",
+  "existing11CriteriaRemainRequired": true,
+  "existingExpectedAnswersMayChange": false,
+  "requiredRoles": [
+    "frontend",
+    "security",
+    "reviewer",
+    "tester"
+  ],
+  "blockingWork": [
+    "Owner must publish the exact bounded development approval as an unedited native OWNER comment. No new allowance has been granted.",
+    "After approval, bind the actual comment ID/digest, initialize the new budget once with all prior spent history carried, and run the concrete plan under native gates."
+  ],
+  "currentOwnerMode": "read-only-review",
+  "remainingModelRequests": 0,
+  "applicationWritesAuthorized": false,
+  "publicationAuthorized": false,
+  "legalEnabled": false,
+  "immutableHostCasesSha256": "8c4ddb579b3aa548561013d5a986afd306e0da6fff0b59dd0dd2b2b83659de6c",
+  "browserChecks": 25,
+  "browserPublicationGateWired": true,
+  "browserPublicationGateProof": ".factory/browser-publication-gate-proof-20261027.json",
+  "positiveNativeCorrectedAppAcceptanceVerified": false,
+  "readOnlyDependenciesWired": true,
+  "newFirstTaskStartWired": true,
+  "readonlyFirstStartProof": ".factory/readonly-first-start-proof-20261027.json",
+  "launchPackage": ".factory/input-repair-launch-package-20261027.json",
+  "launchReadinessProof": ".factory/input-repair-launch-readiness-proof-20261027.json",
+  "historyReconciledAndNativeVerified": true,
+  "concretePlanPrepared": true,
+  "proposedAdditionalRequests": 8,
+  "ownerDecision": null
+}

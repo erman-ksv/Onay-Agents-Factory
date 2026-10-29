@@ -64,3 +64,10 @@ test("after-CI never runs in inspect, plan or preflight, and rejects absent or r
     assert.equal(existsSync(state), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('required project runtime rejects missing or forged host before state and network access',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'required-project-runtime-')),state=join(root,'uncreated');
+ try{for(const mode of ['run','plan','preflight'] as const)await assert.rejects(()=>runCalculatorRuntime({}, {},state,mode,{AGENT_FACTORY_PROJECT_BUDGET_MODE:'required'}),refusal);
+ await assert.rejects(()=>runCalculatorRuntime({}, {},state,'run',{},undefined,undefined,undefined,{controller:{} as never,executionId:'forged'}),refusal);assert.equal(existsSync(state),false);
+ }finally{rmSync(root,{recursive:true,force:true});}
+});

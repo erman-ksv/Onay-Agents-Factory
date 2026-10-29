@@ -1,0 +1,1 @@
+{"version": 1, "taskId": "calculator-pilot-step7-v1-34ee03-t05", "ownerAllowance": {"id": "owner-t05-nine-free-calls-48000-second-correction-20261025", "maxRequests": 9, "maxReservedTokens": 48000, "maxRepairs": 2, "freeTierConfirmed": true}, "executionRuntimeSha": "4bd391a3844d92b507390ace77c1e7524cfbbdee", "executionSourceCiRunId": 40171447393}

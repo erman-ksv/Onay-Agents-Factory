@@ -1,0 +1,47 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {randomBytes} from 'node:crypto';import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';import {join} from 'node:path';
+import {createProjectPublicationFixtureForTests} from '../config/fixtures/projectPublicationFixture.js';
+import {createProjectCheckpointArchiveFixtureForTests} from '../config/fixtures/projectCheckpointArchiveFixture.js';
+import {createProjectCheckpointArchiveForTests,PROJECT_CHECKPOINT_ARCHIVE_ERROR} from './projectCheckpointArchive.js';
+import {createProjectCorrectionRecoveryKey,destroyProjectCorrectionRecoveryKey,writeProjectHostEnvelope} from '../orchestration/projectCorrectionCheckpoint.js';
+import {loadProjectRuntimeRecoveryKey,materializeProjectRuntimeArchive} from '../orchestration/projectRuntimeRecovery.js';
+const refused=(e:unknown)=>e instanceof Error&&e.message===PROJECT_CHECKPOINT_ARCHIVE_ERROR;
+async function fixture(){const f=await createProjectPublicationFixtureForTests(false,true),storage=createProjectCheckpointArchiveFixtureForTests(f.controller.projectKey),key=createProjectCorrectionRecoveryKey('archive-test-key',randomBytes(32)),directory=join(f.root,'archive-private');mkdirSync(directory,{mode:0o700});let i=0;const checkpoint=()=>{const path=join(directory,'checkpoint-'+i+++'.json'),sealed=writeProjectHostEnvelope('onay-runtime-http-v1',JSON.stringify({taskId:f.taskId,stage:'before-http',requestSha256:'a'.repeat(64)}),key,path);return{kind:'before-http',taskId:f.taskId,path,sha256:sealed.sha256};},open=(pin:any=null)=>createProjectCheckpointArchiveForTests({controller:f.controller,token:'offline-archive-token',pin},storage.transport);return{...f,storage,key,directory,checkpoint,open,cleanup:()=>{destroyProjectCorrectionRecoveryKey(key);f.cleanup();}};}
+test('append-only archive stores ciphertext in a separate state ref and reopens from a trusted latest pin',async()=>{
+ const f=await fixture();try{const a=f.open(),first=await a.persist(f.checkpoint()),second=await a.persist(f.checkpoint()),b=f.open(second),history=await b.history();assert.equal(first.sequence,1);assert.equal(second.sequence,2);assert.notEqual(first.head,second.head);assert.equal(history.length,2);assert.equal(history[1]!.previousHead,first.head);assert.equal((await b.inspect())!.pin.head,second.head);assert.ok(f.storage.requests.filter(r=>r.method==='PATCH').every(r=>r.body.force===false));assert.ok(f.storage.requests.every(r=>!r.path.includes('/main')&&!r.path.includes('project-model-budget')));assert.ok(!JSON.stringify(f.storage.requests).includes('requestSha256'));assert.equal((await f.controller.inspect()).used.requests,4);}finally{f.cleanup();}
+});
+test('two competing archive creators have one winner and never force or retry a ref write',async()=>{
+ const f=await fixture();try{const a=f.open(),b=f.open(),results=await Promise.allSettled([a.persist(f.checkpoint()),b.persist(f.checkpoint())]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected').length,1);assert.equal(f.storage.requests.filter(r=>r.path==='/git/refs'&&r.method==='POST').length,2);assert.equal(f.storage.requests.filter(r=>r.method==='PATCH').length,0);}finally{f.cleanup();}
+});
+test('missing rolled-back or unrelated existing ref refuses instead of initializing a replacement',async()=>{
+ const f=await fixture();try{const a=f.open(),first=await a.persist(f.checkpoint()),second=await a.persist(f.checkpoint());for(const head of [undefined,first.head,'0'.repeat(40)]){f.storage.state.head=head;const b=f.open(second),before=f.storage.requests.length;await assert.rejects(()=>b.inspect(),refused);assert.ok(f.storage.requests.slice(before).every(r=>r.method==='GET'));}f.storage.state.head=second.head;await assert.rejects(()=>f.open().persist(f.checkpoint()),refused);}finally{f.cleanup();}
+});
+test('unknown remote acknowledgement stops this writer permanently without duplicating the checkpoint',async()=>{
+ const f=await fixture();try{const a=f.open();f.storage.state.lostAck=true;const c=f.checkpoint();await assert.rejects(()=>a.persist(c),refused);const before=f.storage.requests.length;await assert.rejects(()=>a.persist(c),refused);assert.equal(f.storage.requests.length,before);assert.equal(a.snapshot().stopped,true);assert.ok(f.storage.state.head);}finally{f.cleanup();}
+});
+test('owner revocation corrupted Git data and plaintext checkpoint files cannot enter the archive',async()=>{
+ const f=await fixture();try{const a=f.open(),pin=await a.persist(f.checkpoint());f.storage.state.wrongBlob=true;await assert.rejects(()=>f.open(pin).inspect(),refused);f.storage.state.wrongBlob=false;f.storage.state.truncated=true;await assert.rejects(()=>f.open(pin).inspect(),refused);f.storage.state.truncated=false;const c=f.checkpoint();writeFileSync(c.path,'PRIVATE_SOURCE_MARKER');await assert.rejects(()=>f.open(pin).persist(c),refused);f.state.owner=false;const before=f.storage.requests.length;await assert.rejects(()=>f.open(pin).inspect(),refused);assert.equal(f.storage.requests.length,before);}finally{f.cleanup();}
+});
+test('materialization authenticates the persistent key and refuses wrong keys, copied stores or occupied destinations',async()=>{
+ const f=await fixture();try{const a=f.open(),c=f.checkpoint();await a.persist(c);const fresh=join(f.root,'restore');mkdirSync(fresh,{mode:0o700});const result=await materializeProjectRuntimeArchive(a,f.controller,f.key,fresh,'simulated');assert.equal(result.encryptedFiles,1);assert.equal(result.executionAuthorized,false);assert.deepEqual(readFileSync(join(result.runtime,'checkpoint-0.json')),readFileSync(c.path));await assert.rejects(()=>materializeProjectRuntimeArchive(a,f.controller,f.key,fresh,'simulated'));const other=createProjectCorrectionRecoveryKey('archive-test-key',randomBytes(32));try{const dir=join(f.root,'wrong-key');mkdirSync(dir,{mode:0o700});await assert.rejects(()=>materializeProjectRuntimeArchive(a,f.controller,other,dir,'simulated'));}finally{destroyProjectCorrectionRecoveryKey(other);}const dir=join(f.root,'copy');mkdirSync(dir,{mode:0o700});await assert.rejects(()=>materializeProjectRuntimeArchive({...a},f.controller,f.key,dir,'simulated'));}finally{f.cleanup();}
+});
+test('persistent key configuration has no fallback and forbids provider or Git token reuse',()=>{
+ const bytes=randomBytes(32),value=bytes.toString('base64'),valid={FACTORY_RECOVERY_KEY_ID:'runtime-host-key',FACTORY_RECOVERY_KEY_BASE64:value},key=loadProjectRuntimeRecoveryKey(valid);destroyProjectCorrectionRecoveryKey(key);for(const env of [{}, {...valid,FACTORY_RECOVERY_KEY_BASE64:'invalid'}, {...valid,FACTORY_RECOVERY_KEY_ID:''}, {...valid,GITHUB_TOKEN:value}, {...valid,GROQ_API_KEY:value}])assert.throws(()=>loadProjectRuntimeRecoveryKey(env));bytes.fill(0);
+});
+test('warm history reuses validated immutable records but rechecks the live ref and OWNER each time',async()=>{
+ const f=await fixture();try{const a=f.open();for(let i=0;i<6;i++)await a.persist(f.checkpoint());const pin=a.snapshot().pin!,b=f.open(pin),history=await b.history(),before=f.storage.requests.length;
+  for(let i=0;i<8;i++)assert.deepEqual(await b.history(),history);
+  const warm=f.storage.requests.slice(before);assert.equal(warm.length,8);assert.ok(warm.every(r=>r.method==='GET'&&r.path.startsWith('/git/ref/heads/')));
+  assert.throws(()=>{(history[0] as any).sequence=99;},TypeError);
+  f.state.owner=false;const count=f.storage.requests.length;await assert.rejects(()=>b.history(),refused);assert.equal(f.storage.requests.length,count);
+ }finally{f.cleanup();}
+});
+test('warm archive sees appended records, refuses deletion and rollback, and validates unseen objects cold',async()=>{
+ const f=await fixture();try{const a=f.open(),first=await a.persist(f.checkpoint()),second=await a.persist(f.checkpoint()),b=f.open(second);await b.history();
+  const third=await a.persist(f.checkpoint()),before=f.storage.requests.length;assert.equal((await b.history()).length,3);const reads=f.storage.requests.slice(before);assert.equal(reads.filter(r=>r.path.startsWith('/git/commits/')).length,1);
+  const missing=f.open(third);await missing.history();f.storage.state.head=undefined;await assert.rejects(()=>missing.history(),refused);f.storage.state.head=third.head;
+  const rollback=f.open(third);await rollback.history();f.storage.state.head=first.head;await assert.rejects(()=>rollback.history(),refused);f.storage.state.head=third.head;
+  const corrupted=f.open(third);await corrupted.history();await a.persist(f.checkpoint());f.storage.state.wrongBlob=true;await assert.rejects(()=>corrupted.history(),refused);
+ }finally{f.cleanup();}
+});
+

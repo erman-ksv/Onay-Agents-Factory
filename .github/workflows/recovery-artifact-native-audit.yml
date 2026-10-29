@@ -1,0 +1,45 @@
+name: Native read-only recovery artifact audit
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/recovery-artifact-native-audit-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: native-readonly-recovery-artifact-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable tested artifact reader
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '5d0801884483af5290f6344c3170388cc79bcf04'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform reviewed artifact reader without installing dependencies
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync,writeFileSync} from 'node:fs';import {stripTypeScriptTypes} from 'node:module';
+          const p='github/calculatorRecoveryArtifact.ts';writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));
+          JS
+      - name: Verify native artifact ZIP and independently pinned selected file
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: '5d0801884483af5290f6344c3170388cc79bcf04'
+          FACTORY_SOURCE_CI_RUN: '40227769306'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/calculator-recovery-artifact-native-audit.mjs
+      - name: Preserve metadata-only verification result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-artifact-native-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/recovery-artifact-native-audit/result.json
+          if-no-files-found: warn
+          retention-days: 7

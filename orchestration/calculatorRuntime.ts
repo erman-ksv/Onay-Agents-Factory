@@ -1,3 +1,9 @@
+import {createCalculatorRuntimeProposalRejection} from './calculatorRejectedProposalCheckpoint.js';
+import {prepareCalculatorRuntimeRecoveryHost,calculatorRuntimeRecoverySource,admitCalculatorRuntimeRecovery,assertCalculatorRuntimeRecovery,routeCalculatorRuntimeRecovery,type CalculatorRuntimeRecoveryHost,type CalculatorRuntimeRecoveryPermit} from './calculatorRuntimeRecovery.js';
+import {prepareCalculatorRejectedProposalRecovery} from './calculatorRejectedProposalRecovery.js';
+import {prepareCalculatorVerifiedCorrections,resolveCalculatorVerifiedCorrection,type CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
+import {createCalculatorRuntimeFailureCheckpoint} from './calculatorRuntimeFailure.js';
+import {createCalculatorProjectRuntimeTeam,prepareCalculatorProjectRuntimeHost,type CalculatorProjectRuntimeHost} from './calculatorProjectRuntimeTeam.js';
 import type { CalculatorHostPreset } from "./taskModelBudget.js";
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync } from "node:fs";
@@ -29,6 +35,7 @@ function refuse(): never { throw new Error(CALCULATOR_RUNTIME_ERROR); }
  * JSON, model output and old receipt status cannot provide this capability.
  * The checker must verify archived approvals and actual current host tests. */
 export type CalculatorRuntimeAfterCi = Readonly<{
+  verifiedCorrections?:readonly CalculatorVerifiedCorrection[];
   request: CalculatorAfterCiRequest; verifyDependencies: CalculatorCheckRunner;
   persistBarrier: CalculatorAfterCiBarrierPersistence;
 }>;
@@ -37,11 +44,13 @@ export function prepareCalculatorRuntimeAfterCi(value: unknown): CalculatorRunti
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))) return refuse();
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).length !== 3 || !Object.hasOwn(descriptors, "request") || !Object.hasOwn(descriptors, "verifyDependencies") ||
+  const hasCorrections=Object.hasOwn(descriptors,'verifiedCorrections');
+  if (Reflect.ownKeys(value).length !== (hasCorrections?4:3) || !Object.hasOwn(descriptors, "request") || !Object.hasOwn(descriptors, "verifyDependencies") ||
       !Object.hasOwn(descriptors, "persistBarrier") ||
       !Object.values(descriptors).every(item => Object.hasOwn(item, "value")) ||
       typeof descriptors.verifyDependencies.value !== "function" || typeof descriptors.persistBarrier.value !== "function") return refuse();
   try { return Object.freeze({ request: prepareCalculatorAfterCiRequest(descriptors.request.value),
+    ...(hasCorrections?{verifiedCorrections:prepareCalculatorVerifiedCorrections(descriptors.verifiedCorrections!.value)}:{}),
     verifyDependencies: descriptors.verifyDependencies.value as CalculatorCheckRunner,
     persistBarrier: descriptors.persistBarrier.value as CalculatorAfterCiBarrierPersistence }); }
   catch { return refuse(); }
@@ -286,11 +295,18 @@ export async function loadCalculatorRuntimeSources(reader: CalculatorSnapshotRea
  * Production adapters remain isolated from model arguments. */
 export async function runCalculatorRuntime(input: unknown, configInput: unknown, directory: string,
   mode: "inspect" | "plan" | "run" | "preflight", env: NodeJS.ProcessEnv = process.env, hostLimits?: CalculatorRuntimeHostLimits,
-  continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi) {
+  continuationInput?: CalculatorRuntimeContinuation, afterCiInput?: CalculatorRuntimeAfterCi, projectHostInput?:CalculatorProjectRuntimeHost,recoveryInput?:CalculatorRuntimeRecoveryHost) {
+  let projectHost:CalculatorProjectRuntimeHost|undefined;
+  try{projectHost=prepareCalculatorProjectRuntimeHost(projectHostInput);}catch{return refuse();}
+  const projectMode=env.AGENT_FACTORY_PROJECT_BUDGET_MODE;
+  if(projectMode!==undefined&&projectMode!=='required'||projectHost&&projectMode!=='required'||
+    projectMode==='required'&&(mode==='run'||mode==='plan'||mode==='preflight')&&!projectHost)return refuse();
   const limits = prepareCalculatorRuntimeHostLimits(hostLimits), continuation = prepareCalculatorRuntimeContinuation(continuationInput);
   const afterCi = prepareCalculatorRuntimeAfterCi(afterCiInput);
+  const recovery=prepareCalculatorRuntimeRecoveryHost(recoveryInput),recoverySource=recovery?calculatorRuntimeRecoverySource(recovery):undefined;
   const hostPreset = limits && "hostPreset" in limits ? limits.hostPreset : undefined;
-  if (hostPreset && (!afterCi || continuation)) return refuse();
+  if(recovery&&(mode!=='run'||!projectHost||afterCi||continuation||hostPreset!=='calculator-frontend-2048-four-roles'||limits?.maxRequests!==4||limits.maxRepairs!==0))return refuse();
+  if (hostPreset && ((!afterCi&&!recovery) || continuation)) return refuse();
   if (afterCi && (mode !== "run" || continuation || limits?.maxRequests !== 4 || limits.maxRepairs !== 0)) return refuse();
   if ((limits || continuation) && mode !== "run") return refuse();
   if (continuation ? limits?.maxRequests !== (continuation.restoredAssessments?.length === 2 ? 1 : 3) :
@@ -299,15 +315,20 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
   const saved = store.inspect();
   if (mode === "inspect") return { mode, status: saved?.status ?? "unplanned", planFingerprint: saved?.fingerprint,
     taskIds: saved?.tasks.map(task => task.id) ?? [], wholeAppCompleted: false, legalEnabled: false };
+  let projectGrantSha256:string|undefined;
   let phase = "runtime_configuration_unverified";
   try {
+    if(projectHost){
+      if(!saved||saved.fingerprint!==projectHost.controller.identity.planFingerprint||saved.owner.ownerFingerprint!==projectHost.controller.identity.ownerFingerprint)return refuse();
+      await projectHost.controller.assertAuthorized();projectGrantSha256=(await projectHost.controller.inspect()).grantSha256;
+    }
     const config = prepareCalculatorRuntimeConfig(configInput), provider = selectProviderConfig(env);
     if (!["plan", "run", "preflight"].includes(mode) || env.AGENT_FACTORY_TARGET_PROFILE !== "calculator" ||
         env.AGENT_FACTORY_LEGAL_ENABLED !== "false" || env.ONAY_TEAM_FREE_TIER_CONFIRMED !== "true" ||
         env.AGENT_FACTORY_PROVIDER !== owner.provider || env.CALCULATOR_MODEL_LIVE_APPROVED !== "ONE_FREE_BOUNDED_RUN" ||
         provider.provider !== owner.provider) return refuse();
     const reader = createCalculatorSnapshotReader(env);
-    const sandbox = createCalculatorSandbox({ image: config.sandboxImage, baseSha: owner.baseSha, baseSources: new Map() }, env);
+    const sandbox = createCalculatorSandbox({ image: config.sandboxImage, baseSha: owner.baseSha, baseSources: new Map(), includeFailureDetails: true }, env);
     phase = "sandbox_readiness_unverified";
     const readiness = await sandbox.preflight();
     if (!readiness.ready) return { mode, status: "blocked", reasonCode: readiness.reasonCode, wholeAppCompleted: false, legalEnabled: false };
@@ -355,21 +376,32 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
     const currentSha = await reader.getHead(saved.branch);
     if (continuation && currentSha !== owner.baseSha) return refuse();
     if (afterCi && (!started || currentSha !== afterCi.request.candidateSha)) return refuse();
+    if(recoverySource&&(!started||currentSha!==recoverySource.identity.baseSha||saved.fingerprint!==recoverySource.identity.planFingerprint))return refuse();
     // Verify the pinned workflow itself before model calls and durable task claim.
     phase = "project_workflow_unverified";
     await ci({ repository: owner.repository, branch: saved.branch, candidateSha: currentSha });
     phase = "current_sources_unverified";
     const sources = await loadCalculatorRuntimeSources(reader, saved.branch, currentSha);
-    const checks = createCalculatorSandbox({ image: config.sandboxImage, baseSha: currentSha, baseSources: sources }, env);
+    const checks = createCalculatorSandbox({ image: config.sandboxImage, baseSha: currentSha, baseSources: sources, includeFailureDetails: true }, env);
     phase = "private_execution_checkpoint_unverified";
-    const privateDirectory = privateExecutionDirectory(directory);
+    let privateDirectory = privateExecutionDirectory(directory);
+    if(recoverySource){
+      const recoverySnapshot=await loadCalculatorSnapshot({repository:owner.repository,baseRef:saved.branch,baseSha:currentSha,changePaths:saved.tasks.find(t=>t.id===recoverySource.identity.taskId)?.paths??[]},reader);
+      const prepared=prepareCalculatorRejectedProposalRecovery({...recoverySource,plan:saved,taskId:recoverySource.identity.taskId,snapshot:recoverySnapshot,model:provider.model});
+      privateDirectory=join(privateDirectory,prepared.metadata.executionId);
+      try{mkdirSync(privateDirectory,{mode:0o700});}catch(error){if(!error||typeof error!=='object'||!('code'in error)||error.code!=='EEXIST')return refuse();}
+      const s=lstatSync(privateDirectory);if(!s.isDirectory()||s.isSymbolicLink()||(s.mode&0o777)!==0o700||(process.getuid&&s.uid!==process.getuid()))return refuse();
+    }
     // Runtime checkout provenance is pinned by the host workflow barrier. This
     // digest binds evidence to policy/config/model; it grants no resume authority.
     const runtimeConfigDigest = digest({ policyVersion: "calculator-private-execution-v1", provider: provider.provider, model: provider.model,
+      ...(projectHost?{projectBudget:{projectKey:projectHost.controller.projectKey,grantSha256:projectGrantSha256,executionId:projectHost.executionId}}:{}),
       ...(limits ? { hostLimits: limits } : {}),
       ...(continuation ? { continuationProposalDigest: continuation.proposalDigest } : {}),
       ...(continuation?.restoredAssessments?.length ? { restoredAssessmentsDigest: digest(continuation.restoredAssessments) } : {}),
       ...(afterCi ? { afterCiRequest: afterCi.request } : {}),
+      ...(afterCi?.verifiedCorrections?{verifiedCorrections:afterCi.verifiedCorrections}:{}),
+      ...(recoverySource?{rejectedSourceSha256:recoverySource.expectedSha256}:{}),
       version: config.version, sandboxImage: config.sandboxImage,
       trustedWorkflows: [...config.trustedWorkflows].sort((a, b) => a.path.localeCompare(b.path)).map(pin => ({ id: pin.id, path: pin.path, blobSha: pin.blobSha })) });
     const checkpointIdentity = { repository: owner.repository,
@@ -391,8 +423,17 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         writers.get(activeId).save(next); active = next;
       } catch { checkpointUnavailable = true; return refuse(); }
     }
-    const beforeRequest = createCalculatorRuntimeRequestCheckpoint(limits, (charge, admitted) =>
+    let recoveryPermit:CalculatorRuntimeRecoveryPermit|undefined;
+    const persistBeforeRequest = createCalculatorRuntimeRequestCheckpoint(limits, (charge, admitted) =>
       save({ ...active, status: admitted ? "running" : "blocked", httpInFlight: admitted }, charge));
+    const beforeRequest=async(amount:CalculatorPriorModelCharge)=>{
+      if(recovery){if(!recoveryPermit)return refuse();await assertCalculatorRuntimeRecovery(recoveryPermit);}
+      if(afterCi?.verifiedCorrections)for(const correction of afterCi.verifiedCorrections){
+        const task=saved.tasks.find(t=>t.id===correction.taskId);if(!task)return refuse();const receipt=store.taskReceipt(saved,task);
+        try{await resolveCalculatorVerifiedCorrection(correction,saved,receipt.inspectExisting(),currentSha);}finally{receipt.close();}
+      }
+      persistBeforeRequest(amount);
+    };
     let dependencyAssessment: Readonly<{ taskId: string; proposal: PreparedCalculatorChanges; expectedRole: CalculatorRejectedAssessment["role"] }> | undefined;
     const afterAssessmentRejected = createCalculatorRuntimeAssessmentRejection({ directory: privateDirectory,
       context: () => {
@@ -411,11 +452,27 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
           status: active.status, httpInFlight: active.httpInFlight };
       }, charge: () => charge(), persistReturned: returnedCharge => save({ ...active, status: "blocked", httpInFlight: false }, returnedCharge),
     });
-    const team = createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected }, hostPreset);
+    const afterProposalRejected=createCalculatorRuntimeProposalRejection({
+      context:()=>activeId!==runtimeId&&saved.tasks.some(t=>t.id===activeId)?{taskId:activeId,stage:active.stage,attempt:active.attempt,status:active.status,httpInFlight:active.httpInFlight,publicationStarted:active.publicationStarted}:undefined,
+      charge:()=>charge(),persistReturned:(rejectedProposal,amount)=>save({...active,status:'blocked',httpInFlight:false,rejectedProposal},amount),
+    });
+    const team = projectHost
+      ? await createCalculatorProjectRuntimeTeam(input,saved,env,projectHost,{checkpoints:{beforeRequest,afterAssessmentRejected,afterProposalRejected},...(hostPreset?{preset:hostPreset}:{})})
+      : createCalculatorModelTeam(input, env, globalThis.fetch, {}, undefined, { beforeRequest, afterAssessmentRejected,afterProposalRejected }, hostPreset);
     function charge(): CalculatorPriorModelCharge {
       const result = team.checkpointCharge(); if (!result) return refuse(); return result;
     }
+    const recordFailure=createCalculatorRuntimeFailureCheckpoint({
+      diagnostic:()=>team.snapshot().stopped?team.diagnostic():{reasonCode:'execution_failed'},charge,
+      persist:(failure,amount)=>save({...active,status:'blocked',failure},amount),
+    });
     function checkpoint(event: CalculatorExecutionCheckpointEvent): void {
+      // The parsed rejected response is already durable and terminal. The
+      // executor's generic failure callback must not discard that evidence.
+      if(active.rejectedProposal){
+        if(event.taskId===activeId&&event.attempt===active.attempt&&event.stage===active.stage&&event.status==='blocked')return;
+        return refuse();
+      }
       if (!saved!.tasks.some(task => task.id === event.taskId) ||
           (continuation && event.taskId !== saved!.tasks[0]!.id) ||
           (activeId !== runtimeId && activeId !== event.taskId) || (activeId !== event.taskId && active.httpInFlight)) return refuse();
@@ -465,14 +522,20 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
       };
       phase = "workspace_unverified";
       const workspace = await openCalculatorWorkspace(store, reader, saved.branch, currentSha);
+      if(recovery){
+        if(!projectHost)return refuse();
+        recoveryPermit=await admitCalculatorRuntimeRecovery(workspace,store,recovery,projectHost.controller,privateDirectory,provider.model);
+      }
       phase = "one_task_execution_failed";
-      const executionOptions = { team, env, checkpoint,
+      const routed=recoveryPermit?routeCalculatorRuntimeRecovery(team,{checkProposal:checks.checkProposal,publish:publisher.publish,ci},recoveryPermit):{team,tools:{checkProposal:checks.checkProposal,publish:publisher.publish,ci}};
+      const executionOptions = { ...routed, env, checkpoint,
+        ...(recoveryPermit?{rejectedProposalPermit:recoveryPermit}:{}),
         ...(limits ? { maxRepairs: limits.maxRepairs } : {}),
         ...(continuation ? { restoreProposal: createCalculatorRuntimeContinuationRestorer(continuation, saved, team) } : {}),
         ...(continuation?.restoredAssessments?.length ? {
           restoreAssessments: (plan: CalculatorPlan, id: string, proposal: PreparedCalculatorChanges) => team.restoredAssessmentPrefix(plan, id, proposal),
         } : {}),
-        tools: { checkProposal: checks.checkProposal, publish: publisher.publish, ci } };
+        };
       let result: CalculatorExecutionReport;
       if (afterCi) {
         // This directory survives with private evidence. It never sits inside
@@ -484,17 +547,18 @@ export async function runCalculatorRuntime(input: unknown, configInput: unknown,
         if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700 ||
             (process.getuid && stat.uid !== process.getuid())) return refuse();
         const transition = await runCalculatorAfterCi(store, reader, afterCi.request, { eventDirectory, ci,
+          ...(afterCi.verifiedCorrections?{verifiedCorrections:afterCi.verifiedCorrections}:{}),
           verifyDependencies: afterCi.verifyDependencies, persistBarrier: afterCi.persistBarrier, execution: executionOptions });
         result = transition.execution ?? { status: transition.status === "blocked" ? "blocked" as const : "needs-review" as const,
           reasonCode: transition.reasonCode, attempts: 0, repairs: 0, proposalTestsExecuted: false,
           candidateTestsExecuted: false, wholeAppCompleted: false as const, finalCalculatorCiVerified: false as const, legalEnabled: false as const };
       } else result = await runCalculatorExecution(workspace, { ...executionOptions, verifyDependencies });
-      if (active.httpInFlight || (active.status === "running" && writers.has(activeId)))
-        save({ ...active, status: "blocked" }, charge());
-      if (team.snapshot().stopped) console.error(JSON.stringify({ event: "calculator_execution_model_failed", ...team.diagnostic() }));
+      if(team.snapshot().stopped){
+        await recordFailure();console.error(JSON.stringify({event:'calculator_execution_model_failed',...team.diagnostic()}));
+      }else if(active.httpInFlight||(active.status==='running'&&writers.has(activeId)))save({...active,status:'blocked'},charge());
       return result;
     } catch {
-      if (writers.has(activeId)) try { save({ ...active, status: "blocked" }, charge()); } catch { /* Retain the last durable conservative capsule. */ }
+      if (writers.has(activeId)) try { await recordFailure(); } catch { /* Retain the last durable conservative capsule; never retry an uncertain write. */ }
       throw new Error(CALCULATOR_RUNTIME_ERROR);
     } finally { writers.close(); }
   } catch { console.error(JSON.stringify({ event: "calculator_runtime_failed", reasonCode: phase })); return refuse(); }

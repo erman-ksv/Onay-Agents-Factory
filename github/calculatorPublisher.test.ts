@@ -8,7 +8,7 @@ import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { CALCULATOR_ACCEPTANCE, calculatorPlanTaskId, createCalculatorPlan } from "../orchestration/calculatorPlan.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader, type CalculatorTreeEntry } from "./calculatorSnapshot.js";
 import { prepareCalculatorRoleChanges } from "../commander/calculatorTeam.js";
-import { createCalculatorPublisher, runCalculatorGit, CALCULATOR_PUBLISHER_ERROR, type CalculatorGitRequest } from "./calculatorPublisher.js";
+import { createCalculatorPublisher, calculatorPublicationDiagnostic, runCalculatorGit, CALCULATOR_PUBLISHER_ERROR, type CalculatorGitRequest } from "./calculatorPublisher.js";
 
 const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40), D = "d".repeat(40);
 const owner = { version: 1, id: "publisher-pilot", goal: "Create the agreed static calculator website with arithmetic and browser tests.",
@@ -267,4 +267,35 @@ test("real offline Git plumbing publishes locally and rejects a racing writer at
     await assert.rejects(() => createCalculatorPublisher(options).publish({ task: realPlan.tasks[1], changes: ui, expectedSha: candidate.headSha, branch: realPlan.branch }), refuse);
     assert.ok(raceSha); assert.equal(await reader.getHead(realPlan.branch), raceSha);
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("acknowledged push followed by stale API head reports its exact safe phase without retrying the push",async()=>{
+ const f=await fixture();const git=async(request:CalculatorGitRequest)=>{const result=await f.git(request);if(command(request)==="push")f.move(A);return result;};
+ const publisher=createCalculatorPublisher({...f.options,runGit:git});let failure:unknown;try{await publisher.publish(f.input);}catch(error){failure=error;}
+ assert.ok(refuse(failure));const d=calculatorPublicationDiagnostic(failure)!;assert.deepEqual(d,{operation:"publish",phase:"git_ref_after_push",writeAttempted:true,pushAcknowledged:true,candidateSha:C});
+ assert.ok(!JSON.stringify(d).includes(authorized.GITHUB_TOKEN));assert.equal(f.http.length,0);const count=f.requests.length;await assert.rejects(()=>publisher.publish(f.input),refuse);assert.equal(f.requests.length,count);assert.equal(f.requests.filter(r=>command(r)==="push").length,1);
+ assert.equal(calculatorPublicationDiagnostic(JSON.parse(JSON.stringify(failure))),undefined);assert.equal(calculatorPublicationDiagnostic(Object.assign(new Error(CALCULATOR_PUBLISHER_ERROR),d)),undefined);
+});
+test("PR HTTP failure retains bounded status after acknowledged push and strips private response data",async()=>{
+ const f=await fixture();let calls=0;let failure:unknown;try{await createCalculatorPublisher({...f.options,transport:async()=>{calls++;return new Response("PRIVATE_UPSTREAM_BODY "+authorized.GITHUB_TOKEN,{status:403});}}).publish(f.input);}catch(error){failure=error;}
+ assert.ok(refuse(failure));const d=calculatorPublicationDiagnostic(failure)!;assert.equal(d.phase,"pr_list");assert.equal(d.httpStatus,403);assert.equal(d.pushAcknowledged,true);assert.equal(d.candidateSha,C);assert.equal(calls,1);assert.ok(!JSON.stringify(d).includes("PRIVATE_UPSTREAM_BODY"));assert.ok(!JSON.stringify(d).includes(authorized.GITHUB_TOKEN));
+});
+test("uncertain or no-op push never becomes an acknowledged publication diagnostic",async()=>{
+ for(const mode of ["lost-ack","up-to-date"]){const f=await fixture();let failure:unknown;const git=async(request:CalculatorGitRequest)=>{const result=await f.git(request);if(command(request)==="push"){if(mode==="lost-ack")throw Error("PRIVATE_UPSTREAM_BODY "+authorized.GITHUB_TOKEN);return {status:0,stdout:"=\t"+C+":refs/heads/"+plan.branch+"\t[up to date]\n"};}return result;};
+ try{await createCalculatorPublisher({...f.options,runGit:git}).publish(f.input);}catch(error){failure=error;}assert.ok(refuse(failure));const d=calculatorPublicationDiagnostic(failure)!;assert.equal(d.phase,"git_push");assert.equal(d.writeAttempted,true);assert.equal(d.pushAcknowledged,false);assert.equal(f.http.length,0);assert.equal(f.requests.filter(r=>command(r)==="push").length,1);}
+});
+
+test('stale PR detail converges through reads without a second push, POST or model replay',async()=>{
+ const f=await fixture();let details=0,posts=0;const transport:typeof fetch=async(url,init)=>{
+  if(init?.method==='POST')posts++;if(String(url).includes('/pulls?'))return Response.json([f.pr()]);
+  const value=f.pr();if(++details<3)value.head.sha=A;return Response.json(value);
+ };const publisher=createCalculatorPublisher({...f.options,transport});assert.equal((await publisher.publish(f.input)).headSha,C);
+ assert.equal(details,3);assert.equal(posts,0);assert.equal(f.requests.filter(r=>command(r)==='push').length,1);
+ const count=f.requests.length;await assert.rejects(()=>publisher.publish(f.input),refuse);assert.equal(f.requests.length,count);assert.equal(details,3);
+});
+test('PR detail HTTP 429 after stale data is terminal and acknowledged push never repeats',async()=>{
+ const f=await fixture();let details=0;const transport:typeof fetch=async url=>{if(String(url).includes('/pulls?'))return Response.json([f.pr()]);if(++details===1){const value=f.pr();value.head.sha=A;return Response.json(value);}return new Response('PRIVATE_UPSTREAM_BODY',{status:429});};
+ const publisher=createCalculatorPublisher({...f.options,transport});let diagnostic:ReturnType<typeof calculatorPublicationDiagnostic>;
+ await assert.rejects(()=>publisher.publish(f.input),e=>{diagnostic=calculatorPublicationDiagnostic(e);return refuse(e)&&!String(e).includes('PRIVATE_UPSTREAM_BODY');});assert.equal(details,2);assert.equal(diagnostic?.phase,'pr_detail');assert.equal(diagnostic?.httpStatus,429);assert.equal(diagnostic?.pushAcknowledged,true);assert.equal(f.requests.filter(r=>command(r)==='push').length,1);
+ await assert.rejects(()=>publisher.publish(f.input),refuse);assert.equal(details,2);
 });

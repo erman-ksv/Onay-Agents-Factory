@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "mode": "input-repair-first-task-then-ci-successor",
+  "ownerCommentId": 6448721815,
+  "manifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "budgetResetAuthorized": false,
+  "legalEnabled": false,
+  "activationAttempt": 3,
+  "priorReadOnlyInspectionRunId": 40552700334,
+  "previousBlockedRunId": 40553191631
+}

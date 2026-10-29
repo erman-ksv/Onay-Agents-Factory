@@ -1,0 +1,63 @@
+name: Validate repaired specialist context without model calls
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-repair-context-preflight.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 4ae0ded6c44cd033ed7edf6cadbe0321eeb30f50
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12514596755'
+          run-id: '39983292798'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/precise-failed-evidence
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Preview exact bounded context with network transport disabled
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: groq
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+        run: |
+          pnpm exec tsx --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {join} from 'node:path';
+          import {createCalculatorSnapshotReader,loadCalculatorSnapshot} from './github/calculatorSnapshot.js';
+          import {createCalculatorPlan} from './orchestration/calculatorPlan.js';
+          import {createCalculatorModelTeam} from './orchestration/calculatorModelTeam.js';
+          import {calculatorProposalDigest} from './orchestration/calculatorExecutionEvidence.js';
+          import {collectCalculatorFailedTestEvidence} from './orchestration/calculatorFailedTestRepair.js';
+          const env=process.env,root=join(env.RUNNER_TEMP,'precise-failed-evidence'),report=JSON.parse(readFileSync(join(root,'report.json'))),previous=JSON.parse(readFileSync(join(root,'private-saved-agent-proposal.json')));
+          const resp=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12514596755',{headers:{Authorization:'Bearer '+env.GITHUB_TOKEN},redirect:'error'});assert.equal(resp.status,200);const artifact=await resp.json();assert.equal(artifact.workflow_run.id,39983292798);assert.equal(artifact.digest,'sha256:9d14ce56bfc3f818696cfc93a5eaa0227b806d765dd90c141456b050b0c9b338');assert.equal(artifact.expired,false);
+          assert.equal(report.status,'actual_failed_test_diagnosed');assert.equal(report.modelsRun,false);assert.equal(report.targetWrites,false);assert.equal(report.sourceProposalDigest,'504dc76ea4ae0d149374a1a3e07c1b4e8698895ce6d9c141ea5670e5cf6cc75d');assert.equal(calculatorProposalDigest(previous),report.sourceProposalDigest);
+          const fixture=JSON.parse(readFileSync('./orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal),task=plan.tasks[2];
+          const reader=createCalculatorSnapshotReader(env),scope={repository:previous.repository,baseRef:previous.baseRef,baseSha:previous.baseSha};
+          const snapshot=await loadCalculatorSnapshot({...scope,changePaths:[...task.paths]},reader),dependency=await loadCalculatorSnapshot({...scope,changePaths:['src/calculator.mjs','test/calculator.test.mjs']},reader);
+          let calls=0;const team=createCalculatorModelTeam(fixture.request,env,async()=>{calls++;throw Error('Provider transport disabled');},{},undefined,undefined,'calculator-restored-repair-four-roles');
+          const restored=team.restoreProposal(plan,task.id,snapshot,previous,report.sourceProposalDigest,[]);
+          const token=await collectCalculatorFailedTestEvidence(task,restored,async()=>report.tests);
+          const request=team.importFailedHostTestRepair(plan,task.id,restored,token,dependency);
+          const preview=await team.inspectRepairContext(plan,task.id,snapshot,request);
+          assert.equal(preview.status,'ready');assert.equal(calls,0);assert.equal(team.diagnostic().httpRequestsSent,0);assert.equal(team.diagnostic().httpRequestsAttempted,0);assert.equal(team.checkpointCharge().reservedRunTokens,0);
+          console.log(JSON.stringify({status:'context_ready_without_model_call',sourceProposalDigest:report.sourceProposalDigest,preview,providerCalls:calls,reservedTokens:team.checkpointCharge().reservedRunTokens,executionAuthorized:false,publicationAuthorized:false,legalEnabled:false}));
+          JS

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "sourceRunId": 40142876107,
+  "sourceArtifactId": 12579916054,
+  "candidateSha": "10b4dddb9fd8881030155336a07a12b2cf739993",
+  "ciRunId": 40142997703,
+  "mode": "read-only-no-replay-no-model-no-publication",
+  "deliveryMode": "automatic-needs-job-to-durable-inbox-zero-model-budget",
+  "deliveryRuntimeSha": "6e746c06ad46c18f6353dec1df8041b919827f77",
+  "sourceCiRunId": 40144077823,
+  "freshWorkerRedeliveryRequired": true,
+  "ownerT04Allowance": {
+    "id": "owner-t04-eight-free-calls-48000-20261024",
+    "taskId": "calculator-pilot-step7-v1-34ee03-t04",
+    "maxRequests": 8,
+    "maxReservedTokens": 48000,
+    "maxRepairs": 1,
+    "freeTierConfirmed": true
+  },
+  "executionRuntimeSha": "227f287ff2f6dfdd035a587689536ccf10ddced9",
+  "executionSourceCiRunId": 40147202434,
+  "preflightFix": "bounded-host-source-groups-zero-model-cost",
+  "correctionSourceRunId": 40145732417,
+  "correctionSourceArtifactId": 12580346942,
+  "scope": "three-fresh-reviews-only-frozen-code-remaining-three-owner-authorized-calls",
+  "evidenceSourceRunId": 40146425639,
+  "evidenceSourceArtifactId": 12580732860,
+  "maxNewModelCalls": 3,
+  "frozenProposalDigest": "f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf"
+}

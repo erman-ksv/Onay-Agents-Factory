@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.4-generic-model-transport",
+  "status": "generic-model-transport-tested-no-live-run",
+  "sourceSha": "e1e86a58055fceaf1dc3694ebf55e420b1ae70b3",
+  "localRelatedTests": {
+    "total": 185,
+    "passed": 185,
+    "failed": 0
+  },
+  "newTests": 15,
+  "newIntegrationFix": "project-task hash prefix matched existing sk- secret pattern; project-run preserves validation without weakening scanner",
+  "realModelCalls": 0,
+  "realBudgetWrites": 0,
+  "applicationWrites": 0,
+  "newProductionTargetsRegistered": 0,
+  "genericFullPipelineWired": false,
+  "realSecondProjectExecuted": false,
+  "legalEnabled": false,
+  "ci": {
+    "runId": 40337212062,
+    "jobId": 121621887033,
+    "typecheck": "passed",
+    "tests": 2460,
+    "passed": 2460,
+    "failed": 0
+  },
+  "limits": {
+    "maxRequests": 4,
+    "maxRequestBytes": 24000,
+    "maxRunBytes": 96000,
+    "maxOutputTokens": 1200,
+    "wallTimeMs": 300000,
+    "contextTokens": 6000,
+    "runContextTokens": 24000,
+    "tpmTokens": 6000
+  },
+  "scope": [
+    "genuine one-use task admission",
+    "required fresh owner/source/context guards",
+    "durable reservation before hash-only checkpoint and HTTP",
+    "bounded request and nonstreamed response",
+    "terminal 429/network/truncation/guard failure without refund",
+    "fresh-controller replay refusal"
+  ],
+  "testEvidence": "mock provider and native owner/source/context assertions plus real temporary file budget; no new live model or native remote budget mutation",
+  "legacyIntegrity": {
+    "main": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "budgetCommit": "b139646c2f359fe23f213e0a3227aa99dd84f369",
+    "changed": false
+  }
+}

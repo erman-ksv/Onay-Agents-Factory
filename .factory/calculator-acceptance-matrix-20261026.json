@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "status": "technical-acceptance-matrix-verified-in-documented-scope",
+  "projectId": "calculator-pilot-step7-v1",
+  "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+  "repository": "erman-ksv/Onay-Factory-Calculator",
+  "pullRequest": {
+    "number": 1,
+    "state": "open",
+    "draft": true
+  },
+  "criteria": [
+    {
+      "id": "addition",
+      "covered": true,
+      "evidence": [
+        "fixed-host-arithmetic",
+        "candidate-node-tests",
+        "ui-mocked-dom-tests"
+      ],
+      "realBrowserExplicitlyVerified": false
+    },
+    {
+      "id": "negative-result",
+      "covered": true,
+      "evidence": [
+        "fixed-host-arithmetic",
+        "candidate-node-tests",
+        "ui-mocked-dom-tests"
+      ],
+      "realBrowserExplicitlyVerified": false
+    },
+    {
+      "id": "multiplication",
+      "covered": true,
+      "evidence": [
+        "fixed-host-arithmetic",
+        "candidate-node-tests",
+        "ui-mocked-dom-tests"
+      ],
+      "realBrowserExplicitlyVerified": false
+    },
+    {
+      "id": "division",
+      "covered": true,
+      "evidence": [
+        "fixed-host-arithmetic",
+        "candidate-node-tests",
+        "ui-mocked-dom-tests"
+      ],
+      "realBrowserExplicitlyVerified": false
+    },
+    {
+      "id": "decimals",
+      "covered": true,
+      "evidence": [
+        "fixed-host-arithmetic",
+        "candidate-node-tests",
+        "ui-mocked-dom-tests"
+      ],
+      "realBrowserExplicitlyVerified": false
+    },
+    {
+      "id": "decimal-display",
+      "covered": true,
+      "evidence": [
+        "fixed-host-arithmetic",
+        "candidate-node-tests",
+        "ui-mocked-dom-tests"
+      ],
+      "realBrowserExplicitlyVerified": false
+    },
+    {
+      "id": "zero-recovery",
+      "covered": true,
+      "evidence": [
+        "fixed-host-arithmetic",
+        "candidate-node-tests",
+        "ui-mocked-dom-tests"
+      ],
+      "realBrowserExplicitlyVerified": false
+    },
+    {
+      "id": "clear",
+      "covered": true,
+      "evidence": [
+        "candidate-node-tests",
+        "real-chrome-scenario"
+      ],
+      "realBrowserExplicitlyVerified": true
+    },
+    {
+      "id": "backspace",
+      "covered": true,
+      "evidence": [
+        "candidate-node-tests",
+        "real-chrome-scenario"
+      ],
+      "realBrowserExplicitlyVerified": true
+    },
+    {
+      "id": "keyboard",
+      "covered": true,
+      "evidence": [
+        "candidate-node-tests",
+        "real-chrome-scenario"
+      ],
+      "realBrowserExplicitlyVerified": true
+    },
+    {
+      "id": "narrow-screen",
+      "covered": true,
+      "evidence": [
+        "candidate-node-tests",
+        "real-chrome-scenario"
+      ],
+      "realBrowserExplicitlyVerified": true
+    }
+  ],
+  "candidateCi": {
+    "runId": 40178095158,
+    "jobId": 121123061295,
+    "conclusion": "success",
+    "syntax": "passed",
+    "taskTests": "passed",
+    "testsExecuted": true
+  },
+  "liveEvidence": {
+    "runId": 40307399306,
+    "jobId": 121519847360,
+    "node": "passed",
+    "chrome": "passed",
+    "chromeVersion": "141.0.7390.37",
+    "scenarios": 5,
+    "security": true,
+    "reviewer": true,
+    "tester": true
+  },
+  "files": [
+    {
+      "path": ".github/workflows/calculator-setup-readiness.yml",
+      "blobSha": "a58ba0a538ddd4eab09da02ae60e224944ccaae5"
+    },
+    {
+      "path": ".github/workflows/calculator-task-ci.yml",
+      "blobSha": "45fae4a292a04e89a631ad7ff2469a3af7265e70"
+    },
+    {
+      "path": "README.md",
+      "blobSha": "71076b4befd7df33685792a49930529ba39855b8"
+    },
+    {
+      "path": "index.html",
+      "blobSha": "18150ee8ab02586759ec1ef341d83a5d4df0bd14"
+    },
+    {
+      "path": "src/app.mjs",
+      "blobSha": "a218250d94cebaaa036cf8e97af238ae57396841"
+    },
+    {
+      "path": "src/calculator.mjs",
+      "blobSha": "e80e4cf99b5f2f892a60af61e0b82293c33445b1"
+    },
+    {
+      "path": "styles.css",
+      "blobSha": "2b91427a8d85dfa565bb47fe5c480c63b2ff044b"
+    },
+    {
+      "path": "test/calculator.test.mjs",
+      "blobSha": "bfb51b49639454e37185178f542cc30b1bdb5a5f"
+    },
+    {
+      "path": "test/ui.test.mjs",
+      "blobSha": "1ac172efed6e41524565de7288492b367dfc76ba"
+    }
+  ],
+  "unverifiedAreas": [
+    "Seven arithmetic UI scenarios were checked with mocked DOM, not each explicitly in real Chrome",
+    "Other viewport sizes, Firefox/Safari, physical phones and accessibility beyond existing checks",
+    "Owner visual acceptance, merge, deployment and a public application URL",
+    "General Factory portability and autonomous creation of another project"
+  ],
+  "modelCalls": 0,
+  "applicationWrites": 0,
+  "sourceChanged": false,
+  "wholeAppCompleted": false,
+  "legalEnabled": false,
+  "nextTechnicalBlocker": {
+    "authorization": "projectBudgetAuthorization.ts pins Calculator repository",
+    "profile": "calculatorProfile.ts pins paths, branch and CI",
+    "required": "explicit host-approved target profiles and per-project budget identities, without arbitrary repository selection"
+  }
+}

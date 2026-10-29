@@ -8,7 +8,7 @@ import { createCalculatorPlan } from "./calculatorPlan.js";
 import { calculatorProposalDigest } from "./calculatorExecutionEvidence.js";
 import { createCalculatorModelTeam } from "./calculatorModelTeam.js";
 import { collectCalculatorAssessmentEvidence, calculatorAssessmentEvidencePacket, CALCULATOR_UI_BROWSER_SCENARIOS,
-  type CalculatorBrowserChecks, type CalculatorAssessmentEvidence } from "./calculatorAssessmentEvidence.js";
+  CALCULATOR_NARROW_BROWSER_SCENARIOS, CALCULATOR_NARROW_DOM_SELECTORS, type CalculatorBrowserChecks, type CalculatorAssessmentEvidence } from "./calculatorAssessmentEvidence.js";
 
 const saved = JSON.parse(readFileSync(new URL("./fixtures/calculatorStep7SavedPlan.json", import.meta.url), "utf8"));
 const plan = createCalculatorPlan(saved.request, saved.proposal), task = plan.tasks[1]!;
@@ -133,4 +133,26 @@ test("three saved-UI-sized review packets fit unchanged Groq per-request and run
   for (const role of ["security", "reviewer", "tester"] as const) await team.assess(role, plan, task.id, changes);
   assert.equal(calls, 3); assert.ok(team.checkpointCharge()!.reservedRunTokens <= 16000);
   assert.ok(team.checkpointCharge()!.totalRequestBytes <= 72000); assert.equal(team.diagnostic().contextBudgetCode, undefined);
+});
+
+test("narrow-screen host evidence requires the added 360px scenario and retains unknown device areas",async()=>{
+ const task=plan.tasks[3]!,snap=await snapshot(task.paths),dependency=await snapshot(["src/calculator.mjs"]);
+ const changes=prepareCalculatorRoleChanges("frontend",{summary:"Responsive fixture",changes:task.paths.map(path=>({operation:"create",path,content:path==="styles.css"?"body{margin:0}":"<output>0</output>",message:"fixture"}))},snap),proposalDigest=calculatorProposalDigest(changes);
+ const proposal={repository:changes.repository,taskId:task.id,baseSha:A,proposalDigest,status:"passed" as const,testsExecuted:true,failures:[]};
+ const browser={repository:changes.repository,taskId:task.id,baseSha:A,proposalDigest,dependencySha256:sha(core),status:"passed" as const,testsExecuted:true as const,browser:"Chrome/155.0",sandboxDisabled:false as const,pageErrors:0 as const,blockedRequests:0 as const,scenarios:CALCULATOR_NARROW_BROWSER_SCENARIOS,domSelectors:CALCULATOR_NARROW_DOM_SELECTORS.map(selector=>({selector,matches:1}))};
+ const token=await collectCalculatorAssessmentEvidence(task,changes,dependency,{checkProposal:async()=>proposal,checkBrowser:async()=>browser});const packet=calculatorAssessmentEvidencePacket(token,task,changes);assert.ok(packet.unverifiedAreas.some(a=>a.includes("Other viewport widths")));assert.ok(!JSON.stringify(packet).includes(core));assert.deepEqual(packet.browserChecks.domSelectors,browser.domSelectors);
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{checkProposal:async()=>proposal,checkBrowser:async()=>({...browser,scenarios:CALCULATOR_UI_BROWSER_SCENARIOS})}));
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{checkProposal:async()=>proposal,checkBrowser:async()=>({...browser,domSelectors:[{selector:".not-proven",matches:1}]})}));
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{checkProposal:async()=>proposal,checkBrowser:async()=>({...browser,domSelectors:CALCULATOR_NARROW_DOM_SELECTORS.map(selector=>({selector,matches:-1}))})}));
+});
+
+test('T05 evidence requires exact integration scope, actual Node and full existing browser proof',async()=>{
+ const task=plan.tasks[4]!,snap=await snapshot(task.paths),dependency=await snapshot(['src/calculator.mjs']);
+ const changes=prepareCalculatorRoleChanges('frontend',{summary:'Integration fixture',changes:[{operation:'create',path:'test/ui.test.mjs',content:'// fixture integration tests',message:'fixture'}]},snap),proposalDigest=calculatorProposalDigest(changes);
+ const proposal={repository:changes.repository,taskId:task.id,baseSha:A,proposalDigest,status:'passed' as const,testsExecuted:true,failures:[]};
+ const browser={repository:changes.repository,taskId:task.id,baseSha:A,proposalDigest,dependencySha256:sha(core),status:'passed' as const,testsExecuted:true as const,browser:'Chrome/155.0',sandboxDisabled:false as const,pageErrors:0 as const,blockedRequests:0 as const,scenarios:CALCULATOR_NARROW_BROWSER_SCENARIOS,domSelectors:CALCULATOR_NARROW_DOM_SELECTORS.map(selector=>({selector,matches:1}))};
+ const runners={checkProposal:async()=>proposal,checkBrowser:async()=>browser};const token=await collectCalculatorAssessmentEvidence(task,changes,dependency,runners),packet=calculatorAssessmentEvidencePacket(token,task,changes);assert.ok(!JSON.stringify(packet).includes(core));assert.ok(packet.unverifiedAreas.length>0);
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence({...task,acceptanceIds:task.acceptanceIds.slice(1)},changes,dependency,runners));
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{...runners,checkBrowser:async()=>({...browser,scenarios:CALCULATOR_UI_BROWSER_SCENARIOS})}));
+ await assert.rejects(()=>collectCalculatorAssessmentEvidence(task,changes,dependency,{...runners,checkProposal:async()=>({...proposal,status:'failed' as const})}));
 });

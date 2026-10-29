@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "allowanceId": "owner-five-additional-free-calls-20261024",
+  "phase": "verify-saved-dom-reply-and-three-fresh-reviews-no-author-replay",
+  "runtimeSha": "62a99eb21932b7ca26c3d2a4f3cae16810f48da2",
+  "sourceCiRunId": 40106869548,
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "sourceReplyRunId": 40106311123,
+  "sourceReplyArtifactId": 12565240405,
+  "priorRequests": 13,
+  "priorReservedTokens": 55286,
+  "maxNewRequests": 3,
+  "maxNewAuthorRequests": 0,
+  "maxNewReservedTokens": 16000,
+  "maxTotalT03Requests": 16,
+  "maxTotalT03ReservedTokens": 74698,
+  "maxFurtherRepairs": 0,
+  "publicationOnlyAfterAllFreshGates": true,
+  "modelChecksumClaimsAreAdvisory": true,
+  "automaticReplay": false,
+  "legalEnabled": false
+}

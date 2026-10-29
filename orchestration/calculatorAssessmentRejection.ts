@@ -59,6 +59,9 @@ function canonical(value: unknown, maximum: number): string {
   }
   visit(value, 0); const encoded = parts.join(""); if (secret(encoded)) return refuse(); return encoded;
 }
+/** Shared host-only encoder for bounded private rejected output. No file write,
+ * role approval or permission is supplied by this data-only helper. */
+export function encodeCalculatorPrivateRejectedJson(value:unknown):string{return canonical(value,MAX_RESULT_BYTES);}
 function identity(value: unknown): CalculatorAssessmentRejectionIdentity {
   const keys = ["repository", "goalId", "ownerFingerprint", "planFingerprint", "taskId", "branch", "baseSha", "bootstrapSha", "runtimeConfigDigest", "proposalDigest", "role"];
   if (!plain(value) || Object.keys(value).length !== keys.length || keys.some(key => !Object.hasOwn(value, key)) ||

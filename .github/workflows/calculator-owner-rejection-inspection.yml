@@ -1,0 +1,75 @@
+name: Inspect rejected owner correction without model calls
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-owner-rejection-inspection.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12509264527'
+          run-id: '39973872603'
+          github-token: ${{ github.token }}
+          path: evidence
+          merge-multiple: true
+      - name: Download original unpublished proposal for exact provenance comparison
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12497425333'
+          run-id: '39942417242'
+          github-token: ${{ github.token }}
+          path: prior
+          merge-multiple: true
+      - name: Inspect only hashes, schema, limits and anchor counts
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,hashlib,difflib
+          root=pathlib.Path('evidence');rejected=root/'private-rejected-proposal.json'
+          assert rejected.is_file() and rejected.stat().st_size<100000
+          b=rejected.read_bytes();r=json.loads(b);o=r['result']
+          cap=root/'source/historical/execution-private/calculator-pilot-step7-v1-34ee03-t02.execution.json'
+          raw=cap.read_bytes();assert hashlib.sha256(raw).hexdigest()=='b49a7295bb014e25f601c04608e6c1cefb20818f27af474369dad71c25c240a7'
+          sources={f['path']:f['content'] for f in json.loads(raw)['payload']['proposal']['files']}
+          priorBytes=pathlib.Path('prior/execution-private/calculator-pilot-step7-v1-34ee03-t03.execution.json').read_bytes()
+          assert hashlib.sha256(priorBytes).hexdigest()=='0f99168fbc2dfa98aad2b378ee4b36a5440e51ac5721d14c2cd8d930707ebbf7'
+          previous={f['path']:f['content'] for f in json.loads(priorBytes)['payload']['proposal']['files']}
+          count=lambda s:len(s.encode('utf-16-le'))//2 if isinstance(s,str) else -1
+          rows=[];total=0
+          for c in o.get('changes',[]):
+            path=c.get('path');src=sources.get(path);op=c.get('operation')
+            row={'approvedPath':path in ['src/app.mjs','test/ui.test.mjs'],'path':path if path in ['src/app.mjs','test/ui.test.mjs'] else 'unapproved','operation':op if op in ['patch','create'] else 'invalid','messageCharacters':count(c.get('message'))}
+            if op=='patch':
+              row['exactSchema']=set(c)=={'operation','path','sourceSha256','edits','message'}
+              row['sourceExists']=src is not None;row['sourceShaMatches']=src is not None and c.get('sourceSha256')==hashlib.sha256(src.encode()).hexdigest()
+              candidate=previous.get(path)
+              row['previousCandidateCharacters']=count(candidate)
+              row['previousCandidateShaMatches']=candidate is not None and c.get('sourceSha256')==hashlib.sha256(candidate.encode()).hexdigest()
+              row['edits']=[]
+              for e in c.get('edits',[]):
+                before=e.get('before');after=e.get('after');n=0;start=0
+                if src is not None and isinstance(before,str) and before:
+                  while True:
+                    pos=src.find(before,start)
+                    if pos<0:break
+                    n+=1;start=pos+1
+                total+=max(0,count(before))+max(0,count(after))
+                differences=[]
+                if candidate is not None and isinstance(before,str):
+                  for tag,first0,last0,first1,last1 in difflib.SequenceMatcher(None,candidate,before,autojunk=False).get_opcodes():
+                    if tag!='equal':
+                      safe=lambda text: text if all(ch in "\\\\'\"\\n\\r\\t " for ch in text) else '<non-punctuation>'
+                      differences.append({'kind':tag,'oldCharacters':last0-first0,'newCharacters':last1-first1,'oldPunctuation':safe(candidate[first0:last0]),'newPunctuation':safe(before[first1:last1])})
+                row['edits'].append({'exactSchema':set(e)=={'before','after'},'beforeCharacters':count(before),'afterCharacters':count(after),'originalAnchorOccurrences':n,'unchangedEdit':before==after,'wholePreviousCandidateExact':candidate is not None and before==candidate,'wholePreviousCandidateTrimEqual':candidate is not None and isinstance(before,str) and before.strip()==candidate.strip(),'differences':differences})
+            elif op=='create':
+              row['exactSchema']=set(c)=={'operation','path','content','message'};row['sourceExists']=src is not None
+              row['contentCharacters']=count(c.get('content'));row['contentBytes']=len(c.get('content','').encode());total+=max(0,count(c.get('content')))
+            rows.append(row)
+          result={'sourceRun':39973872603,'modelsRun':False,'targetWrites':False,'rejectionSha256':hashlib.sha256(b).hexdigest(),'exactTopSchema':set(o)=={'summary','changes'},'summaryCharacters':count(o.get('summary')),'changeCount':len(o.get('changes',[])),'totalChangedCharacters':total,'rows':rows}
+          print('::notice title=Real rejected proposal diagnostics::'+json.dumps(result))
+          PY

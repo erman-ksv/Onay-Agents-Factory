@@ -1,0 +1,53 @@
+name: Read-only acknowledged grant history inspection
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.github/workflows/project-grant-history-inspection.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '8f106f6aef4af9adc78fed9c620058e124111280'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Compile immutable reviewed source
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Verify native acknowledged history without writes or model credentials
+        env:
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: |
+          node --input-type=module - <<'JS' > grant-history-result.json
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';
+          import {prepareProjectRuntimeManifest,projectRuntimeManifestInspectionContext} from './orchestration/projectRuntimeManifest.js';import {projectPlanBudgetIdentity} from './orchestration/projectPlan.js';import {authorizeGitHubProjectBudget} from './orchestration/projectBudgetAuthorization.js';import {prepareProjectStateProtection} from './github/projectStateProtection.js';import {restoreGitHubAcknowledgedDevelopmentGrantLineage,assertProjectGrantLineageFloor} from './orchestration/projectGrantLineage.js';import {createProjectModelBudgetGitHubStore} from './github/projectModelBudgetStore.js';import {createProjectCheckpointArchive} from './github/projectCheckpointArchive.js';
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.equal(process.env.GITHUB_REPOSITORY,'erman-ksv/Onay-Agents-Factory');for(const key of ['GROQ_API_KEY','OPENAI_API_KEY','GEMINI_API_KEY','FACTORY_RECOVERY_KEY_BASE64'])assert.equal(process.env[key],undefined);
+          const native=globalThis.fetch,started=performance.now();let requests=0;globalThis.fetch=async(input,init)=>{const u=new URL(String(input));assert.equal(u.origin,'https://api.github.com');assert.ok(u.pathname.startsWith('/repos/erman-ksv/Onay-Agents-Factory/'));assert.equal(init?.method,'GET');assert.equal(init?.body,undefined);assert.equal(init?.redirect,'error');assert.ok(++requests<=200&&performance.now()-started<180000);return native(input,init);};
+          try{
+            const cap=prepareProjectRuntimeManifest(readFileSync('.factory/runtime-project-manifest.json','utf8'),'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284'),c=projectRuntimeManifestInspectionContext(cap),identity=projectPlanBudgetIdentity(c.plan),token=process.env.FACTORY_STATE_TOKEN;
+            const previous=await authorizeGitHubProjectBudget({identity,history:c.history,decision:c.decision,token,targetProfile:c.target}),next=await authorizeGitHubProjectBudget({identity,history:c.history,decision:{issueNumber:75,commentId:6459178751,bodySha256:'b464d742bd6820440fd1669d0595d4979ebf5e858ab08fff04f62c86f5d101c3'},token,targetProfile:c.target}),stateProtection=await prepareProjectStateProtection({controller:next,token:process.env.FACTORY_READ_TOKEN});
+            const lineage=await restoreGitHubAcknowledgedDevelopmentGrantLineage({previous,next,beforeHead:'2d489136b4e9758133fce6598157feb94743f732',afterHead:'3e2710a55558dc82b3e65fc62d39791e6a21bd7a',stateProtection,token});
+            await assertProjectGrantLineageFloor(lineage,next,{projectKey:next.projectKey,grantSha256:previous.grantSha256,used:previous.grant.historical},'native');
+            const saved=await createProjectModelBudgetGitHubStore({projectKey:next.projectKey,token}).read();assert.equal(saved.revision,createHash('sha256').update('1f37b8b99a69e27fa5d583655db77763e95fb937').digest('hex'));assert.equal(saved.data.reservations.length,2);
+            const archive=createProjectCheckpointArchive({controller:next,token,pin:{head:'1b5f623159f2b8ffecd6fd104da9786677d8ea15',sequence:4}}),events=await archive.history();assert.deepEqual(events.map(e=>e.kind),['task-start','before-http','task-start','before-http']);
+            console.log(JSON.stringify({version:1,status:'acknowledged-lineage-after-reservation-verified',currentBudgetHead:'1f37b8b99a69e27fa5d583655db77763e95fb937',archivePin:archive.snapshot().pin,oldGrantSha256:previous.grantSha256,currentGrantSha256:next.grantSha256,used:(await next.inspect()).used,requests,modelGenerationRequests:0,applicationWrites:0,budgetWrites:0,archiveWrites:0,executionAuthorized:false}));
+          }catch{console.error(JSON.stringify({version:1,status:'read-only-grant-history-blocked',requests,modelGenerationRequests:0,budgetWrites:0,archiveWrites:0}));process.exitCode=1;}finally{globalThis.fetch=native;}
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: readonly-grant-history
+          path: grant-history-result.json
+          if-no-files-found: warn
+          retention-days: 7

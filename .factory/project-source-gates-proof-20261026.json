@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.5-source-and-proposal-gates",
+  "status": "source-and-proposal-gates-tested-native-source-read-verified",
+  "sourceSha": "7ad340f064454a869d4933d365c26a54dae2a1d5",
+  "ci": {
+    "runId": 40341767562,
+    "jobId": 121638057912,
+    "typecheck": "passed",
+    "tests": 2476,
+    "passed": 2476,
+    "failed": 0
+  },
+  "localRelatedTests": {
+    "total": 201,
+    "passed": 201,
+    "failed": 0
+  },
+  "newTests": 16,
+  "modelCalls": 0,
+  "applicationWrites": 0,
+  "budgetWrites": 0,
+  "genericFullPipelineWired": false,
+  "realSecondProjectExecuted": false,
+  "legalEnabled": false,
+  "nativeReadOnlyAudit": {
+    "runId": 40342235253,
+    "jobId": 121639716202,
+    "eventSha": "9233b639b441b0b448dd7fa14c4cfab0ad3ac15e",
+    "result": {
+      "version": 1,
+      "status": "native-source-snapshot-and-absence-verified",
+      "modelCalls": 0,
+      "githubApiMutationRequests": 0,
+      "applicationChanged": false,
+      "budgetWrites": 0,
+      "executionAuthorized": false,
+      "legalEnabled": false,
+      "runtimeSha": "7ad340f064454a869d4933d365c26a54dae2a1d5",
+      "sourceCiRunId": 40341767562,
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+      "files": [
+        {
+          "path": "index.html",
+          "exists": true,
+          "blobSha": "18150ee8ab02586759ec1ef341d83a5d4df0bd14",
+          "sourceSha256": "b910b1be94ca0ed30bfee9df726c3f3a5eb07de4f5b8fee981b92d694b48640b",
+          "bytes": 1344
+        },
+        {
+          "path": "src/__onay_readonly_probe_absent__.mjs",
+          "exists": false
+        },
+        {
+          "path": "src/app.mjs",
+          "exists": true,
+          "blobSha": "a218250d94cebaaa036cf8e97af238ae57396841",
+          "sourceSha256": "095b7a6a64196ebc7d4c1dc04a2c727f4f0472905dc91b053906f33215086d90",
+          "bytes": 1708
+        },
+        {
+          "path": "src/calculator.mjs",
+          "exists": true,
+          "blobSha": "e80e4cf99b5f2f892a60af61e0b82293c33445b1",
+          "sourceSha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+          "bytes": 882
+        },
+        {
+          "path": "styles.css",
+          "exists": true,
+          "blobSha": "2b91427a8d85dfa565bb47fe5c480c63b2ff044b",
+          "sourceSha256": "d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f",
+          "bytes": 850
+        },
+        {
+          "path": "test/calculator.test.mjs",
+          "exists": true,
+          "blobSha": "bfb51b49639454e37185178f542cc30b1bdb5a5f",
+          "sourceSha256": "d083598254a38c1a6badf00df045a48cd804c0001c701e26a4f982431d012aee",
+          "bytes": 1036
+        },
+        {
+          "path": "test/ui.test.mjs",
+          "exists": true,
+          "blobSha": "1ac172efed6e41524565de7288492b367dfc76ba",
+          "sourceSha256": "5f975b7376a717fb38ad1ccf5e3a98aefc78d2325fac0c9cad3f01dd93f94930",
+          "bytes": 5464
+        }
+      ],
+      "sourceBytes": 11284,
+      "metadataOnly": true,
+      "forgedSnapshotRefused": true,
+      "foreignProposalRefused": true,
+      "missingPathVerified": true,
+      "unverifiedAreas": [
+        "Unselected repository source",
+        "Dependency acceptance and runtime behavior",
+        "Independent reviews, tests and exact-candidate CI"
+      ],
+      "newProductionTargetsRegistered": 0,
+      "githubReads": 22
+    }
+  },
+  "positiveProposalEvidence": "Synthetic notes fixture; no real app patch prepared or applied.",
+  "remainingGates": [
+    "selected specialist context packets and request binding",
+    "independent role verdicts and bounded correction",
+    "actual generic sandbox/browser tests",
+    "candidate publication exact-CI delivery restart",
+    "separate native live allowance"
+  ]
+}

@@ -1,0 +1,56 @@
+name: Inspect saved precise repair without model calls
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-precise-reply-inspect.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12516549326'
+          run-id: '39990331498'
+          github-token: ${{ github.token }}
+          path: reply
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12514596755'
+          run-id: '39983292798'
+          github-token: ${{ github.token }}
+          path: previous
+          merge-multiple: true
+      - name: Inspect metadata and exact original-commit anchors only
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json,pathlib,hashlib,urllib.request,os
+          def api(path):
+            req=urllib.request.Request('https://api.github.com/repos/erman-ksv/Onay-Factory-Calculator'+path,headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN'],'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(req,timeout=15) as r:
+              b=r.read(1048577);assert len(b)<1048577;return json.loads(b)
+          commit=api('/git/commits/949a0bf874722fd8cbd886c2cb0af8f2b502ac05');tree=api('/git/trees/'+commit['tree']['sha']+'?recursive=1');assert tree['truncated']==False
+          entry=next(e for e in tree['tree'] if e['path']=='src/app.mjs');assert entry['type']=='blob' and entry['mode']=='100644'
+          with urllib.request.urlopen('https://raw.githubusercontent.com/erman-ksv/Onay-Factory-Calculator/949a0bf874722fd8cbd886c2cb0af8f2b502ac05/src/app.mjs',timeout=15) as response:app=response.read(131073)
+          assert len(app)<131073 and hashlib.sha1(b'blob '+str(len(app)).encode()+b'\0'+app).hexdigest()==entry['sha']
+          originals={'src/app.mjs':app.decode()};assert not any(e['path']=='test/ui.test.mjs' for e in tree['tree'])
+          data=pathlib.Path('reply/private-rejected-proposal.json').read_bytes();r=json.loads(data);raw=r['result']
+          previous=json.loads(pathlib.Path('previous/private-saved-agent-proposal.json').read_bytes());files={f['path']:f['content'] for f in previous['files']}
+          result={'modelsRun':False,'targetWrites':False,'replySha256':hashlib.sha256(data).hexdigest(),'taskMatches':r['taskId']=='calculator-pilot-step7-v1-34ee03-t03','kindMatches':r['kind']=='repair','topSchema':set(raw)=={'summary','changes'},'summaryLength':len(raw.get('summary','')),'changes':[]}
+          for c in raw.get('changes',[]):
+            p=c.get('path');source=files.get(p,'');row={'path':p if p in ['src/app.mjs','test/ui.test.mjs'] else 'unapproved','operation':c.get('operation') if c.get('operation') in ['patch','create'] else 'invalid','sourceShaMatches':bool(source) and c.get('sourceSha256')==hashlib.sha256(source.encode()).hexdigest(),'patchSchema':set(c)=={'operation','path','sourceSha256','edits','message'},'createSchema':set(c)=={'operation','path','content','message'}}
+            row['originalSourceExists']=p in originals;row['originalSourceShaMatches']=p in originals and c.get('sourceSha256')==hashlib.sha256(originals[p].encode()).hexdigest()
+            row['originalEdits']=[{'exactOccurrences':originals.get(p,'').count(e.get('before','')) if e.get('before') else -1,'unchanged':e.get('before')==e.get('after')} for e in c.get('edits',[])]
+            row['edits']=[{'beforeLength':len(e.get('before','')),'afterLength':len(e.get('after','')),'exactOccurrences':source.count(e.get('before','')) if e.get('before') else -1,'wholeFileExact':e.get('before')==source} for e in c.get('edits',[])]
+            if isinstance(c.get('content'),str):row['contentLength']=len(c['content'])
+            result['changes'].append(row)
+          summary=raw.get('summary','')
+          if isinstance(summary,str) and len(summary)<=200 and not any(x in summary for x in ['gsk_','ghp_','ghs_']):result['blockedSummary']=summary
+          print(json.dumps(result))
+          PY

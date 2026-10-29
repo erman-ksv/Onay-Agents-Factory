@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "status": "candidate-verified-after-readonly-reconciliation",
+  "taskId": "calculator-pilot-step7-v1-34ee03-t03",
+  "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+  "candidateSha": "10b4dddb9fd8881030155336a07a12b2cf739993",
+  "parentSha": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+  "proposalDigest": "6e84fd6a29e8759a5337f946872b0dc73feb553cf1b91b8aabd387f32842b754",
+  "sourceCapsuleSha256": "1694fe7fad387c392a7e1c02f517d1d326d9e6ab16339f657ad814bc30f27f04",
+  "sourceArtifactId": 12579916054,
+  "sourceRunId": 40142876107,
+  "verifiedCiRunId": 40142997703,
+  "roles": [
+    {
+      "role": "security",
+      "ready": true,
+      "findings": 0,
+      "unverifiedAreas": [
+        "Potential impact of exported handleKey on other modules not shown in diff",
+        "Server‑side enforcement of input constraints (if any) is unknown",
+        "Rate‑limiting or DoS considerations for rapid key events are not addressed",
+        "Behavior on unexpected or malicious key values beyond the allowed set is untested",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ]
+    },
+    {
+      "role": "reviewer",
+      "ready": true,
+      "findings": 0,
+      "unverifiedAreas": [
+        "Potential UI layout effects on narrow screens and other browsers not covered by the test suite.",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ]
+    },
+    {
+      "role": "tester",
+      "ready": true,
+      "findings": 0,
+      "unverifiedAreas": [
+        "Unshown unchanged source beyond the verified arithmetic export signature",
+        "Narrow-screen layout, other browsers and phones",
+        "Independent model verdicts, publication, exact-candidate CI and overall completion",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ]
+    }
+  ],
+  "changedPaths": [
+    "src/app.mjs",
+    "test/ui.test.mjs"
+  ],
+  "exactPublishedBytesVerified": true,
+  "workflowUnchangedSinceOwnerBootstrap": true,
+  "originalT03ReceiptUnchanged": true,
+  "historicalReceiptUnchanged": true,
+  "sourceReceiptStatusPreserved": "needs-review",
+  "sidecarOnly": true,
+  "newModelCalls": 0,
+  "publicationWrites": 0,
+  "charge": {
+    "attemptedRequests": 18,
+    "totalRequestBytes": 142611,
+    "reservedRunTokens": 74531,
+    "elapsedMs": 535306
+  },
+  "step8Closed": false,
+  "automaticSuccessorProven": false,
+  "legalEnabled": false,
+  "reconciliationRunId": 40143153855,
+  "reconciliationArtifact": {
+    "id": 12580085877,
+    "name": "t03-publication-reconciled-40143153855",
+    "size_in_bytes": 1332,
+    "url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12580085877",
+    "archive_download_url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12580085877/zip",
+    "expired": false,
+    "created_at": "2026-10-24T23:32:44Z",
+    "expires_at": "2026-11-07T23:32:44Z",
+    "updated_at": "2026-10-24T23:32:44Z",
+    "digest": "sha256:14838bf889e0f44eb9fefb10ae725ff49d54fa187d16c4f1abba7e03ea17d808",
+    "workflow_run": {
+      "id": 40143153855,
+      "repository_id": 1409325634,
+      "head_repository_id": 1409325634,
+      "head_branch": "feat/calculator-t02-charge-reconcile-20261022",
+      "head_sha": "4a393c9a319fc07c1eff6082f84d5e0a3ea2bdea"
+    }
+  },
+  "sourceCi": {
+    "runId": 40142763641,
+    "tests": 2128,
+    "typecheck": "passed"
+  },
+  "step8Criteria": {
+    "closed": [
+      1,
+      2
+    ],
+    "open": [
+      3,
+      4
+    ]
+  },
+  "additionalAllowance": {
+    "requestsUsed": 7,
+    "requestsAllowed": 7,
+    "reservedTokensUsed": 29833,
+    "reservedTokensAllowed": 36000,
+    "remainingRequests": 0
+  }
+}

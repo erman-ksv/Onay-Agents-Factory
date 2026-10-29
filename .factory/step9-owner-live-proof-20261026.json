@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "owner": {
+    "commentId": 6412067757,
+    "login": "erman-ksv",
+    "association": "OWNER",
+    "unmodified": true,
+    "bodySha256": "afaf23c899abbd5349787e912e6249092a5e6690d66abc1f3eb5d1adbc8318b6",
+    "mode": "read-only-review",
+    "expiresAt": "2026-11-01T00:00:00.000Z"
+  },
+  "activation": {
+    "runId": 40295986355,
+    "jobId": 121482095903,
+    "status": "initialized",
+    "stateWrites": 1,
+    "modelCalls": 0,
+    "githubReads": 10,
+    "githubApiMutationRequests": 4,
+    "initialRevision": "edc200943234709a9b5e438cb57407b3eb17ba7b"
+  },
+  "live": {
+    "runId": 40296325671,
+    "jobId": 121483197739,
+    "conclusion": "failure",
+    "status": "unverified",
+    "phase": "required-project-three-reviews",
+    "providerCallsSent": 2,
+    "ledgerReservations": 3,
+    "allThreeReviewsVerified": false,
+    "canonicalRoleVerdictsRetrieved": false,
+    "githubReads": 218,
+    "githubApiMutationRequests": 12,
+    "automaticRetry": false
+  },
+  "ledger": {
+    "projectKey": "30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0",
+    "revision": "906deeb59bc1c67c11da677be7ba3c8424c98e26",
+    "grantSha256": "cd317be0675c6660d080e0ac8c7f85f178d9f62805734de93b20741a8ad52cb9",
+    "historical": {
+      "requests": 59,
+      "requestBytes": 553908,
+      "reservedTokens": 230413
+    },
+    "reservations": [
+      {
+        "reservationId": "published-review-19c955786d31a87efdff2a5e-6f7fa238c4e283ae:r1",
+        "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+        "requestSha256": "e01baa19d7a95a110bf63cf72d9daab11389b6ba8410fcf97c515780f639c421",
+        "requestBytes": 12114,
+        "reservedTokens": 5494
+      },
+      {
+        "reservationId": "published-review-19c955786d31a87efdff2a5e-6f7fa238c4e283ae:r2",
+        "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+        "requestSha256": "0f5b34973858e0c89d4b8fdf174932dca1a6d6a8733e7080871155b20262c2bc",
+        "requestBytes": 12073,
+        "reservedTokens": 5481
+      },
+      {
+        "reservationId": "published-review-19c955786d31a87efdff2a5e-6f7fa238c4e283ae:r3",
+        "taskId": "calculator-pilot-step7-v1-34ee03-t05",
+        "requestSha256": "8097e35a981578743934931a4f3bb93e311aabbc7d5a7f2b738a11f2e6920a8c",
+        "requestBytes": 12124,
+        "reservedTokens": 5498
+      }
+    ],
+    "used": {
+      "requests": 62,
+      "requestBytes": 590219,
+      "reservedTokens": 246886
+    },
+    "remaining": {
+      "requests": 0,
+      "requestBytes": 35689,
+      "reservedTokens": 1527
+    },
+    "refunds": 0,
+    "resets": 0
+  },
+  "fix": {
+    "sourceSha": "0cc520245e3db9e0b922a9a2336271574c5533d7",
+    "ciRunId": 40298235602,
+    "typecheck": "passed",
+    "tests": 2402,
+    "passed": 2402,
+    "failed": 0,
+    "localRelatedTests": 43,
+    "oldContextRunLimit": 16000,
+    "newReadonlyContextRunLimit": 18000,
+    "requestLimit": 3,
+    "contextTokenLimit": 6000,
+    "tpmTokenLimit": 6000,
+    "realisticRegressionFailedBefore": true,
+    "realisticRegressionPassedAfter": true,
+    "newLiveModelCallsAfterFix": 0
+  },
+  "replay": {
+    "runId": 40298681929,
+    "jobId": 121490929285,
+    "status": "fresh-native-controller-replay-refused-before-source-and-model",
+    "githubReads": 14,
+    "githubApiMutationRequests": 0,
+    "modelCalls": 0,
+    "sourceCalls": 0,
+    "ledgerSnapshotUnchanged": true
+  },
+  "step9": {
+    "closed": false,
+    "step93Closed": true,
+    "step94Closed": false
+  },
+  "mainChanged": false,
+  "applicationChanged": false,
+  "legalEnabled": false
+}

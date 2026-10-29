@@ -1,0 +1,61 @@
+name: Read-only stopped input repair reconciliation
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['scripts/project-input-repair-stopped-audit.mjs']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-readonly-stopped-input-repair
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'de8825f2246c397d830210619030b804ae862e87'
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: inspection-config
+          sparse-checkout: |
+            .factory/runtime-project-manifest.json
+            scripts/project-input-repair-stopped-audit.mjs
+            scripts/project-input-repair-stopped-audit.test.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify independent byte pins and compile immutable runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          for(const [path,pin] of [
+            ['.factory/runtime-project-manifest.json','97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284'],
+            ['scripts/project-input-repair-stopped-audit.mjs','65d1872939f64eae619ef7a686ecf99cdf049560d71d9cbc778a2d6fd1f4340d'],
+            ['scripts/project-input-repair-stopped-audit.test.mjs','661f2a00eac7824822c3fd183b2efa43cd3209e96210e16e22125043d2829937']
+          ]){const bytes=readFileSync('inspection-config/'+path);assert.equal(createHash('sha256').update(bytes).digest('hex'),pin);writeFileSync(path,bytes);}
+          JS
+      - name: Verify offline refusals without credentials
+        run: node scripts/project-input-repair-stopped-audit.test.mjs
+      - name: Inspect native admission using GET only
+        env:
+          FACTORY_STATE_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/project-input-repair-stopped-audit.mjs > readonly-inspection.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: readonly-stopped-input-repair
+          path: readonly-inspection.json
+          if-no-files-found: warn
+          retention-days: 7

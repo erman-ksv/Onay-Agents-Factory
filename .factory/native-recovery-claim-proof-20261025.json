@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "status": "native-github-recovery-claim-verified",
+  "sourceSha": "349d4e549a2f7df976ed94c8e2f34646d81a314c",
+  "sourceCi": {
+    "runId": 40226257446,
+    "jobId": 121268166280,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2366,
+      "passed": 2366,
+      "failed": 0
+    }
+  },
+  "local": {
+    "tests": 300,
+    "passed": 300,
+    "failed": 0,
+    "newTests": 8,
+    "dependenciesInstalled": false,
+    "scriptSyntax": "passed",
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "nativeAudit": {
+    "runId": 40226436989,
+    "jobId": 121268688281,
+    "eventSha": "9ec0fb71f86bad9595bd56fe2e191feefd91c37d",
+    "conclusion": "success",
+    "syntheticMetadataOnly": true,
+    "racingClients": 2,
+    "successfulClaims": 1,
+    "freshClientRefused": true,
+    "githubReads": 21,
+    "githubWriteRequests": 8,
+    "ref": "refs/heads/state/calculator-recovery/3ebd11595eae039546c88d40dd3bfc092dd044c4a4a0a76a8eddc1cb418417dc",
+    "artifactId": 12610938973,
+    "githubReportedArtifactDigest": "7e9fc55edd989d9b331af589e38fe99dc446f623b70eb3f18909e5bfe3e59236",
+    "artifactZipLocallyRehashed": false,
+    "privateArtifactAuthenticationVerified": false,
+    "liveRecoveryEnabled": false,
+    "independentReadback": {
+      "commitSha": "57ae540969231d750c55c792595bc9595fdd54c8",
+      "parents": 0,
+      "treeSha": "e43902116b63143719e0917404f534cd4c443da0",
+      "files": [
+        "calculator-recovery-claim.json"
+      ]
+    }
+  },
+  "realModelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "mainChanged": false,
+  "applicationSourceChanged": false,
+  "merge": false,
+  "deployment": false,
+  "previousPilotReplayed": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Authenticate and load real private checkpoint/receipt artifacts",
+    "Compose production workflow using actual source verification and native claim",
+    "Explicit owner grant and full-history initialization before live model execution"
+  ]
+}

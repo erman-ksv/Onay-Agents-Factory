@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "kind": "extend-and-recover-uncertain-task",
+  "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "preflightSha256": "a1db5810a723d018c52d2160213f534dc8b521a1caee55a75f03d97d93555ecd",
+  "extensionDecision": {
+    "issueNumber": 75,
+    "commentId": 6459178751,
+    "bodySha256": "b464d742bd6820440fd1669d0595d4979ebf5e858ab08fff04f62c86f5d101c3"
+  },
+  "recoveryDecision": {
+    "issueNumber": 75,
+    "commentId": 6459180946,
+    "bodySha256": "388bf86b0750edab1bc3365dea2fe2ad329c5e9b38990b6a91208a86b8414562"
+  }
+}

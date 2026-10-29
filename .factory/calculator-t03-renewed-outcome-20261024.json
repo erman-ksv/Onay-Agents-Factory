@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "date": "2026-10-24",
+  "advisoryOnly": true,
+  "status": "blocked_real_project_tests_saved_variants_exhausted",
+  "wholeStep8Closed": false,
+  "completedCriteria": 1,
+  "totalCriteria": 4,
+  "ownerRenewedAllowance": {
+    "maxAdditionalRequests": 4,
+    "maxAdditionalReservedTokens": 24000,
+    "baselineRequests": 11,
+    "baselineReservedTokens": 44698,
+    "overallRequestCeiling": 15,
+    "overallReservedTokenCeiling": 68698,
+    "usedAdditionalRequests": 1,
+    "remainingAdditionalRequests": 3,
+    "usedAdditionalReservedTokens": 5099,
+    "remainingAdditionalReservedTokens": 18901,
+    "stopOnFailure": true
+  },
+  "currentCharge": {
+    "attemptedRequests": 12,
+    "totalRequestBytes": 95746,
+    "reservedRunTokens": 49797,
+    "elapsedMs": 332199
+  },
+  "authorAttempt": {
+    "runId": 40103757771,
+    "jobId": 120901066921,
+    "artifact": {
+      "id": 12563414974,
+      "node_id": "MDg6QXJ0aWZhY3QxMjU2MzQxNDk3NA==",
+      "name": "calculator-t03-final-four-roles-40103757771",
+      "size_in_bytes": 558053,
+      "url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12563414974",
+      "archive_download_url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12563414974/zip",
+      "expired": false,
+      "digest": "sha256:87fc006d691c6710a076abf33709d55c10692c748c44d65fdee474336574c2af",
+      "created_at": "2026-10-24T14:44:48Z",
+      "updated_at": "2026-10-24T14:44:48Z",
+      "expires_at": "2026-11-07T14:44:47Z",
+      "workflow_run": {
+        "id": 40103757771,
+        "repository_id": 1409325634,
+        "head_repository_id": 1409325634,
+        "head_branch": "feat/calculator-t02-charge-reconcile-20261022",
+        "head_sha": "8cdb07b40980540a10f4075382b42865728c95a8"
+      }
+    },
+    "result": "accepted_protocol_then_failed_actual_syntax_and_project_tests",
+    "newProviderCalls": 1,
+    "httpStatus": 200,
+    "finishReason": "stop"
+  },
+  "savedDraftAudit": {
+    "runId": 40104435920,
+    "jobId": 120903073955,
+    "artifact": {
+      "id": 12563873339,
+      "node_id": "MDg6QXJ0aWZhY3QxMjU2Mzg3MzMzOQ==",
+      "name": "calculator-t03-saved-agent-reviews-40104435920",
+      "size_in_bytes": 553307,
+      "url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12563873339",
+      "archive_download_url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12563873339/zip",
+      "expired": false,
+      "digest": "sha256:f500959a6ea4ff500226a0ab97089557e7f4c2ec2587169437322a1cd63c3a59",
+      "created_at": "2026-10-24T14:53:45Z",
+      "updated_at": "2026-10-24T14:53:45Z",
+      "expires_at": "2026-11-07T14:53:44Z",
+      "workflow_run": {
+        "id": 40104435920,
+        "repository_id": 1409325634,
+        "head_repository_id": 1409325634,
+        "head_branch": "feat/calculator-t02-charge-reconcile-20261022",
+        "head_sha": "fbc2bed6a2ad7804bbc432b1d3458dddbd00efa3"
+      }
+    },
+    "newProviderCalls": 0,
+    "correctedProposalDigest": "94fd1d72bdfbb4e994b6e6674fd7936fe3d2a0b896577edf3c21f430aa27d0ac",
+    "syntax": "passed",
+    "projectTests": "failed",
+    "failure": "ReferenceError at /app/src/app.mjs:3:15; browser entry uses document",
+    "browser": "not executed after Node failure"
+  },
+  "savedVariantAudit": {
+    "runId": 40105076119,
+    "jobId": 120904966377,
+    "artifact": {
+      "id": 12564457075,
+      "node_id": "MDg6QXJ0aWZhY3QxMjU2NDQ1NzA3NQ==",
+      "name": "calculator-t03-latest-saved-reviews-40105076119",
+      "size_in_bytes": 551321,
+      "url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12564457075",
+      "archive_download_url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12564457075/zip",
+      "expired": false,
+      "digest": "sha256:357e291bf75820fd394d4c431abe1675b0f966bf9b66a7051045532be2e31398",
+      "created_at": "2026-10-24T15:02:30Z",
+      "updated_at": "2026-10-24T15:02:30Z",
+      "expires_at": "2026-11-07T15:02:29Z",
+      "workflow_run": {
+        "id": 40105076119,
+        "repository_id": 1409325634,
+        "head_repository_id": 1409325634,
+        "head_branch": "feat/calculator-t02-charge-reconcile-20261022",
+        "head_sha": "2e6d0c4fc531bfbfd665e08cc5e5358e43b918c7"
+      }
+    },
+    "newProviderCalls": 0,
+    "savedLatestTestChanged": false,
+    "savedDraftTargetShaMatches": false,
+    "results": [
+      {
+        "sourceRunId": 40103757771,
+        "status": "exact_source_or_saved_patch_unverified",
+        "providerCalls": 0
+      },
+      {
+        "sourceRunId": 39990331498,
+        "proposalDigest": "a8b89b5da87a845cdf9667b4d86d0c7250431aa3581613e240014ba7be14c625",
+        "status": "failed",
+        "testsExecuted": true,
+        "failures": [
+          "Trusted isolated task check failed: project-tests.",
+          "Untrusted project-test diagnostic: test/ui.test.mjs; ReferenceError; /app/src/app.mjs:3:15; /app/src/app.mjs:3"
+        ]
+      }
+    ]
+  },
+  "factoryChecks": {
+    "sourceSha": "9e385b0fe35ba5e5bab3bc87010f0784e8d7aba0",
+    "ciRunId": 40105151227,
+    "jobId": 120905194138,
+    "typecheck": "passed",
+    "tests": 2119,
+    "passed": 2119,
+    "failed": 0,
+    "diffCheck": "git diff --no-index --check /workspace/factory-renewed-cycle-diff/before /workspace/factory-renewed-cycle-diff/after; no whitespace diagnostics; exit 1 indicates actual differences",
+    "changedImplementationFiles": 17,
+    "additions": 1377,
+    "deletions": 6
+  },
+  "remaining": [
+    "correct Node test initialization before dynamic import of browser entry; agent-authored code only",
+    "three fresh independent assessments and real Node/browser success for exact candidate",
+    "publish checked candidate and confirm exact-SHA Calculator CI",
+    "implement and confirm automatic authenticated CI delivery and exactly-once next-task transition"
+  ],
+  "noActualCiDeliveryImplementedThisTurn": true,
+  "legalEnabled": false,
+  "calculatorPublished": false,
+  "merge": false,
+  "deployment": false,
+  "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorHead": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+  "continuationNotes": [
+    "Do not retry any completed live Action run or delete immutable state claims.",
+    "Do not repeat the saved-variant audits; both outcomes are recorded.",
+    "Use the syntactically corrected saved candidate 94fd1d... from artifact 12563873339 as the next FAILED input, preserving all costs including the failed author request.",
+    "DOM initialization and dynamic-import constraints are now explicit and a <=400-character failing-candidate excerpt is provided with SHA.",
+    "Three requests remain but a new author correction plus three fresh role assessments needs four requests. Do not silently exceed the approved ceiling.",
+    "A proposed extension to five additional requests / 30000 additional reserved tokens is not yet authorized."
+  ]
+}

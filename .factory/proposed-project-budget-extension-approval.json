@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "kind": "authorize-project-model-budget",
+  "grant": {
+    "version": 1,
+    "projectId": "calculator-pilot-step7-v1",
+    "repository": "erman-ksv/Onay-Factory-Calculator",
+    "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+    "grantId": "extend-3a775f3a0edb6270c7f346b61d4e59ca6711d2e44637f35253112956205295ca",
+    "maxRequests": 65,
+    "maxRequestBytes": 24000,
+    "maxTotalRequestBytes": 662219,
+    "maxReservedTokens": 264886,
+    "historical": {
+      "requests": 59,
+      "requestBytes": 553908,
+      "reservedTokens": 230413
+    },
+    "historicalEvidenceSha256": "6fdb95f2178edb18b60364ea659874f75f7bb434a0bf0e45dc87749b941a09f1",
+    "provider": "groq",
+    "freeTierConfirmed": true,
+    "legalEnabled": false
+  },
+  "expiresAt": "2026-11-01T00:00:00.000Z",
+  "mode": "read-only-review"
+}

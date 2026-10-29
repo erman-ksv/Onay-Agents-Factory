@@ -1,0 +1,51 @@
+name: Native synthetic recovery claim audit
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/recovery-claim-native-audit-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: native-synthetic-recovery-claim-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout immutable tested metadata adapter
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '349d4e549a2f7df976ed94c8e2f34646d81a314c'
+          path: runtime
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform TypeScript without dependency installation
+        working-directory: runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readFileSync,writeFileSync} from 'node:fs';import {stripTypeScriptTypes} from 'node:module';
+          for(const p of ['github/calculatorRecoveryClaim.ts','github/secretScanner.ts'])writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));
+          JS
+      - name: Race two synthetic claims and check a fresh worker
+        working-directory: runtime
+        env:
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: '349d4e549a2f7df976ed94c8e2f34646d81a314c'
+          FACTORY_SOURCE_CI_RUN: '40226257446'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+        run: node scripts/calculator-recovery-claim-native-audit.mjs
+      - name: Preserve metadata-only result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-claim-native-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-recovery-claim-native-audit/result.json
+          if-no-files-found: warn
+          retention-days: 7

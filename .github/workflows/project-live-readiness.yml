@@ -1,0 +1,119 @@
+name: Verify installed state protection and persistent key readiness
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/project-live-readiness-request.json']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-model-free-live-readiness
+  cancel-in-progress: false
+jobs:
+  read-scope-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Report bypass metadata visibility with a read-scoped token
+        env:
+          FACTORY_RULES_READ_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          const response=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/rulesets/25942828?includes_parents=false',{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.FACTORY_RULES_READ_TOKEN}}),text=await response.text();if(Buffer.byteLength(text)>65536)throw Error('Metadata response too large');const d=JSON.parse(text);console.log(JSON.stringify({version:1,kind:'read-scoped-ruleset-metadata',status:response.status,id:d.id,enforcement:d.enforcement,bypassActorsFieldPresent:Object.hasOwn(d,'bypass_actors'),bypassActorCount:Array.isArray(d.bypass_actors)?d.bypass_actors.length:null,providerCalls:0,writes:0}));
+          JS
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The existing owner read token can expose ruleset bypass metadata that
+    # GitHub hides from an installation token. All native requests remain GET.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      key-configured: ${{ steps.probe.outputs.key-configured }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'dca52ea14be52008ca890f585069e87a43efd2a2'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform trusted modules without dependency installation
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Report available credential names and key format without values
+        env:
+          FACTORY_READ_TOKEN_PRESENT: ${{ secrets.FACTORY_READ_TOKEN != '' }}
+          CALCULATOR_GITHUB_TOKEN_PRESENT: ${{ secrets.CALCULATOR_GITHUB_TOKEN != '' }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+        run: |
+          node --input-type=module - <<'JS'
+          const {loadProjectRuntimeRecoveryKey}=await import('./orchestration/projectRuntimeRecovery.js'),{destroyProjectCorrectionRecoveryKey}=await import('./orchestration/projectCorrectionCheckpoint.js');let keyConfigured=false;try{const key=loadProjectRuntimeRecoveryKey(process.env);keyConfigured=true;destroyProjectCorrectionRecoveryKey(key);}catch{}console.log(JSON.stringify({version:1,kind:'credential-and-key-presence-only',factoryReadTokenAvailable:process.env.FACTORY_READ_TOKEN_PRESENT==='true',calculatorTokenAvailable:process.env.CALCULATOR_GITHUB_TOKEN_PRESENT==='true',keyConfigured,keyValuePrinted:false,providerCalls:0,writes:0}));
+          JS
+      - name: Native effective rules, unchanged real budget and secret readiness
+        id: probe
+        env:
+          FACTORY_RULES_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN || secrets.CALCULATOR_GITHUB_TOKEN || github.token }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          FACTORY_RUNTIME_SHA: 'dca52ea14be52008ca890f585069e87a43efd2a2'
+          FACTORY_SOURCE_CI_RUN: '40483037312'
+        run: node scripts/project-live-protection-readiness.mjs
+      - name: Diagnose fixed state rule response metadata after a guard failure
+        if: failure()
+        env:
+          FACTORY_RULES_READ_TOKEN: ${{ secrets.FACTORY_READ_TOKEN || secrets.CALCULATOR_GITHUB_TOKEN || github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          const key='30aba2ef57704b41551ee67ae250315a8ec6a83963987f2e6533dbc20f7f70f0',proof=[];
+          for(const prefix of ['state/project-checkpoints/','state/project-model-budget/']){const branch=prefix+key,r=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/rules/branches/'+encodeURIComponent(branch),{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.FACTORY_RULES_READ_TOKEN}}),text=await r.text();if(Buffer.byteLength(text)>65536)throw Error('Rules diagnostic response too large');let d;try{d=JSON.parse(text);}catch{}proof.push({branch,status:r.status,pagination:r.headers.get('link'),rules:Array.isArray(d)?d.map(v=>({type:v.type,ruleset_id:v.ruleset_id,ruleset_source_type:v.ruleset_source_type,ruleset_source:v.ruleset_source})):undefined,message:typeof d?.message==='string'?d.message.slice(0,160):undefined});}console.log(JSON.stringify({version:1,kind:'readonly-state-rules-response-shape',proof,providerCalls:0,writes:0}));
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-free-live-readiness
+          path: ${{ runner.temp }}/factory-live-readiness/
+          if-no-files-found: error
+          retention-days: 1
+  verify-persistent-key:
+    needs: readiness
+    if: needs.readiness.outputs.key-configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'dca52ea14be52008ca890f585069e87a43efd2a2'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: model-free-live-readiness
+          path: ${{ runner.temp }}/factory-key-probe
+      - name: Verify key in a different job without printing or storing its value
+        env:
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {readFileSync,readdirSync,writeFileSync,chmodSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          const {loadProjectRuntimeRecoveryKey}=await import('./orchestration/projectRuntimeRecovery.js'),{readProjectHostEnvelope,destroyProjectCorrectionRecoveryKey}=await import('./orchestration/projectCorrectionCheckpoint.js'),directory=join(process.env.RUNNER_TEMP,'factory-key-probe');chmodSync(directory,0o700);chmodSync(join(directory,'encrypted-probe.json'),0o600);const metadata=JSON.parse(readFileSync(join(directory,'probe-metadata.json'),'utf8')),key=loadProjectRuntimeRecoveryKey(process.env);try{assert.equal(metadata.keyId,key.keyId);const payload=readProjectHostEnvelope('onay-key-persistence-probe-v1',key,join(directory,'encrypted-probe.json'),metadata.sha256);assert.equal(createHash('sha256').update(payload).digest('hex'),metadata.payloadSha256);const proof={version:1,status:'persistent-recovery-key-verified-across-two-jobs',keyValuePrinted:false,keyWritten:false,providerCalls:0,applicationWrites:0,budgetWrites:0,executionAuthorized:false};writeFileSync('persistent-key-proof.json',JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));}finally{destroyProjectCorrectionRecoveryKey(key);}
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: persistent-key-proof
+          path: persistent-key-proof.json
+          if-no-files-found: error
+          retention-days: 7

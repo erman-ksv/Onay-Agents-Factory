@@ -1,0 +1,327 @@
+{
+  "version": 1,
+  "status": "step8-pilot-transition-verified",
+  "scope": "bounded-existing-calculator-plan-T03-to-T04-and-budget-waiting-T05",
+  "step8ClosedForPilot": true,
+  "criteria": {
+    "t02Recovery": true,
+    "fullAgentChecksPublicationExactCi": true,
+    "automaticCiDeliveryAndSavedPlanContinuation": true,
+    "duplicateFailureAndFreshWorkerGuards": true
+  },
+  "verifiedTask": {
+    "version": 1,
+    "status": "t04-candidate-verified-after-readonly-reconciliation",
+    "taskId": "calculator-pilot-step7-v1-34ee03-t04",
+    "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+    "candidateSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "parentSha": "10b4dddb9fd8881030155336a07a12b2cf739993",
+    "proposalDigest": "f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf",
+    "publishedCssSha256": "d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f",
+    "sourceRunId": 40147390593,
+    "sourceArtifactId": 12580874431,
+    "sourceCapsuleSha256": "a42bfb09057f1235d43f660f2eb7aad1cc16006575d6f6805f1d5637db0eebde",
+    "verifiedCiRunId": 40147661281,
+    "changedPaths": [
+      "styles.css"
+    ],
+    "nodeChecks": {
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "taskId": "calculator-pilot-step7-v1-34ee03-t04",
+      "baseSha": "10b4dddb9fd8881030155336a07a12b2cf739993",
+      "proposalDigest": "f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf",
+      "status": "passed",
+      "testsExecuted": true,
+      "failures": []
+    },
+    "browserChecks": {
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "taskId": "calculator-pilot-step7-v1-34ee03-t04",
+      "baseSha": "10b4dddb9fd8881030155336a07a12b2cf739993",
+      "proposalDigest": "f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf",
+      "dependencySha256": "9da658220ab18a157dbda7c02e27824b3c059550e9c950c0bb4d0d4a3621c900",
+      "status": "passed",
+      "testsExecuted": true,
+      "browser": "Chrome/141.0.7390.37",
+      "sandboxDisabled": false,
+      "pageErrors": 0,
+      "blockedRequests": 0,
+      "scenarios": [
+        "Entering 123 then deleting the last digit displays 12",
+        "Clear permits a new calculation after input",
+        "Clear permits a new calculation after a result",
+        "Keyboard and button calculations give the same result",
+        "At 360px controls and result work without horizontal scrolling"
+      ],
+      "domSelectors": [
+        {
+          "selector": ".calculator",
+          "matches": 1
+        },
+        {
+          "selector": ".display",
+          "matches": 1
+        },
+        {
+          "selector": ".keys",
+          "matches": 1
+        },
+        {
+          "selector": ".key",
+          "matches": 18
+        }
+      ]
+    },
+    "assessments": [
+      {
+        "role": "security",
+        "ready": true,
+        "summary": "The CSS changes add responsive layout for narrow screens. No new security-sensitive functionality is introduced; there is no script execution, DOM injection, or credential handling. Existing security posture remains unchanged.",
+        "findings": [],
+        "unverifiedAreas": [
+          "Unshown unchanged source beyond the verified arithmetic export signature",
+          "Other viewport widths, browsers, physical phones and accessibility beyond the supplied scenarios",
+          "Independent model verdicts, publication, exact-candidate CI and overall completion",
+          "A model assessment does not prove test execution, publication or overall task completion."
+        ],
+        "testsExecuted": false,
+        "overallTaskCompletionVerified": false,
+        "publicationAuthorized": false
+      },
+      {
+        "role": "reviewer",
+        "ready": true,
+        "summary": "The CSS patch adds a media query for max-width:360px, adjusting container, display font size, key grid and spacing, meeting the narrow-screen acceptance scenario. No functional regressions observed; existing tests pass. Minor concerns include lack of testing for other breakpoints and potential overflow of long numbers at 360px.",
+        "findings": [
+          {
+            "severity": "low",
+            "message": "Only the 360px breakpoint is tested; other viewport sizes may still cause layout issues, especially for long result strings or landscape mode.",
+            "evidenceRefs": [
+              "host-checks@f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf"
+            ],
+            "evidenceStatus": "supplied"
+          }
+        ],
+        "unverifiedAreas": [
+          "Behavior of calculator layout at viewports wider than 360px but narrower than typical desktop sizes",
+          "Potential horizontal overflow when the result value exceeds available width at 360px",
+          "Accessibility considerations such as focus outlines and screen‑reader announcements at narrow widths",
+          "A model assessment does not prove test execution, publication or overall task completion."
+        ],
+        "testsExecuted": false,
+        "overallTaskCompletionVerified": false,
+        "publicationAuthorized": false
+      },
+      {
+        "role": "tester",
+        "ready": true,
+        "summary": "Responsive design changes for 360px viewport were applied and host browser checks indicate the scenario passes without horizontal scrolling, meeting the acceptance criteria.",
+        "findings": [],
+        "unverifiedAreas": [
+          "Unshown unchanged source beyond the verified arithmetic export signature",
+          "Other viewport widths, browsers, physical phones and accessibility beyond the supplied scenarios",
+          "Independent model verdicts, publication, exact-candidate CI and overall completion",
+          "A model assessment does not prove test execution, publication or overall task completion."
+        ],
+        "testsExecuted": false,
+        "overallTaskCompletionVerified": false,
+        "publicationAuthorized": false
+      }
+    ],
+    "priorReviewerFindingPreserved": {
+      "role": "reviewer",
+      "ready": false,
+      "summary": "Responsive CSS added but potential horizontal overflow if .calculator wrapper missing and grid may exceed viewport; no verification that HTML structure matches selectors, risking failure of acceptance scenario.",
+      "findings": [
+        {
+          "severity": "blocker",
+          "message": "Media query targets .calculator, .display, .keys, .key classes, but index.html changes are not shown; if these elements lack corresponding class names or container, the layout may not adapt, causing horizontal scrolling at 360px, failing the narrow-screen acceptance test.",
+          "evidenceRefs": [
+            "changes@10b4dddb9fd8881030155336a07a12b2cf739993",
+            "host-checks@f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf"
+          ],
+          "evidenceStatus": "supplied"
+        }
+      ],
+      "unverifiedAreas": [
+        "Exact HTML structure and class assignments for .calculator, .display, .keys, .key elements are not provided, leaving uncertainty whether the responsive CSS applies as intended.",
+        "A model assessment does not prove test execution, publication or overall task completion."
+      ],
+      "testsExecuted": false,
+      "overallTaskCompletionVerified": false,
+      "publicationAuthorized": false
+    },
+    "historicalReceiptsCompared": [
+      "calc-calculator-pilot-step7-v1-34ee03-t01.json",
+      "calc-calculator-pilot-step7-v1-34ee03-t02.json",
+      "calc-calculator-pilot-step7-v1-34ee03-t03.json",
+      "calc-calculator-pilot-step7-v1-34ee03-t04.json",
+      "calc-plan-calculator-pilot-step7-v1.json",
+      "calculator-pilot-step7-v1.calculator-plan.json"
+    ],
+    "executionReplay": [
+      {
+        "ref": "refs/heads/state/calculator-live-event/af56550f37da201ba2060d5af29b7d73139f6533a8ceec91f16015d825a6bc14",
+        "status": "duplicate-refused-before-model",
+        "modelCalls": 0
+      },
+      {
+        "ref": "refs/heads/state/calculator-live-event/b644b0393f9bc45339f63066a148d9cbac890ada936fb6678760fc59fe78e0ab",
+        "status": "duplicate-refused-before-model",
+        "modelCalls": 0
+      },
+      {
+        "ref": "refs/heads/state/calculator-live-event/2336a2c40484f2102d98c73628b60cbee6f4d956f2cebcb5bdf1400afc0a5d00",
+        "status": "duplicate-refused-before-model",
+        "modelCalls": 0
+      }
+    ],
+    "charge": {
+      "attemptedRequests": 8,
+      "totalRequestBytes": 58775,
+      "reservedRunTokens": 24994,
+      "elapsedMs": 283356
+    },
+    "ownerRequestSlotsRemaining": 0,
+    "ownerReservedTokensRemaining": 23006,
+    "modelCalls": 0,
+    "writes": 0,
+    "sourceReceiptPreserved": true,
+    "wholeCalculatorCompleted": false,
+    "legalEnabled": false
+  },
+  "delivery": {
+    "version": 1,
+    "status": "t04-ci-delivered-t05-queued-no-execution",
+    "candidateSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "firstDelivery": "queued",
+    "repeatDelivery": "duplicate",
+    "eventKey": "b1991776e1ff8c85a9e30a74bc13408432dabae20769ffc2bf764e45c734583c",
+    "record": {
+      "version": 1,
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+      "previousTaskId": "calculator-pilot-step7-v1-34ee03-t04",
+      "candidateSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+      "ciRunId": 40147661281,
+      "nextTaskId": "calculator-pilot-step7-v1-34ee03-t05",
+      "evidenceSha256": "0ab6290de47b811894f9b010380ba849b8cafd69107ba9046bb0bee74aaa2d70",
+      "status": "awaiting-owner-budget",
+      "modelRequestsAuthorized": 0
+    },
+    "verificationCalls": 1,
+    "modelCalls": 0,
+    "taskStarted": false,
+    "legalEnabled": false
+  },
+  "freshWorkerRedelivery": {
+    "version": 1,
+    "status": "t04-ci-delivered-t05-queued-no-execution",
+    "candidateSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+    "firstDelivery": "duplicate",
+    "repeatDelivery": "duplicate",
+    "eventKey": "b1991776e1ff8c85a9e30a74bc13408432dabae20769ffc2bf764e45c734583c",
+    "record": {
+      "version": 1,
+      "repository": "erman-ksv/Onay-Factory-Calculator",
+      "planFingerprint": "1e91cad431880b10b810d1a0bb7fe97c9a5856394d3f10ed100a82f3927b6ed2",
+      "previousTaskId": "calculator-pilot-step7-v1-34ee03-t04",
+      "candidateSha": "eac625e5830612c64fb8dafbd3d239c72adbeafd",
+      "ciRunId": 40147661281,
+      "nextTaskId": "calculator-pilot-step7-v1-34ee03-t05",
+      "evidenceSha256": "0ab6290de47b811894f9b010380ba849b8cafd69107ba9046bb0bee74aaa2d70",
+      "status": "awaiting-owner-budget",
+      "modelRequestsAuthorized": 0
+    },
+    "verificationCalls": 0,
+    "modelCalls": 0,
+    "taskStarted": false,
+    "legalEnabled": false
+  },
+  "proofRunId": 40148177866,
+  "proofArtifacts": [
+    {
+      "id": 12582220059,
+      "name": "t04-after-ci-redelivery-40148177866",
+      "size_in_bytes": 659,
+      "url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12582220059",
+      "archive_download_url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12582220059/zip",
+      "expired": false,
+      "created_at": "2026-10-25T00:50:14Z",
+      "expires_at": "2026-11-08T00:50:13Z",
+      "updated_at": "2026-10-25T00:50:14Z",
+      "digest": "sha256:26ca980f89b0266283eff5b5ad607e1d290c5f57a76cbe738d3b6abe6d182dfe",
+      "workflow_run": {
+        "id": 40148177866,
+        "repository_id": 1409325634,
+        "head_repository_id": 1409325634,
+        "head_branch": "feat/calculator-t02-charge-reconcile-20261022",
+        "head_sha": "f5396364711f7fda678ee085838273b4bbf4234c"
+      }
+    },
+    {
+      "id": 12580429956,
+      "name": "t04-after-ci-inbox-40148177866",
+      "size_in_bytes": 661,
+      "url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12580429956",
+      "archive_download_url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12580429956/zip",
+      "expired": false,
+      "created_at": "2026-10-25T00:49:56Z",
+      "expires_at": "2026-11-08T00:49:55Z",
+      "updated_at": "2026-10-25T00:49:56Z",
+      "digest": "sha256:ccac09ea315109c7103a5c456cf6afdb3093bc820c1b8c7beaebd33df526dd23",
+      "workflow_run": {
+        "id": 40148177866,
+        "repository_id": 1409325634,
+        "head_repository_id": 1409325634,
+        "head_branch": "feat/calculator-t02-charge-reconcile-20261022",
+        "head_sha": "f5396364711f7fda678ee085838273b4bbf4234c"
+      }
+    },
+    {
+      "id": 12580304973,
+      "name": "t04-verified-completion-40148177866",
+      "size_in_bytes": 2767,
+      "url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12580304973",
+      "archive_download_url": "https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12580304973/zip",
+      "expired": false,
+      "created_at": "2026-10-25T00:49:35Z",
+      "expires_at": "2026-11-08T00:49:34Z",
+      "updated_at": "2026-10-25T00:49:35Z",
+      "digest": "sha256:adfd35c4c323d2adb907837ae409c79065e1a167d7228159c30c406d8e24d1e0",
+      "workflow_run": {
+        "id": 40148177866,
+        "repository_id": 1409325634,
+        "head_repository_id": 1409325634,
+        "head_branch": "feat/calculator-t02-charge-reconcile-20261022",
+        "head_sha": "f5396364711f7fda678ee085838273b4bbf4234c"
+      }
+    }
+  ],
+  "sourceCi": {
+    "runId": 40147202434,
+    "runtimeSha": "227f287ff2f6dfdd035a587689536ccf10ddced9",
+    "typecheck": "passed",
+    "testsPassed": 2150,
+    "testsFailed": 0
+  },
+  "modelAllowance": {
+    "requestsAllowed": 8,
+    "requestsUsed": 8,
+    "requestBytes": 58775,
+    "reservedTokensAllowed": 48000,
+    "reservedTokensUsed": 24994,
+    "remainingRequests": 0,
+    "codeCorrectionCyclesAllowed": 1,
+    "codeCorrectionCyclesUsed": 1
+  },
+  "generalAutonomousDevelopmentProven": false,
+  "wholeCalculatorCompleted": false,
+  "unresolved": [
+    "initial post-push publisher verification failure remains generically diagnosed; read-only compensation proven for this pilot",
+    "general future-CI subscription and arbitrary-project continuous controller not proven",
+    "other viewport sizes, landscape, long result strings and physical phones unverified"
+  ],
+  "t05Started": false,
+  "legalEnabled": false
+}

@@ -1,0 +1,59 @@
+name: Read-only native state read performance
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.github/workflows/project-state-read-performance.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '3c63b8746e42e219997ba0c76267cfc72aea780d'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Compile immutable source before credentials
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Measure fresh refs and authority with immutable-object reuse only
+        env:
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: |
+          node --input-type=module - > state-read-performance.json <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {performance} from 'node:perf_hooks';
+          import {prepareProjectRuntimeManifest,projectRuntimeManifestInspectionContext} from './orchestration/projectRuntimeManifest.js';
+          import {projectPlanBudgetIdentity} from './orchestration/projectPlan.js';import {authorizeGitHubProjectBudget} from './orchestration/projectBudgetAuthorization.js';
+          import {projectBudgetStateDigest} from './orchestration/projectBudgetExtensionAuthorization.js';import {createProjectModelBudgetGitHubStore} from './github/projectModelBudgetStore.js';
+          import {createProjectCheckpointArchive} from './github/projectCheckpointArchive.js';import {prepareProjectStateProtection,verifyProjectStateProtection} from './github/projectStateProtection.js';
+          const source='3c63b8746e42e219997ba0c76267cfc72aea780d',budgetHead='cf561df5381c65522f9691aa0fe0f420624f4906',archiveHead='0b751f98c783bd9ffa75c0b081c882e324156388',budgetSha='c9149d8b38c35ebcbaf97c43b52fbf995d35d77c8fe7567b6a24fa017d01fb9c',decision={issueNumber:75,commentId:6472912771,bodySha256:'55eb8e7a35f956030f856884d7e677ba62371a3ecb559a2857ad76e2c187a923'};
+          const native=globalThis.fetch,started=performance.now(),counts={ref:0,commit:0,tree:0,blob:0,owner:0,rules:0,other:0};let requests=0,stage='initial',iteration=-1,lastHttpStatus=null,lastRemaining=null,lastReset=null,lastRetryAfter=null;
+          globalThis.fetch=async(input,init)=>{const u=new URL(String(input));assert.equal(u.origin,'https://api.github.com');assert.ok(u.pathname.startsWith('/repos/erman-ksv/Onay-Agents-Factory/'));assert.equal(init?.method,'GET');assert.equal(init?.redirect,'error');assert.equal(init?.body,undefined);assert.ok(++requests<=300&&performance.now()-started<300000);const family=u.pathname.includes('/git/ref/')?'ref':u.pathname.includes('/git/commits/')?'commit':u.pathname.includes('/git/trees/')?'tree':u.pathname.includes('/git/blobs/')?'blob':u.pathname.includes('/issues/comments/')?'owner':u.pathname.includes('/rules/')||u.pathname.includes('/rulesets/')?'rules':'other';counts[family]++;const response=await native(input,init);lastHttpStatus=response.status;const numeric=name=>{const v=response.headers.get(name);return v!==null&&/^[0-9]{1,16}$/.test(v)?Number(v):null;};lastRemaining=numeric('x-ratelimit-remaining');lastReset=numeric('x-ratelimit-reset');lastRetryAfter=numeric('retry-after');return response;};
+          async function get(path){const r=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/'+path,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.FACTORY_STATE_TOKEN}});assert.equal(r.status,200);return r.json();}
+          try{
+            const context=projectRuntimeManifestInspectionContext(prepareProjectRuntimeManifest(readFileSync('.factory/runtime-project-manifest.json','utf8'),'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284'));
+            const controller=await authorizeGitHubProjectBudget({identity:projectPlanBudgetIdentity(context.plan),history:context.history,decision,token:process.env.FACTORY_STATE_TOKEN,targetProfile:context.target}),store=createProjectModelBudgetGitHubStore({projectKey:controller.projectKey,token:process.env.FACTORY_STATE_TOKEN}),archive=createProjectCheckpointArchive({controller,token:process.env.FACTORY_STATE_TOKEN,pin:{head:archiveHead,sequence:6}}),protection=await prepareProjectStateProtection({controller,token:process.env.FACTORY_READ_TOKEN});
+            const budgetPath='git/ref/heads/'+encodeURIComponent('state/project-model-budget/'+controller.projectKey),archivePath='git/ref/heads/'+encodeURIComponent('state/project-checkpoints/'+controller.projectKey);assert.equal((await get(budgetPath)).object.sha,budgetHead);assert.equal((await get(archivePath)).object.sha,archiveHead);stage='cold-ledger';assert.equal(projectBudgetStateDigest((await store.read()).data),budgetSha);stage='cold-archive';assert.equal((await archive.history()).length,6);const used=(await controller.inspect()).used;assert.deepEqual(used,{requests:68,requestBytes:640605,reservedTokens:272419});
+            const cold={...counts},warmStarted=performance.now();
+            for(let i=0;i<10;i++){iteration=i;stage='warm-protection';await verifyProjectStateProtection(protection,controller,'native');stage='warm-ledger';assert.equal(projectBudgetStateDigest((await store.read()).data),budgetSha);stage='warm-archive';assert.equal((await archive.history()).length,6);stage='warm-owner';await controller.assertAuthorized();stage='warm-budget';assert.deepEqual((await controller.inspect()).used,used);}
+            const warm=Object.fromEntries(Object.keys(counts).map(k=>[k,counts[k]-cold[k]]));for(const k of ['commit','tree','blob'])assert.equal(warm[k],0);assert.equal(warm.ref,70);assert.equal(warm.owner,40);assert.equal(warm.rules,30);
+            assert.equal((await get(budgetPath)).object.sha,budgetHead);assert.equal((await get(archivePath)).object.sha,archiveHead);
+            console.log(JSON.stringify({version:1,status:'native-state-read-performance-verified',source,budgetHead,archiveHead,archiveSequence:6,used,cold,warm,warmIterations:10,warmElapsedMs:Math.round(performance.now()-warmStarted),totalElapsedMs:Math.round(performance.now()-started),requests,modelGenerationRequests:0,budgetWrites:0,archiveWrites:0,applicationWrites:0,executionAuthorized:false,wholeProjectCompleted:false}));
+          }catch{const diagnostic={version:1,status:'native-state-read-performance-stopped',stage,iteration,counts,requests,totalElapsedMs:Math.round(performance.now()-started),lastHttpStatus,lastRemaining,lastReset,lastRetryAfter,modelGenerationRequests:0,budgetWrites:0,archiveWrites:0,applicationWrites:0,executionAuthorized:false};console.error(JSON.stringify(diagnostic));console.log(JSON.stringify(diagnostic));throw Error('Read-only measurement stopped; no writes or generation attempted');}finally{globalThis.fetch=native;}
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-state-read-performance
+          path: state-read-performance.json
+          if-no-files-found: warn
+          retention-days: 7

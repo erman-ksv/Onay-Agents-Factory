@@ -1,0 +1,75 @@
+name: Verify successor runtime and encrypted checkpoint persistence
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/project-runtime-audit-request.json']
+permissions:
+  contents: read
+concurrency:
+  group: factory-synthetic-successor-runtime-audit
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout immutable tested implementation
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '2b2b058727f5ac170ffd064357e40b723c91e134'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Transform trusted modules without installing dependencies
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Prepare the same pinned Node image
+        run: docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Verify native Docker and synthetic Factory state CAS with mocked models
+        env:
+          FACTORY_CHECKPOINT_WRITE_TOKEN: ${{ github.token }}
+          FACTORY_RUNTIME_SHA: '2b2b058727f5ac170ffd064357e40b723c91e134'
+          FACTORY_SOURCE_CI_RUN: '40444959205'
+        run: node scripts/project-runtime-native-audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-runtime-native-proof
+          path: project-runtime-native-proof.json
+          if-no-files-found: error
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '2b2b058727f5ac170ffd064357e40b723c91e134'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Report recovery secret readiness without its value or a provider request
+        env:
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+        run: |
+          node --input-type=module - <<'JS'
+          import {stripTypeScriptTypes} from 'node:module';import {readFileSync,readdirSync,writeFileSync} from 'node:fs';import {join} from 'node:path';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          const {loadProjectRuntimeRecoveryKey}=await import('./orchestration/projectRuntimeRecovery.js'),{destroyProjectCorrectionRecoveryKey}=await import('./orchestration/projectCorrectionCheckpoint.js');let configured=false;try{const key=loadProjectRuntimeRecoveryKey(process.env);configured=true;destroyProjectCorrectionRecoveryKey(key);}catch{}
+          const proof={version:1,recoveryKeyConfigured:configured,requiredRepositorySecret:'FACTORY_RECOVERY_KEY_BASE64',keyId:'onay-runtime-key-v1',keyValuePrinted:false,keyGenerated:false,keyWritten:false,providerCalls:0,actualBudgetRemainingRequests:0,currentOwnerMode:'read-only-review',developmentRunAuthorized:false,runtimeBlocked:true};writeFileSync('project-runtime-readiness.json',JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-runtime-readiness
+          path: project-runtime-readiness.json
+          if-no-files-found: error

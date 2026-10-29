@@ -1,0 +1,139 @@
+import {createHash} from 'node:crypto';
+import {TeamTaskStore,parseTeamTaskSnapshotBytes} from './teamTaskStore.js';
+import {parseCalculatorExecutionCheckpointBytes,type CalculatorExecutionCheckpointIdentity} from './calculatorExecutionCheckpoint.js';
+import {calculatorPlanDigest} from './calculatorPlan.js';
+/** One host-authorized queued successor. Old receipts stay untouched. A JSON
+ * copy is never a permit; durable execution admission precedes the task claim. */
+import {calculatorCiDeliveryKey,parseCalculatorCiDeliveryRecord,type CalculatorCiDeliveryRecord} from './calculatorCiDelivery.js';
+import {calculatorWorkspacePlan,assertCalculatorWorkspaceCurrent,type CalculatorWorkspace} from './calculatorWorkspace.js';
+import type {CalculatorPlanStore} from './calculatorPlanStore.js';
+export type CalculatorQueuedPermit=Readonly<{kind:'verified-ci-queued-successor'}>;
+const permits=new WeakMap<CalculatorQueuedPermit,{workspace:CalculatorWorkspace;store:CalculatorPlanStore;record:CalculatorCiDeliveryRecord;assertRemote:()=>Promise<void>;used:boolean;correction?:{directory:string;fingerprint:string;originalReceipt:string}}> ();
+const refuse=():never=>{throw Error('Queued successor refused; preserve inbox, charges and execution barrier. No replay.');};
+export async function admitCalculatorQueuedSuccessor(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,host:Readonly<{
+ grant:Readonly<{id:string;eventKey:string;taskId:string;maxRequests:8;maxReservedTokens:48000;freeTierConfirmed:true}>;
+ verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>;
+}>):Promise<CalculatorQueuedPermit>{
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),key=calculatorCiDeliveryKey({version:1,repository:record.repository,planFingerprint:record.planFingerprint,taskId:record.previousTaskId,candidateSha:record.candidateSha,ciRunId:record.ciRunId});
+ if(store.inspect()?.fingerprint!==plan.fingerprint||record.planFingerprint!==plan.fingerprint||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||!host?.grant||host.grant.taskId!==record.nextTaskId||host.grant.eventKey!==key||host.grant.maxRequests!==8||host.grant.maxReservedTokens!==48000||host.grant.freeTierConfirmed!==true)return refuse();
+ const index=plan.tasks.findIndex(t=>t.id===record.nextTaskId),task=plan.tasks[index];
+ const authorized=(index===3&&task?.id==='calculator-pilot-step7-v1-34ee03-t04'&&host.grant.id==='owner-t04-eight-free-calls-48000-20261024')||(index===4&&task?.id==='calculator-pilot-step7-v1-34ee03-t05'&&host.grant.id==='owner-t05-eight-free-calls-48000-20261025');
+ if(!authorized||plan.tasks[index-1]?.id!==record.previousTaskId||record.modelRequestsAuthorized!==0)return refuse();
+ const expected=plan.tasks.slice(0,index).map(t=>t.id),proof=await host.verify();if(JSON.stringify(proof)!==JSON.stringify(expected))return refuse();
+ if(task.dependsOn.some(id=>!proof.includes(id)))return refuse();
+ const receipt=store.taskReceipt(plan,task);try{if(receipt.inspectExisting()||receipt.inspectExistingLock())return refuse();}finally{receipt.close();}
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const permit=Object.freeze({kind:'verified-ci-queued-successor' as const});permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false});return permit;
+}
+export async function claimCalculatorQueuedSuccessor(workspace:CalculatorWorkspace,permit:CalculatorQueuedPermit){
+ const host=permits.get(permit);if(!host||host.used||host.workspace!==workspace)return refuse();host.used=true;
+ const plan=await calculatorWorkspacePlan(workspace),task=plan.tasks.find(t=>t.id===host.record.nextTaskId);if(!task||host.record.candidateSha!==workspace.sha)return refuse();
+ await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ if(host.correction){const old=host.store.taskReceipt(plan,task);try{if(JSON.stringify(old.inspectExisting())!==host.correction.originalReceipt||old.inspectExistingLock())return refuse();}finally{old.close();}}
+ const receipt=host.correction?new TeamTaskStore(host.correction.directory,{id:(task.id==='calculator-pilot-step7-v1-34ee03-t05'?'calc-t05-correction-':'calc-t04-correction-')+host.correction.fingerprint.slice(0,40),fingerprint:host.correction.fingerprint}):host.store.taskReceipt(plan,task);
+ try{if(receipt.inspectExisting()||receipt.inspectExistingLock()||receipt.claim()!=='claimed')return refuse();receipt.recordStage('consume_verified_ci_inbox','running');await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);receipt.recordStage('consume_verified_ci_inbox','passed');return {selection:{status:'ready' as const,reasonCode:'verified_queued_successor_admitted',task,verifiedTaskIds:plan.tasks.slice(0,plan.tasks.findIndex(t=>t.id===task.id)).map(t=>t.id),wholeAppCompleted:false as const,publicationAuthorized:false as const},store:receipt};}catch{receipt.close();return refuse();}
+}
+
+/** Continue only the saved first-generation schema failure, consuming the single
+ * already-authorized correction. This never restarts the original task claim. */
+export async function admitCalculatorQueuedDraftCorrection(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),index=record.nextTaskId==='calculator-pilot-step7-v1-34ee03-t05'?4:3,task=plan.tasks[index],hash=(b:Uint8Array|string)=>createHash('sha256').update(b).digest('hex');
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t0'+(index+1)||record.previousTaskId!==plan.tasks[index-1]?.id||record.planFingerprint!==plan.fingerprint||workspace.sha!==record.candidateSha||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,hash(source.capsule)).data,p=data.payload;
+ if(p.stage!=='generate_1'||p.status!=='blocked'||p.attempt!==1||p.httpInFlight||p.publicationStarted||p.proposal||p.assessments.length||p.modelState.attemptedRequests!==1||p.modelState.reservedRunTokens!==(index===4?4695:4795)||(index===4&&p.modelState.totalRequestBytes!==7173))return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})});
+ if(saved.status!=='blocked'||saved.reasonCode!=='execution_failed_no_replay'||saved.publication||!saved.stages.some(s=>s.stage==='generate_1'&&s.status==='blocked'))return refuse();
+ const prior=store.taskReceipt(plan,task);try{if(JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,index).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const permit=Object.freeze({kind:'verified-ci-queued-successor' as const}),fingerprint=hash(JSON.stringify({plan:plan.fingerprint,task:task.id,source:hash(source.capsule),phase:'one-rejected-generation-correction'}));
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
+/** Evidence-only continuation of the frozen correction. Three independent
+ * roles are rerun; no further developer/model edit is permitted. */
+export async function admitCalculatorQueuedEvidenceReview(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[3],hash=(b:Uint8Array|string)=>createHash('sha256').update(b).digest('hex');
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t04'||record.previousTaskId!==plan.tasks[2]?.id||record.planFingerprint!==plan.fingerprint||workspace.sha!==record.candidateSha||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'c025c7c69bf4eff7dbff9b43ea90bcf8458a3b6ed604ede1fb290b45ac6b7441').data,p=data.payload;
+ if(p.stage!=='execution_complete'||p.status!=='blocked'||p.attempt!==1||p.httpInFlight||p.publicationStarted||!p.proposal||data.proposalDigest!=='f8d50e3e27cc3d148f25b78676ce97f6a7e96ed1474624583c88881de74441cf'||p.assessments.length!==3||p.assessments[1]?.ready!==false||p.modelState.attemptedRequests!==5||p.modelState.reservedRunTokens!==16800)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})});const prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,3).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const permit=Object.freeze({kind:'verified-ci-queued-successor' as const}),fingerprint=hash(JSON.stringify({plan:plan.fingerprint,task:task.id,source:hash(source.capsule),phase:'frozen-code-fresh-dom-evidence'}));
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
+
+/** One new owner-approved repair of the exact saved negative T05 review.
+ * Historical claims/receipts are preserved; the 5 charged calls never reset. */
+export async function admitCalculatorQueuedT05SecondRepair(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{grant:Readonly<{id:string;maxRequests:9;maxReservedTokens:48000;totalCodeCorrections:2;freeTierConfirmed:true}>;verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const g=host?.grant;if(!g||g.id!=='owner-t05-nine-free-calls-48000-second-correction-20261025'||g.maxRequests!==9||g.maxReservedTokens!==48000||g.totalCodeCorrections!==2||g.freeTierConfirmed!==true)return refuse();
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[4];
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t05'||record.previousTaskId!==plan.tasks[3]?.id||record.planFingerprint!==plan.fingerprint||record.modelRequestsAuthorized!==0||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'d85c290bd5465f7c84e112731965059ee26b642bb72484b7d3c79df3c3a7a7d2').data,p=data.payload;
+ if(p.stage!=='execution_complete'||p.status!=='blocked'||p.httpInFlight||p.publicationStarted||!p.proposal||data.proposalDigest!=='fb9b7af7b84571663c5181465473538025c7a0c6688619e9b654f5537f6d9cb7'||p.modelState.attemptedRequests!==5||p.modelState.totalRequestBytes!==42174||p.modelState.reservedRunTokens!==18674||p.assessments.length!==3||p.assessments.some((a,i)=>a.role!==['security','reviewer','tester'][i])||p.assessments[1]?.ready!==false||p.assessments[2]?.ready!==false)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})}),prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,4).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'d85c290bd5465f7c84e112731965059ee26b642bb72484b7d3c79df3c3a7a7d2',grant:g.id,phase:'second-code-correction'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
+
+/** Review-only continuation of the saved six-call failure; no author call. */
+export async function admitCalculatorQueuedT05SavedAppend(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{grant:Readonly<{id:string;maxRequests:9;maxReservedTokens:48000;totalCodeCorrections:2;freeTierConfirmed:true}>;verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const g=host?.grant;if(!g||g.id!=='owner-t05-nine-free-calls-48000-second-correction-20261025'||g.maxRequests!==9||g.maxReservedTokens!==48000||g.totalCodeCorrections!==2||g.freeTierConfirmed!==true)return refuse();
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[4];
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t05'||record.previousTaskId!==plan.tasks[3]?.id||record.planFingerprint!==plan.fingerprint||record.modelRequestsAuthorized!==0||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'b65438b9c77945c1a7ecb1cf1dc532119ed1e516de4b4b95d632563beb4cfb36').data,p=data.payload;
+ if(p.stage!=='generate_1'||p.status!=='blocked'||p.httpInFlight||p.publicationStarted||p.proposal||p.modelState.attemptedRequests!==6||p.modelState.totalRequestBytes!==49601||p.modelState.reservedRunTokens!==23454||p.assessments.length!==0)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})}),prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,4).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'b65438b9c77945c1a7ecb1cf1dc532119ed1e516de4b4b95d632563beb4cfb36',grant:g.id,phase:'saved-generated-append-three-reviews'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
+
+/** New owner-authorized single third correction; six old calls remain charged. */
+export async function admitCalculatorQueuedT05ThirdRepair(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{grant:Readonly<{id:string;maxRequests:10;maxReservedTokens:48000;totalCodeCorrections:3;freeTierConfirmed:true}>;verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const g=host?.grant;if(!g||g.id!=='owner-t05-ten-free-calls-48000-third-correction-20261025'||g.maxRequests!==10||g.maxReservedTokens!==48000||g.totalCodeCorrections!==3||g.freeTierConfirmed!==true)return refuse();
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[4];
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t05'||record.previousTaskId!==plan.tasks[3]?.id||record.planFingerprint!==plan.fingerprint||record.modelRequestsAuthorized!==0||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'b23564a9511804c8174fbc07e5b34f7653f6d19363f6def0963ffbce7abe907a').data,p=data.payload;
+ if(p.stage!=='generate_1'||p.status!=='blocked'||p.httpInFlight||p.publicationStarted||p.proposal||p.modelState.attemptedRequests!==6||p.modelState.totalRequestBytes!==49601||p.modelState.reservedRunTokens!==23454||p.assessments.length!==0)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})}),prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,4).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'b23564a9511804c8174fbc07e5b34f7653f6d19363f6def0963ffbce7abe907a',grant:g.id,phase:'third-code-correction-from-actual-test-failure'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}
+
+/** One Reviewer-only continuation of exact frozen code. Ten calls stay charged.
+ * Saved Security/Tester approvals apply only to the pinned unchanged proposal. */
+export async function admitCalculatorQueuedT05ReviewerSupplement(workspace:CalculatorWorkspace,store:CalculatorPlanStore,input:unknown,
+ source:Readonly<{capsule:Uint8Array;receipt:Uint8Array;identity:CalculatorExecutionCheckpointIdentity;directory:string}>,
+ host:Readonly<{grant:Readonly<{id:string;maxRequests:11;maxReservedTokens:48000;totalCodeCorrections:3;freeTierConfirmed:true}>;verify:()=>Promise<readonly string[]>;persistRemote:()=>Promise<void>;assertRemote:()=>Promise<void>}>):Promise<CalculatorQueuedPermit>{
+ const g=host?.grant;if(!g||g.id!=='owner-t05-eleven-free-calls-48000-reviewer-only-20261025'||g.maxRequests!==11||g.maxReservedTokens!==48000||g.totalCodeCorrections!==3||g.freeTierConfirmed!==true)return refuse();
+ const record=parseCalculatorCiDeliveryRecord(input),plan=await calculatorWorkspacePlan(workspace),task=plan.tasks[4];
+ if(record.nextTaskId!==task?.id||task.id!=='calculator-pilot-step7-v1-34ee03-t05'||record.previousTaskId!==plan.tasks[3]?.id||record.planFingerprint!==plan.fingerprint||record.modelRequestsAuthorized!==0||workspace.sha!==record.candidateSha||workspace.ref!==plan.branch||source.identity.taskId!==task.id||source.identity.baseSha!==workspace.sha||source.identity.planFingerprint!==plan.fingerprint||source.identity.ownerFingerprint!==plan.owner.ownerFingerprint||source.identity.repository!==plan.owner.repository||source.identity.branch!==plan.branch||source.identity.bootstrapSha!==plan.owner.baseSha||source.identity.goalId!==plan.owner.id)return refuse();
+ const data=parseCalculatorExecutionCheckpointBytes(source.capsule,source.identity,'5e22b27158ea3fc170e3c9b0a419240edf1095c6d46312974ddffc24bbf4cb00').data,p=data.payload;
+ if(p.stage!=='execution_complete'||p.status!=='blocked'||p.httpInFlight||p.publicationStarted||p.attempt!==1||!p.proposal||data.proposalDigest!=='f2e8a84624d09752372ccf69ee449919dc4b60e6ff406091d092b4b9fc56706b'||p.modelState.attemptedRequests!==10||p.modelState.totalRequestBytes!==89244||p.modelState.reservedRunTokens!==38023||p.assessments.length!==3||p.assessments.some((a,i)=>a.role!==['security','reviewer','tester'][i])||!p.assessments[0]?.ready||p.assessments[1]?.ready!==false||!p.assessments[2]?.ready)return refuse();
+ const saved=parseTeamTaskSnapshotBytes(source.receipt,{id:'calc-'+task.id,fingerprint:calculatorPlanDigest({planFingerprint:plan.fingerprint,taskId:task.id})}),prior=store.taskReceipt(plan,task);
+ try{if(saved.status!=='blocked'||JSON.stringify(prior.inspectExisting())!==JSON.stringify(saved)||prior.inspectExistingLock())return refuse();}finally{prior.close();}
+ if(JSON.stringify(await host.verify())!==JSON.stringify(plan.tasks.slice(0,4).map(t=>t.id)))return refuse();
+ await assertCalculatorWorkspaceCurrent(workspace);await host.persistRemote();await host.assertRemote();await assertCalculatorWorkspaceCurrent(workspace);
+ const fingerprint=createHash('sha256').update(JSON.stringify({plan:plan.fingerprint,task:task.id,source:'5e22b27158ea3fc170e3c9b0a419240edf1095c6d46312974ddffc24bbf4cb00',grant:g.id,phase:'unchanged-code-one-reviewer-supplement'})).digest('hex'),permit=Object.freeze({kind:'verified-ci-queued-successor' as const});
+ permits.set(permit,{workspace,store,record,assertRemote:host.assertRemote,used:false,correction:{directory:source.directory,fingerprint,originalReceipt:JSON.stringify(saved)}});return permit;
+}

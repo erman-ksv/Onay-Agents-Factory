@@ -1,0 +1,98 @@
+name: Calculator one bounded agent syntax repair
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-t03-syntax-repair-request.json']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: calculator-protected-live-plan-step7
+  cancel-in-progress: false
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout fixed request
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: request
+          sparse-checkout: .factory/calculator-t03-syntax-repair-request.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Validate approved allowance without extending it
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+          assert.deepEqual(JSON.parse(readFileSync('request/.factory/calculator-t03-syntax-repair-request.json','utf8')),{"version":1,"allowanceId":"owner-precise-jsdom-cycle-20261023","phase":"last-approved-request-exact-app-syntax-line","runtimeSha":"4ebf082cfe676406454a91a5d672bb7145460a82","sourceCiRunId":40102034894,"taskId":"calculator-pilot-step7-v1-34ee03-t03","sourceRunId":39993060116,"sourceArtifactId":12518816662,"priorRequests":10,"maxNewRequests":1,"maxTotalT03Requests":11,"maxTotalT03ReservedTokens":45000,"maxOutputTokens":512,"independentReviewsDeferred":true,"publicationEnabled":false,"maxFurtherRepairs":0,"automaticReplay":false,"legalEnabled":false,"zeroHttpDiagnosticRunId":40101817295,"zeroHttpDiagnosticArtifactId":12562803408});
+          JS
+      - name: Checkout immutable tested Factory runtime
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 4ebf082cfe676406454a91a5d672bb7145460a82
+          path: runtime
+          fetch-depth: 4
+          persist-credentials: false
+      - name: Check whitespace in the complete reviewed Factory change
+        working-directory: runtime
+        run: git diff --check 6f6700d93a75e129053fc706e2fce70dd4fd6450 HEAD
+      - name: Download exact failed agent proposal without execution
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12518816662'
+          run-id: '39993060116'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-syntax-source
+          merge-multiple: true
+      - name: Download authenticated zero-HTTP exact-line diagnostic and costs
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12562803408'
+          run-id: '40101817295'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/calculator-syntax-diagnostic
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install trusted locked runtime on ephemeral Actions runner
+        working-directory: runtime
+        run: pnpm install --frozen-lockfile
+      - name: Prepare pinned isolated test images
+        run: |
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: One agent syntax delta then real checks, without publication
+        working-directory: runtime
+        env:
+          CALCULATOR_SYNTAX_REPAIR_APPROVED: LAST_APPROVED_REQUEST_MAX_512_OUTPUT_NO_PUBLICATION
+          CALCULATOR_SYNTAX_DIAGNOSTIC_DIRECTORY: ${{ runner.temp }}/calculator-syntax-diagnostic
+          CALCULATOR_SYNTAX_SOURCE_DIRECTORY: ${{ runner.temp }}/calculator-syntax-source
+          FACTORY_RUNTIME_SHA: 4ebf082cfe676406454a91a5d672bb7145460a82
+          FACTORY_SOURCE_CI_RUN: '40102034894'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CALCULATOR_EXECUTION_LIVE_APPROVED: RUN_ONE_FREE_CALCULATOR_TASK
+          CALCULATOR_MODEL_LIVE_APPROVED: ONE_FREE_BOUNDED_RUN
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+          AGENT_FACTORY_PROVIDER: groq
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ALLOW_WORKFLOW_CHANGES: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'false'
+        run: pnpm exec tsx scripts/calculator-t03-syntax-repair.mjs
+      - name: Preserve exact evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculator-t03-syntax-repair-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-t03-syntax-repair/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,69 @@
+name: Verify blocked T05 outcome and reviews without models
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/t05-final-outcome.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 9f7c26bacdd3e40f36aae61a91b6817634f9ede2
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12589941962'
+          run-id: '40169007596'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-final
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12581447641'
+          run-id: '40150058778'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/t05-first
+          merge-multiple: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Preserve negative verdicts and exact evidence without replay
+        env:
+          SOURCE_ROOT: ${{ runner.temp }}/t05-final
+          PREVIOUS_ROOT: ${{ runner.temp }}/t05-first
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/t05-final-outcome.mjs <<'JS'
+          import {createRequire} from 'node:module';import {loadCalculatorSnapshot,calculatorSources} from '../github/calculatorSnapshot.js';import assert from 'node:assert/strict';import {readFileSync,readdirSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {createCalculatorPlan} from '../orchestration/calculatorPlan.js';import {parseCalculatorExecutionCheckpointBytes} from '../orchestration/calculatorExecutionCheckpoint.js';import {calculatorProposalDigest} from '../orchestration/calculatorExecutionEvidence.js';import {createCalculatorSnapshotReader} from '../github/calculatorSnapshot.js';import {createCalculatorLiveBarrier} from '../orchestration/calculatorLiveBarrier.js';
+          assert.equal(process.env.GROQ_API_KEY,undefined);const root=process.env.SOURCE_ROOT,base='eac625e5830612c64fb8dafbd3d239c72adbeafd',sha=b=>createHash('sha256').update(b).digest('hex'),fixture=JSON.parse(readFileSync('orchestration/fixtures/calculatorStep7SavedPlan.json')),plan=createCalculatorPlan(fixture.request,fixture.proposal),task=plan.tasks[4],report=JSON.parse(readFileSync(root+'/report.json'));
+          const response=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/artifacts/12589941962',{headers:{Authorization:'Bearer '+process.env.FACTORY_STATE_TOKEN},redirect:'error'});assert.equal(response.status,200);const a=await response.json();assert.equal(a.workflow_run.id,40169007596);assert.equal(a.workflow_run.head_sha,'8a45984b06fc8ee8e9b9fbd72d4eb6f68888c9be');assert.equal(a.digest,'sha256:89073ea24a337a6b26ddcfee8cd77c857da1e13e1555ac707ba8bd22a5f9cb67');assert.equal(a.expired,false);
+          const bytes=readFileSync(root+'/execution-private/'+task.id+'.execution.json'),json=JSON.parse(bytes),cap=parseCalculatorExecutionCheckpointBytes(bytes,json.identity,sha(bytes)).data,p=cap.payload;assert.equal(cap.identity.taskId,task.id);assert.equal(cap.identity.planFingerprint,plan.fingerprint);assert.equal(cap.identity.baseSha,base);assert.equal(p.assessments.length,3);assert.equal(p.publicationStarted,false);assert.equal(p.modelState.attemptedRequests,5);assert.equal(p.modelState.reservedRunTokens,18674);assert.equal(report.metadataRepair.modelCodeChanged,false);assert.ok(p.proposal);const digest=calculatorProposalDigest(p.proposal);assert.equal(cap.proposalDigest,digest);
+          const checks=JSON.parse(readFileSync(root+'/checks-'+digest+'.json'));let browser=null;try{browser=JSON.parse(readFileSync(root+'/browser-'+digest+'.json'));}catch{/* Explicitly absent evidence, never assumed success. */}
+          for(const proof of [checks,browser].filter(Boolean)){assert.equal(proof.baseSha,base);assert.equal(proof.proposalDigest,digest);assert.equal(proof.taskId,task.id);}
+          const compared=[];for(const name of readdirSync(process.env.PREVIOUS_ROOT+'/state').filter(p=>p.endsWith('.json'))){assert.equal(sha(readFileSync(root+'/state/'+name)),sha(readFileSync(process.env.PREVIOUS_ROOT+'/state/'+name)));compared.push(name);}assert.ok(compared.length>=6);
+          const reader=createCalculatorSnapshotReader();assert.equal(await reader.getHead(plan.branch),base);
+          const claims=[];for(const [runtimeSha,sourceCiRunId,suffix]of [['74e021f9257be53ded32c90fdd29369c19fd9b23',40149959287,'-t05-exec'],['e1a46b2bf733ae1a03c73e63c72a39aa023d4777',40150271565,'-t05-fix1'],['9f7c26bacdd3e40f36aae61a91b6817634f9ede2',40168909337,'-t05-meta3']]){const b=createCalculatorLiveBarrier({runtimeSha,sourceCiRunId,planFingerprint:plan.fingerprint,previousTaskId:plan.tasks[3].id+suffix,candidateSha:base},process.env);assert.equal(await b.inspectAbsent(),false);claims.push({ref:b.ref,duplicateRefused:true,modelCalls:0});}
+          const snapshot=await loadCalculatorSnapshot({repository:plan.owner.repository,baseRef:plan.branch,baseSha:base,changePaths:task.paths},reader),original=calculatorSources(snapshot).get('test/ui.test.mjs'),updated=p.proposal.files.find(f=>f.path==='test/ui.test.mjs').content;assert.equal(typeof original,'string');const parser=createRequire(import.meta.resolve('tsx'))('esbuild'),code=s=>parser.transformSync(s,{loader:'js',target:'esnext',legalComments:'none',minifyWhitespace:true,minifySyntax:false,minifyIdentifiers:false}).code,beforeCode=code(original),afterCode=code(updated),executableTestsChanged=beforeCode!==afterCode;assert.equal(executableTestsChanged,false);
+          const result={version:1,status:'t05-blocked-outcome-verified-readonly',sourceRunId:40169007596,sourceArtifactId:12589941962,executableTestsChanged,beforeExecutableSha256:sha(beforeCode),afterExecutableSha256:sha(afterCode),sourceCapsuleSha256:sha(bytes),taskId:task.id,baseSha:base,proposalDigest:digest,assessments:p.assessments,preReviewNodeChecks:checks,preReviewBrowserChecks:browser,execution:report.execution,metadataRepair:report.metadataRepair,currentCharge:report.currentCharge,remainingRequests:3,remainingReservedTokens:29326,codeCorrectionConsumed:true,historicalReceiptsCompared:compared,claims,publicationStarted:false,calculatorUnchanged:true,modelCalls:0,writes:0,legalEnabled:false};
+          writeFileSync(process.env.RUNNER_TEMP+'/t05-final-outcome.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
+          JS
+          pnpm exec tsx scripts/t05-final-outcome.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t05-final-outcome-${{ github.run_id }}
+          path: ${{ runner.temp }}/t05-final-outcome.json
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "status": "main-runtime-recovery-routing-mock-verified",
+  "sourceSha": "1773ecf5748242078658b60af35133272c436777",
+  "sourceCi": {
+    "runId": 40224842296,
+    "jobId": 121263911727,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2352,
+      "passed": 2352,
+      "failed": 0
+    }
+  },
+  "local": {
+    "tests": 286,
+    "passed": 286,
+    "failed": 0,
+    "newTests": 9,
+    "dependenciesInstalled": false,
+    "diffCheck": "passed-isolated-index-comparison"
+  },
+  "verified": {
+    "mainRuntimeSelectsRecoveryWithVerifiedHostInput": true,
+    "originalReceiptAndCheckpointUnchanged": true,
+    "separatePrivatePhaseAndReceipt": true,
+    "initialPhaseAttemptIsTwo": true,
+    "ordinaryWorkspaceAncestryBlobHostDependencyChecks": true,
+    "readOnlyAdmissionRefusedBeforeClaim": true,
+    "existingSuccessorRefusesAdmission": true,
+    "hostInputGettersAndJsonRejected": true,
+    "privateCopiesIsolatedFromPublicMutation": true,
+    "permitCloneAndReuseRejected": true,
+    "remoteClaimLostAcknowledgementNotRetried": true,
+    "remoteAssertionFailureLatched": true,
+    "originalReceiptRecheckedAfterAwaits": true,
+    "ordinaryRoleToolPublicationCiPathRetained": true
+  },
+  "integration": {
+    "realCodeModules": [
+      "admission",
+      "router",
+      "executor",
+      "budget",
+      "checkpoint"
+    ],
+    "modelTransport": "mock",
+    "remoteBarrier": "mock",
+    "toolExecution": "mock",
+    "applicationCi": "mock",
+    "mockRequests": 4,
+    "originalEvidenceUnchanged": true
+  },
+  "productionWorkflowConfigured": false,
+  "mainEntryWithRealDockerAndGitHubExecuted": false,
+  "correctedReceiptAdmittedToSuccessorSelector": false,
+  "realModelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "mainChanged": false,
+  "applicationSourceChanged": false,
+  "previousPilotReplayed": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Production source artifact/remote barrier host and workflow configuration",
+    "Verified correction receipt and CI link before successor selection",
+    "Owner-approved goal and allowance plus explicit complete-history initialization before live model calls"
+  ]
+}

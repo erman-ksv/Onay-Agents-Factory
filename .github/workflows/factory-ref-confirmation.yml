@@ -1,0 +1,48 @@
+name: Read-only verification of authoritative Calculator refs
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/factory-ref-confirmation.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 27825106ab1db73ca109bbb6a147207b0354b2a5
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Compare real ref, commit lookup and validated current snapshot without publishing
+        env:
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          AGENT_FACTORY_TARGET_PROFILE: calculator
+          AGENT_ALLOWED_REPOSITORIES: erman-ksv/Onay-Factory-Calculator
+        run: |
+          cat > scripts/factory-ref-confirmation.mjs <<'JS'
+          import assert from 'node:assert/strict';import {writeFileSync} from 'node:fs';import {createCalculatorSnapshotReader,loadCalculatorSnapshot} from '../github/calculatorSnapshot.js';
+          const repo='erman-ksv/Onay-Factory-Calculator',branch='feat/calculator-agent/calculator-pilot-step7-v1',expected='eac625e5830612c64fb8dafbd3d239c72adbeafd';assert.equal(process.env.GROQ_API_KEY,undefined);
+          const calls=[];const transport=async(url,init)=>{calls.push(new URL(String(url)).pathname);assert.equal(init?.method,'GET');assert.equal(init?.redirect,'error');return fetch(url,init);};
+          const reader=createCalculatorSnapshotReader(process.env,transport),head=await reader.getHead(branch);assert.equal(head,expected);
+          async function get(path){const r=await fetch('https://api.github.com/repos/'+repo+path,{headers:{Authorization:'Bearer '+process.env.GITHUB_TOKEN},redirect:'error',signal:AbortSignal.timeout(15000)});assert.equal(r.status,200);return r.json();}
+          const native=await get('/git/ref/heads/'+encodeURIComponent(branch));assert.equal(native.ref,'refs/heads/'+branch);assert.equal(native.object.type,'commit');assert.equal(native.object.sha,head);
+          const committed=await get('/commits/'+encodeURIComponent(branch)),snapshot=await loadCalculatorSnapshot({repository:repo,baseRef:branch,baseSha:head,changePaths:['styles.css']},reader);assert.equal(snapshot.files[0].sourceSha256,'d38a4adb69a9ca2396d5c131a00a207cfec151d4aad8e3a77960b5625e55799f');assert.ok(calls.every(p=>!p.startsWith('/repos/'+repo+'/commits/')));assert.equal(await reader.getHead('feat/calculator-pilot-bootstrap'),'2c1218f2b020962ad93adf68d902a847271a7e72');
+          const result={version:1,status:'authoritative-ref-and-published-snapshot-verified-readonly',runtimeSha:'27825106ab1db73ca109bbb6a147207b0354b2a5',branch,headSha:head,nativeRefSha:native.object.sha,commitEndpointSha:committed.sha,observedCommitLookupAgrees:committed.sha===head,snapshotFile:snapshot.files[0],adapterEndpoints: [...new Set(calls)],modelCalls:0,pushes:0,pullRequestWrites:0,originalHistoricalFailureCauseProven:false,newLivePushVerified:false,legalEnabled:false};writeFileSync(process.env.RUNNER_TEMP+'/factory-ref-confirmation.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
+          JS
+          pnpm exec tsx scripts/factory-ref-confirmation.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: factory-ref-confirmation-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-ref-confirmation.json
+          if-no-files-found: ignore
+          retention-days: 14

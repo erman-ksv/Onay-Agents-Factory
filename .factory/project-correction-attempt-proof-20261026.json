@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.10",
+  "status": "qualified-single-correction-tested-mocked-model-native-docker-cycle-verified",
+  "sourceSha": "90427ef4784baefd4347d37048cbc232166c074d",
+  "sourceCi": {
+    "runId": 40381213998,
+    "jobId": 121777628306,
+    "typecheck": "passed",
+    "tests": 2537,
+    "passed": 2537,
+    "failed": 0
+  },
+  "local": {
+    "relatedTests": 201,
+    "passed": 201,
+    "sourceContextReplyNodeTests": 77,
+    "newRegressionTests": 12
+  },
+  "native": {
+    "runId": 40381534393,
+    "jobId": 121778760980,
+    "status": "success",
+    "eventSha": "c0b25ee6283733def6d82674d6b6b9fe17bc7161",
+    "sourceAndOwner": "synthetic fixture and mocked owner approval",
+    "model": "mocked transport; zero actual Groq requests",
+    "actualDockerChecks": 2,
+    "unchangedHostOracle": true,
+    "temporaryLedgerUsedRequestsBefore": 4,
+    "temporaryLedgerUsedRequestsAfter": 8,
+    "distinctStableAttemptIds": 2,
+    "proof": {
+      "version": 1,
+      "status": "bounded-mocked-model-correction-with-native-tests-verified",
+      "runtimeSha": "90427ef4784baefd4347d37048cbc232166c074d",
+      "sourceCiRunId": 40381213998,
+      "sourceAndOwner": "synthetic fixture and mocked owner approval; no real grant created",
+      "model": "mocked transport, no Groq requests",
+      "mockedModelCalls": 8,
+      "actualDockerChecks": 2,
+      "first": {
+        "status": "failed",
+        "proposalDigest": "ab630c32091e79e29594a27ada1941434ef9bee7823ce783986c5bed681c7698",
+        "usedRequests": 4
+      },
+      "corrected": {
+        "status": "passed",
+        "proposalDigest": "fb1f0e42eb7451d5d9261d08e8a1840ba89b889d8de655f38ecb779d5c154184",
+        "usedRequests": 8,
+        "remainingRequests": 0
+      },
+      "stableExecutionIds": [
+        "project-run-f15c8f28d023c195fa68b8ec4afc0c4b",
+        "project-run-2b9f2dcae955ec901b8f914e5e394d56"
+      ],
+      "unchangedHostPolicySha256": "f938ca0313bf39320e08084f87ffdb26b43610c357a899e6e510a68752541534",
+      "virtualWaitTotalMs": 180000,
+      "cooldown": "virtual timing only; no actual provider TPM claim",
+      "state": {
+        "stopped": false,
+        "reasonCode": "ready",
+        "stage": "done",
+        "providerCallsSent": 4,
+        "attemptedRequests": 4,
+        "totalRequestBytes": 15827,
+        "reservedRunTokens": 11100,
+        "publicationAuthorized": false,
+        "wholeAppCompleted": false,
+        "attempt": 2,
+        "correctionId": "project-fix-5b76275682f77a5a0c9d222b3d2b469c",
+        "contextBound": true,
+        "repliesBound": true,
+        "nextRole": null,
+        "independentAssessmentsVerified": true,
+        "runtimeTestsVerified": true,
+        "runtimeCoverage": "host-selected-node-contracts-only",
+        "browserTestsVerified": false,
+        "ciVerified": false
+      },
+      "realModelCalls": 0,
+      "realBudgetWrites": 0,
+      "applicationWrites": 0,
+      "correctionRestorationVerified": false,
+      "publicationAuthorized": false,
+      "wholeAppCompleted": false,
+      "legalEnabled": false,
+      "auditRunId": 40381534393,
+      "auditJobId": 121778760980
+    },
+    "limit": "Virtual cooldown and synthetic model/owner are not real provider/owner/live-project evidence."
+  },
+  "implemented": [
+    "Genuine correction admission bound to same native-branded development controller/plan/profile",
+    "Minimum four remaining requests and worst-case byte/token context headroom checked before admission",
+    "Same project ledger, distinct stable first/correction IDs independent of failure text/grant",
+    "One additional attempt only, fresh author/Security/Reviewer/Tester and exact own context",
+    "Content-identical rejected proposal cannot pass by altering summary",
+    "Conservative one-minute first-correction cooldown with <=15s guarded waits",
+    "Every send retains reserve-before-HTTP, fresh owner/source/context checks and terminal429 behavior"
+  ],
+  "correctionAdmissionWired": true,
+  "correctionExecutionWired": true,
+  "correctionRestorationWired": false,
+  "realModelCorrectionExecuted": false,
+  "realModelCalls": 0,
+  "realBudgetWrites": 0,
+  "applicationChanges": 0,
+  "newRealOwnerGrantCreated": false,
+  "realRemainingRequests": 0,
+  "genericFullPipelineWired": false,
+  "browserTestsVerified": false,
+  "candidateCiVerified": false,
+  "publicationAuthorized": false,
+  "wholeAppCompleted": false,
+  "legalEnabled": false,
+  "preservedRefs": {
+    "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "projectBudgetLedger": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "remaining": [
+    "Authenticated durable correction checkpoint/restoration with no duplicate spend",
+    "Generic candidate publication/exact-CI delivery/deduplication",
+    "Separate real planning/live authorization and composed real-model run",
+    "Browser/device/Expo policies and app acceptance"
+  ],
+  "report": "docs/STEP_10_10_QUALIFIED_CORRECTION_2026-10-26.md",
+  "diffCheck": "passed"
+}

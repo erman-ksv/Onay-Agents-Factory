@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.8",
+  "status": "generic-node-receipts-tested-native-docker-verified",
+  "sourceSha": "f0ecc1d9c2c6f2effb7dbc4e86785669451ff729",
+  "sourceCi": {
+    "runId": 40376173448,
+    "jobId": 121759705193,
+    "typecheck": "passed",
+    "tests": 2513,
+    "passed": 2513,
+    "failed": 0
+  },
+  "local": {
+    "relatedTests": 177,
+    "passed": 177,
+    "sourceContextReplyNodeTests": 53,
+    "newRegressionTests": 12,
+    "productionDockerAvailable": false,
+    "reason": "Local sandbox denied Unix Docker socket; no escalation or host execution fallback"
+  },
+  "native": {
+    "runId": 40376621059,
+    "jobId": 121761299795,
+    "status": "success",
+    "eventSha": "9bf5a5b75d59a51ae37077dbe52b1b408c4bb6d7",
+    "source": "synthetic host fixture, actual isolated Docker process",
+    "receiptVerifierPassed": true,
+    "copiedReceiptRefused": true,
+    "foreignProposalRefused": true,
+    "staleSourceRefused": true,
+    "oneShotReplayRefused": true,
+    "proof": {
+      "version": 1,
+      "status": "native-docker-contracts-verified",
+      "runtimeSha": "f0ecc1d9c2c6f2effb7dbc4e86785669451ff729",
+      "sourceCiRunId": 40376173448,
+      "image": "node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392",
+      "source": "synthetic host fixture; no native application commit is claimed",
+      "cases": [
+        {
+          "id": "passing",
+          "status": "passed",
+          "testsExecuted": true,
+          "proposalDigest": "ed0cb5b6420d617fc5f905375d39c058bc88ab37c2f87caf16675abc4f7bdcef",
+          "fileSetSha256": "6c0713d9a86bc684b148320ffaf8343ce788dcec25448f3fdeba2f27748ec9cf",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": []
+        },
+        {
+          "id": "wrong-result",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "9df93611c6f4b3808ff16f592a6bb0bad3f2f27298958f219fe78e35f137b9f5",
+          "fileSetSha256": "8c0cd6125c8371a136d3da16a9646cb5c19ea03558d348fc5d2b7a91eb8a62d8",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "early-exit",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "e02b7412d02a87809eb06a06cc6b7d0fbd1fa96de5219c91563ce92a3a10da80",
+          "fileSetSha256": "432ba7f281c16e80fd4ebb9c3baa00eaad90f12ad2dbaaa7c10e9c94dd9a763d",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "forged-project-output",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "50cb193e3fb8a76e0940e079bb6d941eafd325e419fd8ee59bfe654304b02562",
+          "fileSetSha256": "f6170e2fc36b38ff1bf72bba01878c465a062b03fc7766e5a79232e917239f50",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "outside-app-read",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "fe842fabd7e98493045ba653e080e4541dc14b89318a3795068b8a5cc18022e9",
+          "fileSetSha256": "2168c93521f16b95149bc86cb08b3d0617aab1b6078169d103ec3171eed70912",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        },
+        {
+          "id": "timeout",
+          "status": "failed",
+          "testsExecuted": true,
+          "proposalDigest": "6e8f35df751bb5d418d04aa49374fffcd6510f3f1401e4fb4f6bb21f74b5ec62",
+          "fileSetSha256": "5538474d6ca50fe80012165df403cc4985c7f17827d1fbe5ed8ea572fa6e122a",
+          "policySha256": "a2a48e82e52102fb30911a875af712825f22d6c9e240413f605fe04c526a3e92",
+          "failures": [
+            "contract:contract-note"
+          ]
+        }
+      ],
+      "realModelCalls": 0,
+      "applicationWrites": 0,
+      "budgetWrites": 0,
+      "publicationAuthorized": false,
+      "wholeAppCompleted": false,
+      "legalEnabled": false
+    },
+    "coverageNote": "The case named timeout uses unsettled async completion; native wall-time deadline enforcement is not separately claimed. Process timeout/error handling is covered by mocks."
+  },
+  "implemented": [
+    "Immutable host-selected Node contract policy and pinned image",
+    "Exact overlay/source-set SHA, including unchanged dependencies",
+    "Fixed isolated Docker supervisor; untrusted output is not a receipt",
+    "Genuine native receipt identity, freshness and approval checks",
+    "Injected test runners always mint simulated receipts; simulated proof cannot approve runtime tests",
+    "Ordered specialist pipeline has an exact-proposal native-receipt gate"
+  ],
+  "genericFullPipelineWired": false,
+  "realSecondProjectExecuted": false,
+  "browserTestsVerified": false,
+  "candidateCiVerified": false,
+  "publicationAuthorized": false,
+  "wholeAppCompleted": false,
+  "realModelCalls": 0,
+  "realBudgetWrites": 0,
+  "applicationChanges": 0,
+  "legalEnabled": false,
+  "preservedRefs": {
+    "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "projectBudgetLedger": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "remainingRequests": 0,
+  "remaining": [
+    "Qualified bounded correction and restart after failures",
+    "Generic publication/exact-candidate CI delivery and deduplication",
+    "Separate native planning/live allowance and real composed run",
+    "Additional browser/device/Expo-specific host policies"
+  ],
+  "report": "docs/STEP_10_08_HOST_NODE_TESTS_2026-10-26.md",
+  "diffCheck": "passed"
+}

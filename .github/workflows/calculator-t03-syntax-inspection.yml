@@ -1,0 +1,49 @@
+name: Calculator read-only rejected syntax patch inspection
+on:
+  push:
+    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    paths: ['.factory/calculator-t03-syntax-inspection-request.json']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download fixed rejected patch only as untrusted JSON
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12562824077'
+          run-id: '40102210646'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/syntax-rejected
+          merge-multiple: true
+      - name: Download exact previous proposal only as untrusted JSON
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: '12518816662'
+          run-id: '39993060116'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/syntax-original
+          merge-multiple: true
+      - name: Print bounded validation metadata without code or model calls
+        env:
+          READ_TOKEN: ${{ github.token }}
+          INSPECTION_CURRENT: ${{ runner.temp }}/syntax-rejected
+          INSPECTION_ORIGINAL: ${{ runner.temp }}/syntax-original
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');assert.equal(process.env.GITHUB_REF,'refs/heads/feat/calculator-t02-charge-reconcile-20261022');
+          const api=async p=>{const r=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory'+p,{headers:{Authorization:'Bearer '+process.env.READ_TOKEN},redirect:'error',signal:AbortSignal.timeout(10000)});assert.equal(r.status,200);return r.json();};
+          for(const [id,run,digest] of [[12562824077,40102210646,'sha256:136bbd34596a82725b0c44cff576b37fa143b9d3fd4b3a2303960db0cfc495a0'],[12518816662,39993060116,'sha256:e7df7d3816b5ba336b28bb68e4ee6aa507af3aea5ba705dffb8e0647f75267de']]){const a=await api('/actions/artifacts/'+id);assert.equal(a.workflow_run.id,run);assert.equal(a.digest,digest);assert.equal(a.expired,false);}
+          const read=(directory,name,max)=>{const bytes=readFileSync(directory+'/'+name);assert.ok(bytes.length<=max);return JSON.parse(bytes.toString('utf8'));};
+          const report=read(process.env.INSPECTION_CURRENT,'report.json',65536),patch=read(process.env.INSPECTION_CURRENT,'private-syntax-patch.json',8192),previous=read(process.env.INSPECTION_ORIGINAL,'private-agent-repaired-proposal.json',262144);assert.equal(report.modelCalls,11);assert.equal(report.newProviderCalls,1);assert.equal(report.httpInFlight,false);assert.equal(report.publicationStarted,false);
+          const original=previous.files.find(f=>f.path==='src/app.mjs');assert.ok(original);const validObject=patch&&typeof patch==='object'&&!Array.isArray(patch),allowed=['sourceSha256','edits'];
+          const result={version:1,providerCalls:0,publicationStarted:false,sourceRunId:40102210646,taskId:report.taskId,patchIsObject:!!validObject,requiredKeysPresent:validObject&&allowed.every(k=>Object.hasOwn(patch,k)),extraKeysCount:validObject?Object.keys(patch).filter(k=>!allowed.includes(k)).length:null,shaMatchesCurrentApp:validObject&&patch.sourceSha256===createHash('sha256').update(original.content).digest('hex'),editsArray:Array.isArray(patch?.edits),editCount:Array.isArray(patch?.edits)?patch.edits.length:null,edits:[],currentCharge:report.currentCharge};
+          const words=s=>s.match(/[\p{L}_$][\p{L}\p{N}_$]*|\d+(?:\.\d+)?|[+*%=\-]/gu)??[];
+          for(const e of (Array.isArray(patch?.edits)?patch.edits:[]).slice(0,3)){const obj=e&&typeof e==='object'&&!Array.isArray(e),strings=obj&&typeof e.before==='string'&&typeof e.after==='string';let occurrences=0;if(strings&&e.before.length){let p=-1;while((p=original.content.indexOf(e.before,p+1))>=0){occurrences++;if(occurrences>=3)break;}}
+          result.edits.push({requiredKeysPresent:!!obj&&['before','after'].every(k=>Object.hasOwn(e,k)),extraKeysCount:obj?Object.keys(e).filter(k=>!['before','after'].includes(k)).length:null,beforeAndAfterStrings:!!strings,beforeLength:strings?e.before.length:null,afterLength:strings?e.after.length:null,unchanged:strings?e.before===e.after:null,anchorOccurrencesAtMostThree:occurrences,wordsNumbersOperatorsPreserved:strings?JSON.stringify(words(e.before))===JSON.stringify(words(e.after)):null});}
+          console.log(JSON.stringify(result));
+          JS

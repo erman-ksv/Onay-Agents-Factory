@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "status": "bounded-rejected-proposal-request-preparation",
+  "runtimeSha": "1055e8eba49fe589f56da84087a9c4cb1d5da3d8",
+  "sourceCi": {
+    "runId": 40222662057,
+    "jobId": 121257397741,
+    "conclusion": "success",
+    "typecheck": "passed",
+    "tests": {
+      "total": 2334,
+      "passed": 2334,
+      "failed": 0
+    }
+  },
+  "local": {
+    "tests": 196,
+    "passed": 196,
+    "failed": 0,
+    "correctionTests": 12,
+    "newRegressionTests": 6,
+    "diffCheck": "passed-isolated-index-comparison",
+    "dependenciesInstalled": false
+  },
+  "verified": {
+    "trustedDigestRequired": true,
+    "identityPlanTaskAndBaseShaBound": true,
+    "snapshotCapabilityRequired": true,
+    "conservativeChargeRetained": true,
+    "boundedContextAndUnverifiedAreasRetained": true,
+    "checkpointUnchangedByPreparation": true,
+    "cyclicAndAccessorInputRefused": true,
+    "transportErrorAndRepeatedRepairRefused": true
+  },
+  "scope": "Frontend generation validator rejection only",
+  "automaticCorrectionAdded": false,
+  "executorConnectedToNewBuilder": false,
+  "requestPreparationAuthorizesModel": false,
+  "modelCalls": 0,
+  "additionalRequestsAuthorized": 0,
+  "actualLedgerInitialized": false,
+  "ownerDecision": null,
+  "budgetOperatorMode": "inspect",
+  "mainSha": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "calculatorSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "applicationSourceChanged": false,
+  "mainChanged": false,
+  "previousPilotReplayed": false,
+  "merge": false,
+  "deployment": false,
+  "legalEnabled": false,
+  "step9FullyClosed": false,
+  "remaining": [
+    "Authorized one-use host continuation using prepared context",
+    "Owner-approved allowance and explicit full-history initialization before any model call",
+    "Corrected candidate must pass unchanged role/tool/CI gates"
+  ]
+}

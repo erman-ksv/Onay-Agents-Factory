@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "date": "2026-10-24",
+  "advisoryOnly": true,
+  "status": "node_browser_security_reviewer_passed_tester_pending",
+  "wholeStep8Closed": false,
+  "completedStep8Criteria": 1,
+  "totalStep8Criteria": 4,
+  "proposalDigest": "6e84fd6a29e8759a5337f946872b0dc73feb553cf1b91b8aabd387f32842b754",
+  "source": {
+    "runId": 40110787654,
+    "jobId": 120921878769,
+    "artifactId": 12566129197,
+    "artifactDigest": "sha256:08cbc1dffbd2cf8afeba8bc763dcaf3186f7ef53f1f70991cd6cdfd8353f4f98",
+    "version": 1,
+    "status": "two_fresh_assessments_restore_verified",
+    "proposalDigest": "6e84fd6a29e8759a5337f946872b0dc73feb553cf1b91b8aabd387f32842b754",
+    "proposalFileSha256": "a747bdb2b0e692990c816394b9531f9150e840ce34ed58dfc5dda9d121afc144",
+    "prefixFileSha256": "fda91b139ce2b57cdf73b30393438c43b492caee7d46b5b895418bbb78db8e21",
+    "capsuleFileSha256": "67f2527d18f07f966886245040a17912eab6849585526fe2ddb5cea69b205b0a",
+    "roles": [
+      "security",
+      "reviewer"
+    ],
+    "providerCalls": 0,
+    "publicationAuthorized": false,
+    "testerStillRequired": true,
+    "charge": {
+      "attemptedRequests": 17,
+      "totalRequestBytes": 132977,
+      "reservedRunTokens": 69863,
+      "elapsedMs": 513701
+    }
+  },
+  "actualNodeAndBrowserPassed": true,
+  "appBytesPreserved": true,
+  "securityReady": true,
+  "reviewerReady": true,
+  "testerExecuted": false,
+  "publicationStarted": false,
+  "currentCharge": {
+    "attemptedRequests": 17,
+    "totalRequestBytes": 132977,
+    "reservedRunTokens": 69863,
+    "elapsedMs": 513701
+  },
+  "renewedAllowance": {
+    "approvedAdditionalRequests": 6,
+    "approvedAdditionalReservedTokens": 36000,
+    "baselineRequests": 11,
+    "baselineReservedTokens": 44698,
+    "usedAdditionalRequests": 6,
+    "usedAdditionalReservedTokens": 25165,
+    "remainingRequests": 0,
+    "remainingReservedTokens": 10835,
+    "overallRequestCeiling": 17,
+    "overallReservedTokenCeiling": 80698
+  },
+  "restorePreflight": {
+    "runId": 40111468210,
+    "jobId": 120923911887,
+    "status": "passed",
+    "providerCalls": 0,
+    "prefixRoles": [
+      "security",
+      "reviewer"
+    ],
+    "capsuleFileSha256": "67f2527d18f07f966886245040a17912eab6849585526fe2ddb5cea69b205b0a",
+    "prefixFileSha256": "fda91b139ce2b57cdf73b30393438c43b492caee7d46b5b895418bbb78db8e21"
+  },
+  "factoryChecks": {
+    "sourceSha": "36aea35a2eb89bc6590cd7e77d17dbf4a9873d80",
+    "runId": 40110632453,
+    "jobId": 120921415953,
+    "typecheck": "passed",
+    "tests": 2127,
+    "passed": 2127,
+    "failed": 0
+  },
+  "rootHostIssuesCorrected": [
+    "source browser diagnostics now use a fresh one-shot sandbox instead of reusing the predecessor instance",
+    "Node test repair contract includes window.addEventListener as well as document methods",
+    "stale import/Jest diagnoses are omitted after the prior agent fix",
+    "private original source guard traverses structured data before JSON escaping"
+  ],
+  "nextTesterRequest": {
+    "authorized": false,
+    "additionalRequests": 1,
+    "proposedRenewedRequestCeiling": 7,
+    "proposedOverallT03RequestCeiling": 18,
+    "reservedTokenCeilingUnchanged": 80698,
+    "maxOneRequestReservedTokens": 6000,
+    "remainingReservedTokens": 10835,
+    "generateOrRepairAllowed": false,
+    "codeBytesMustRemainUnchanged": true
+  },
+  "stillPending": [
+    "one fresh independent Tester assessment on exact proposal",
+    "publication and exact-SHA Calculator CI after Tester passes",
+    "automatic authenticated CI delivery to Factory",
+    "real exactly-once next-task transition including failure/duplicate/restart coverage"
+  ],
+  "legalEnabled": false,
+  "merge": false,
+  "deployment": false,
+  "calculatorHead": "949a0bf874722fd8cbd886c2cb0af8f2b502ac05",
+  "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+  "diff": {
+    "baseline": "8c731ad55b4fe97e36f23ee3a4ef716d5e0073e7",
+    "sourceHead": "1df85137472258e236d4915892e2f69a418c6abe",
+    "implementationFiles": 14,
+    "additions": 1033,
+    "deletions": 1,
+    "whitespaceErrors": 0,
+    "patchPath": "/workspace/Factory-step8-node-test-20261024.patch"
+  }
+}

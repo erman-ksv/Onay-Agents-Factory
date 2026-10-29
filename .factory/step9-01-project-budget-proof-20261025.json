@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "date": "2026-10-25",
+  "step": "9.1",
+  "status": "implemented-and-tested-opt-in-filesystem-budget",
+  "overallStep9Completed": false,
+  "runtimeSha": "48c75a81c5546bfc1c00038c020964ec8ec08427",
+  "sourceCi": {
+    "runId": 40191521978,
+    "jobId": 121163335747,
+    "typecheck": "passed",
+    "tests": {
+      "total": 2228,
+      "passed": 2228,
+      "failed": 0
+    }
+  },
+  "localTests": {
+    "total": 42,
+    "passed": 42,
+    "failed": 0,
+    "dependencyInstallation": false,
+    "typescriptTransform": "Node stripTypeScriptTypes into temporary copy; separate CI typecheck passed"
+  },
+  "changes": {
+    "store": "dedicated host-owned shared filesystem with exclusive lock, atomic rename and fsync",
+    "concurrency": "compare-and-swap conflict stops without retry",
+    "httpBoundary": "explicit host-only opt-in in createTaskModelBudgetFetch",
+    "contentStored": "request metadata and SHA256 only",
+    "historicalChargeRequired": true,
+    "automaticInitialization": false,
+    "refunds": false,
+    "scopeCapturedBeforeMutation": true
+  },
+  "modelCalls": 0,
+  "newLiveOwnerGrant": false,
+  "actualT05LedgerMigrated": false,
+  "t05Budget": {
+    "requestsUsed": 11,
+    "requestsLimit": 11,
+    "reservedTokens": 43761,
+    "reservedTokenLimit": 48000,
+    "remainingRequests": 0
+  },
+  "legalEnabled": false,
+  "calculatorWrites": 0,
+  "onayWrites": 0,
+  "mainWrites": 0,
+  "merge": false,
+  "deployment": false,
+  "remaining": [
+    "9.2: remote atomic shared store for independent Actions runners",
+    "9.3: authenticated project-wide owner grant, full history migration and mandatory controller wiring for all roles",
+    "9.4: bounded real model/CI continuation with explicit approved project allowance"
+  ],
+  "limitations": [
+    "Filesystem adapter requires one trusted shared disk and a host-owned directory outside agent-writable checkout.",
+    "Grant schema alone is not proof of owner approval; future controller must verify approval and historical evidence.",
+    "Existing legacy callers have not been switched to this opt-in. This is not live cross-runner budget enforcement.",
+    "A provider token reservation is conservative host accounting, not a provider invoice."
+  ]
+}

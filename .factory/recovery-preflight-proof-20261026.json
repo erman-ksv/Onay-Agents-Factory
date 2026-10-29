@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "sourceSha": "c4bc50f2d15aabe7b3cb970769ee1c933329ad27",
+  "sourceCi": {
+    "runId": 40288806670,
+    "jobId": 121458748954,
+    "typecheck": "passed",
+    "tests": 2392,
+    "passed": 2392,
+    "failed": 0
+  },
+  "local": {
+    "tests": 54,
+    "passed": 54,
+    "dependencyInstallation": false,
+    "scriptSyntax": "passed",
+    "scope": "synthetic fixtures and mock transport"
+  },
+  "nativePreflight": {
+    "eventSha": "72184e41523a55d70bc4f5e52aa5a1237b673412",
+    "runId": 40289056515,
+    "jobId": 121459550690,
+    "jobConclusion": "success",
+    "status": "blocked-source-missing",
+    "sourceProvided": false,
+    "sourceVerified": false,
+    "ledgerPresent": false,
+    "budgetStatus": "not-initialized",
+    "githubReads": 3,
+    "storageReads": 0,
+    "githubApiMutationRequests": 0,
+    "modelCalls": 0,
+    "executionAuthorized": false,
+    "ownerApprovalVerified": false,
+    "sourceCollectionCompletenessVerified": false,
+    "dependencyAcceptanceVerified": false,
+    "sandboxVerified": false,
+    "metadataArtifact": {
+      "id": 12635104022,
+      "bytes": 579,
+      "sha256": "079ce0718910ff9ff141875d95d3af92c41b3fa736a620fdb0771e1966d2bc80",
+      "digestSource": "GitHub reported; output ZIP not downloaded/rehashed"
+    }
+  },
+  "unchanged": {
+    "main": true,
+    "applicationSource": true,
+    "modelHistory": true
+  },
+  "legalEnabled": false,
+  "wholeProjectCompleted": false
+}

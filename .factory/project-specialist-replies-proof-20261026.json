@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.7",
+  "status": "ordered-authentic-specialist-replies-tested-no-live-model-run",
+  "sourceSha": "b1be5a9e8a8662fe37c8ec2d951d2c2bc45aafe7",
+  "sourceCi": {
+    "runId": 40374169083,
+    "jobId": 121752566597,
+    "typecheck": "passed",
+    "tests": 2501,
+    "passed": 2501,
+    "failed": 0
+  },
+  "local": {
+    "relatedTests": 165,
+    "passed": 165,
+    "sourceContextReplyTests": 41,
+    "newRegressionTests": 12,
+    "sourceAndProvider": "synthetic mocks with a temporary real file ledger"
+  },
+  "implemented": [
+    "Private genuine model reply linked to exact context/task/source/role/request digest",
+    "Genuine author JSON is the only proposal source for this cycle",
+    "Mandatory author-security-reviewer-tester ordering and same genuine proposal identity",
+    "Strict independent verdict schema with explicit missing evidence",
+    "Negative, malformed, stale, repeated, substituted or skipped results stop without retry/refund",
+    "Model opinion cannot become actual runtime-test/CI/publication evidence"
+  ],
+  "realModelCalls": 0,
+  "realBudgetWrites": 0,
+  "applicationChanges": 0,
+  "genericFullPipelineWired": false,
+  "realSecondProjectExecuted": false,
+  "runtimeTestsVerified": false,
+  "candidateCiVerified": false,
+  "publicationAuthorized": false,
+  "wholeAppCompleted": false,
+  "legalEnabled": false,
+  "preservedRefs": {
+    "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "projectBudgetLedger": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "budget": {
+    "usedRequests": 65,
+    "usedRequestBytes": 626530,
+    "usedReservedTokens": 263359,
+    "remainingRequests": 0
+  },
+  "remaining": [
+    "Host execution evidence tied to exact proposed files",
+    "Bounded qualified correction and restart state",
+    "Generic candidate publication, exact CI delivery and deduplication",
+    "Separate native planning/live authorization and real composed run"
+  ],
+  "report": "docs/STEP_10_07_SPECIALIST_REPLIES_2026-10-26.md",
+  "diffCheck": "passed"
+}

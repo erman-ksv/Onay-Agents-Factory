@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "stage": "10.12",
+  "status": "generic-draft-publication-and-exact-ci-tested-native-readonly-task-ci-verified",
+  "sourceSha": "6a067b57ca4e44f4c7e9ad8c06e4d384509fd2f4",
+  "sourceCi": {
+    "runId": 40392916653,
+    "jobId": 121818300445,
+    "typecheck": "passed",
+    "tests": 2581,
+    "passed": 2581,
+    "failed": 0
+  },
+  "local": {
+    "relatedTests": 245,
+    "passed": 245,
+    "sourceContextReplyNodePublicationCiTests": 121,
+    "newRegressionTests": 24,
+    "Git": "actual local bare Git; test-only private stdin FD compatibility",
+    "GitHubOwnerModel": "mocked/synthetic"
+  },
+  "native": {
+    "runId": 40393362970,
+    "jobId": 121819863833,
+    "status": "success",
+    "eventSha": "2ac7710aaf47d68611c05f340778f1df04e026ef",
+    "actualDockerChecks": 1,
+    "actualLocalGitPushes": 1,
+    "mockedDraftPrRequests": 1,
+    "mockedModelCalls": 4,
+    "existingCalculatorTaskCiVerifiedReadonly": true,
+    "historicalWorkflowPinBaseSha": "2c1218f2b020962ad93adf68d902a847271a7e72",
+    "proof": {
+      "version": 1,
+      "status": "generic-publication-fixture-and-native-readonly-ci-verified",
+      "runtimeSha": "6a067b57ca4e44f4c7e9ad8c06e4d384509fd2f4",
+      "sourceCiRunId": 40392916653,
+      "fixture": {
+        "repository": "example/publication-fixture",
+        "modelAndOwner": "mocked/synthetic",
+        "mockedModelCalls": 4,
+        "actualDockerChecks": 1,
+        "actualLocalGitPushes": 1,
+        "mockedDraftPrRequests": 1,
+        "candidateSha": "5cde0a77ff68ba87e4a2e2faf78057e378746db7",
+        "publicationProvenance": "simulated",
+        "confirmation": {
+          "repository": "example/publication-fixture",
+          "branch": "feat/publication-agent/publish-notes",
+          "candidateSha": "5cde0a77ff68ba87e4a2e2faf78057e378746db7",
+          "number": 1,
+          "ciStatus": "passed",
+          "ciVerified": true,
+          "provenance": "simulated",
+          "mergeAuthorized": false,
+          "wholeAppCompleted": false
+        },
+        "repeatPublicationRefused": true
+      },
+      "nativeCi": {
+        "repository": "erman-ksv/Onay-Factory-Calculator",
+        "branch": "feat/calculator-agent/calculator-pilot-step7-v1",
+        "candidateSha": "558993981c9bbb7c6100c8335860ac5668768314",
+        "targetProfileSha256": "4833b9225de59bc109169934c79c174260d739d549b149d1cafab1056e56ae34",
+        "policySha256": "672b4100b60abc3b17e925c7763b66bbd709379b48d8228aada3d5da3486e857",
+        "status": "passed",
+        "verifiedRunIds": [
+          40178095158
+        ],
+        "provenance": "native-github",
+        "mergeAuthorized": false,
+        "wholeAppCompleted": false,
+        "workflowPinBaseSha": "2c1218f2b020962ad93adf68d902a847271a7e72",
+        "scope": "Historical Task CI only under a read-only probe profile; not the full Calculator release/acceptance gate. No publication or repair"
+      },
+      "realApplicationPublications": 0,
+      "realModelCalls": 0,
+      "realBudgetWrites": 0,
+      "applicationWrites": 0,
+      "genericCiDeliveryWired": false,
+      "mergeAuthorized": false,
+      "wholeAppCompleted": false,
+      "legalEnabled": false,
+      "auditRunId": 40393362970,
+      "auditJobId": 121819863833
+    },
+    "scope": "Local fixture publication with mocked owner/model/PR/fixture CI. Separate native historical Calculator TASK CI only, not full release/acceptance or new app publication."
+  },
+  "implemented": [
+    "Genuine one-use publication approval after all opinions and exact native host tests",
+    "Test-only simulated approvals cannot enter the native writer",
+    "Host write/profile/free-tier/legal/workflow opt-ins and current owner/source guards",
+    "Fixed bare Git, restricted credentials/hooks/filters/submodules, exact parent/path/blob verification",
+    "Create/update feature refs only with exact lease; unknown push/PR does not retry",
+    "Open Draft same-repo/head/base confirmation with before/after checkpoints",
+    "Pinned host workflow policy and exact branch/SHA/run/attempt/job/step CI reader",
+    "Fresh CI/ref/PR revalidation and one-use genuine confirmation; repeated pass does not republish"
+  ],
+  "genericPublisherWired": true,
+  "genericExactCiReaderWired": true,
+  "genericCiDeliveryWired": false,
+  "durablePublicationReceiptWired": false,
+  "realApplicationPublicationVerified": false,
+  "realApplicationPublications": 0,
+  "realModelCalls": 0,
+  "realBudgetWrites": 0,
+  "applicationChanges": 0,
+  "newRealOwnerGrantCreated": false,
+  "realRemainingRequests": 0,
+  "genericFullPipelineWired": false,
+  "fullCalculatorReleaseGateVerified": false,
+  "browserDeviceExpoAcceptanceVerified": false,
+  "mergeAuthorized": false,
+  "wholeAppCompleted": false,
+  "legalEnabled": false,
+  "preservedRefs": {
+    "factoryMain": "0752de6cf757c833417754bfe7f9a10fd654dbd9",
+    "calculator": "558993981c9bbb7c6100c8335860ac5668768314",
+    "projectBudgetLedger": "b139646c2f359fe23f213e0a3227aa99dd84f369"
+  },
+  "remaining": [
+    "Durable publication/CI receipts and read-only reconciliation of uncertain push/PR",
+    "Automatic exact-CI result delivery and cross-process next-task deduplication",
+    "Production recovery key/storage integration and separate real planning/live allowance",
+    "Real composed run and browser/device/Expo/app acceptance"
+  ],
+  "report": "docs/STEP_10_12_GENERIC_PUBLICATION_CI_2026-10-26.md",
+  "diffCheck": "passed"
+}

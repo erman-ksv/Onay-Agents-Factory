@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
+import type {CalculatorVerifiedCorrection} from './calculatorVerifiedCorrection.js';
 import type { PreparedCalculatorChanges } from "../commander/calculatorChanges.js";
 import { CALCULATOR_PROFILE } from "../config/calculatorProfile.js";
 import { loadCalculatorSnapshot, type CalculatorSnapshotReader, type CalculatorSnapshot, type CalculatorTreeEntry } from "../github/calculatorSnapshot.js";
 import type { CalculatorPlan, CalculatorPlanTask } from "./calculatorPlan.js";
+import { assertCalculatorT02InspectedSuccessorPreview, type CalculatorT02ReadOnlyPreselection } from "./calculatorT02SuccessorPreview.js";
+import { consumeCalculatorT02ExecutionPermit, type CalculatorT02ExecutionPermit } from "./calculatorT02Admission.js";
 import { CalculatorPlanStore, type CalculatorDependencyEvidence, type CalculatorSelection } from "./calculatorPlanStore.js";
 import type { TeamTaskSnapshot, TeamTaskStore } from "./teamTaskStore.js";
 
@@ -95,9 +98,31 @@ async function taskBlobs(reader: CalculatorSnapshotReader, commitSha: string, ta
   }
   return blobs;
 }
+export async function verifyCalculatorWorkspaceDependency(workspace:CalculatorWorkspace,taskId:string,runner:CalculatorCheckRunner){
+  const host=await fresh(workspace),task=host.plan.tasks.find(t=>t.id===taskId);if(!task)return refuse();
+  const store=host.store.taskReceipt(host.plan,task);
+  try{
+    const receipt=store.inspectExisting();
+    if(!receipt||store.inspectExistingLock()||receipt.status!=='needs-review'||!receipt.publication||
+      !receipt.stages.some(s=>s.stage==='publish_candidate'&&s.status==='passed'))return refuse();
+    const before=JSON.stringify(receipt),result=await verifyDependency(workspace,task,receipt,runner);
+    if(!result||store.inspectExistingLock()||JSON.stringify(store.inspectExisting())!==before)return refuse();
+    return result;
+  }finally{store.close();}
+}
 async function verifyDependency(workspace: CalculatorWorkspace, task: CalculatorPlanTask, receipt: TeamTaskSnapshot,
-  runner?: CalculatorCheckRunner): Promise<CalculatorDependencyEvidence | undefined> {
-  const host = await fresh(workspace), candidateSha = receipt.publication?.headSha;
+  runner?: CalculatorCheckRunner, historical?: CalculatorT02ReadOnlyPreselection): Promise<CalculatorDependencyEvidence | undefined> {
+  const host = await fresh(workspace);
+  let candidateSha = receipt.publication?.headSha;
+  if (!candidateSha && historical && task.id === historical.previousTaskId) {
+    assertCalculatorT02InspectedSuccessorPreview(historical);
+    if (historical.status !== "candidate-preview-only" || historical.readOnly !== true ||
+        historical.executionAuthorized !== false || historical.planFingerprint !== workspace.planFingerprint ||
+        historical.candidateSha !== workspace.sha ||
+        receipt.status !== "needs-review" ||
+        receipt.reasonCode !== "publication_or_ci_uncertain_inspect_no_replay") return undefined;
+    candidateSha = historical.candidateSha;
+  }
   if (!runner || !sha(candidateSha)) return undefined;
   await ancestors(host.reader, workspace.sha, [host.plan.owner.baseSha, candidateSha]);
   await ancestors(host.reader, candidateSha, [host.plan.owner.baseSha]);
@@ -114,29 +139,56 @@ async function verifyDependency(workspace: CalculatorWorkspace, task: Calculator
   return { repository: workspace.repository, taskId: task.id, candidateSha, integratedAtSha: workspace.sha,
     securityReady: true, independentReviewReady: true, taskChecksPassed: true, testsExecuted: true };
 }
-export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner): Promise<CalculatorSelection> {
+export async function selectCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner,
+  historical?: Readonly<{ inspectedT02: CalculatorT02ReadOnlyPreselection; eventDirectory: string; admittedPermit?:CalculatorT02ExecutionPermit }>,verifiedCorrections?:readonly CalculatorVerifiedCorrection[]
+): Promise<CalculatorSelection> {
   try {
     const host = await fresh(workspace);
-    const selection = await host.store.select({ currentBaseSha: workspace.sha,
-      verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner) });
+    const selection = await host.store.select({ currentBaseSha: workspace.sha,verifiedCorrections,
+      ...(historical ? { inspectedT02: historical.inspectedT02, eventDirectory: historical.eventDirectory, ...(historical.admittedPermit?{admittedPermit:historical.admittedPermit}:{}) } : {}),
+      verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner, historical?.inspectedT02) });
     await fresh(workspace); return selection;
   } catch { return refuse(); }
 }
 /** Claim is persisted before future model execution. Movement after claim leaves
  * a blocked receipt; it must not erase the barrier and automatically replay. */
-export async function claimCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner):
+export async function claimCalculatorWorkspaceTask(workspace: CalculatorWorkspace, runner?: CalculatorCheckRunner,verifiedCorrections?:readonly CalculatorVerifiedCorrection[]):
   Promise<{ selection: CalculatorSelection; store?: TeamTaskStore }> {
   let claimed: TeamTaskStore | undefined;
   try {
     const host = await fresh(workspace);
     if (workspace.ref !== host.plan.branch) return refuse();
-    const result = await host.store.claimNext({ currentBaseSha: workspace.sha,
+    const result = await host.store.claimNext({ currentBaseSha: workspace.sha,verifiedCorrections,
       verifyTask: (task, receipt) => verifyDependency(workspace, task, receipt, runner) });
     claimed = result.store; await fresh(workspace); return result;
   } catch {
     if (claimed) {
       try { claimed.finish("blocked", "working_base_changed_after_claim"); } finally { claimed.close(); }
     }
+    return refuse();
+  }
+}
+/** Special historical claim: no generic caller can supply a preview to claimNext.
+ * Only a workspace-bound, one-use permit issued after the external event barrier
+ * can cause this atomic receipt claim. Recheck all dependencies before claiming. */
+export async function claimHistoricalCalculatorT03(workspace:CalculatorWorkspace,
+  permit:CalculatorT02ExecutionPermit,runner?:CalculatorCheckRunner):
+  Promise<{selection:CalculatorSelection;store?:TeamTaskStore}> {
+  let claimed:TeamTaskStore|undefined;
+  try {
+    const context=consumeCalculatorT02ExecutionPermit(workspace,permit);
+    const host=await fresh(workspace);
+    if(workspace.ref!==host.plan.branch || !runner) return refuse();
+    const selection=await selectCalculatorWorkspaceTask(workspace,runner,{...context,admittedPermit:permit});
+    if(selection.status!=="ready" || selection.task?.id!==context.taskId ||
+       !selection.verifiedTaskIds.includes(context.inspectedT02.previousTaskId))return {selection};
+    const receipt=host.store.taskReceipt(host.plan,selection.task);
+    if(receipt.claim()!=="claimed"){receipt.close();return refuse();}
+    claimed=receipt;
+    await fresh(workspace);
+    return {selection,store:claimed};
+  }catch{
+    if(claimed){try{claimed.finish("blocked","historical_claim_interrupted_no_replay");}finally{claimed.close();}}
     return refuse();
   }
 }
