@@ -12,6 +12,11 @@ export function resolveProjectContextSelections(snapshot:ProjectSourceSnapshot,c
   const r=v as Readonly<{path:string;version:'proposed';changedWindow:number}>;
   if(Object.getPrototypeOf(r)!==Object.prototype||Reflect.ownKeys(r).length!==3||!['path','version','changedWindow'].every(k=>Object.hasOwn(Object.getOwnPropertyDescriptor(r,k)??{},'value'))||r.version!=='proposed'||!Number.isSafeInteger(r.changedWindow)||r.changedWindow<1||r.changedWindow>2048)return refuse();
   const source=proposed.get(r.path),before=base.get(r.path)??'';if(!changes||!source)return refuse();let prefix=0;while(prefix<before.length&&prefix<source.length&&before[prefix]===source[prefix])prefix++;
-  const cap=base.has(r.path)?Math.min(r.changedWindow,2048,Math.floor(Buffer.byteLength(before)*0.6)):Math.min(r.changedWindow,2048),start=Math.max(0,prefix-Math.min(48,Math.floor(cap/4))),end=Math.min(source.length,start+cap);if(end<=start)return refuse();return Object.freeze({path:r.path,version:'proposed' as const,start,end});
+  const cap=base.has(r.path)?Math.min(r.changedWindow,2048,Math.floor(Buffer.byteLength(before)*0.6)):Math.min(r.changedWindow,2048);let start=Math.max(0,prefix-Math.min(48,Math.floor(cap/4)));
+  // Context limits count UTF-8 bytes; source offsets count UTF-16 code units.
+  // Keep both edges on code-point boundaries and never widen the byte cap.
+  if(start>0&&source.charCodeAt(start)>=0xdc00&&source.charCodeAt(start)<=0xdfff&&source.charCodeAt(start-1)>=0xd800&&source.charCodeAt(start-1)<=0xdbff)start--;
+  let end=start,bytes=0;for(const point of source.slice(start)){const size=Buffer.byteLength(point);if(bytes+size>cap)break;bytes+=size;end+=point.length;}
+  if(end<=start)return refuse();return Object.freeze({path:r.path,version:'proposed' as const,start,end});
  });
 }

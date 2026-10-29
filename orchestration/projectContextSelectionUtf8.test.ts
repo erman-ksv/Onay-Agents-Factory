@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createProjectRecoveryWorkerFixtureForTests as fixture} from '../config/fixtures/projectRecoveryWorkerFixture.js';import {createProjectUncertainRecoveryRuntimeForTests} from './projectNextTaskWorker.js';
+test('a valid author patch with multibyte comments reaches all independent reviews without exceeding excerpt byte caps',async()=>{
+ const f=await fixture('normal',true),base=f.injections.model,fragments:Array<{text:string;bytes:number;cap:number}>=[];try{
+  const model:typeof fetch=async(input,init)=>{const p=JSON.parse(JSON.parse(String(init?.body)).messages[1].content);if(p.proposal)for(const fragment of p.fragments)fragments.push({...fragment,cap:Math.min(64,2048,Math.floor(p.sourceFiles.find((v:any)=>v.path===fragment.path).bytes*0.6))});const response=await base(input,init),body=await response.json() as any;if(!p.proposal){const proposal=JSON.parse(body.choices[0].message.content);proposal.changes[0].edits[0].after='return 2; /* '+('Ж×÷−😀'.repeat(5))+' */';body.choices[0].message.content=JSON.stringify(proposal);}return Response.json(body);};
+  const options={...f.options,taskPolicies:f.options.taskPolicies.map(p=>({...p,reviewSelections:[{path:'src/note.mjs',version:'proposed' as const,changedWindow:64}]}))};
+  const result=await createProjectUncertainRecoveryRuntimeForTests(options,{...f.injections,model}).recover(f.ticket);assert.equal(result.candidate.provenance,'simulated');assert.equal(f.calls(),4);assert.equal(fragments.length,3);for(const fragment of fragments){assert.equal(Buffer.byteLength(fragment.text),fragment.bytes);assert.ok(fragment.bytes<=fragment.cap);assert.equal(Buffer.from(fragment.text).toString('utf8'),fragment.text);assert.ok(!fragment.text.endsWith('\ud83d'));}
+ }finally{f.cleanup();}
+});

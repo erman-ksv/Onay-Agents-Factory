@@ -20,3 +20,7 @@ test('post-HTTP rejection exposes only whitelisted host stage and reason, never 
  const value={stage:'done',lastProviderHttpStatus:200,failedReplyStage:'author-proposal',failedReplyRole:'author',replyRejectionReason:'reply-rejected',changeRejectionCode:'bounded-patch',rejectedReplyCheckpoint:'persisted',content:'PRIVATE_REPLY_MARKER'},d=diagnostic(value);assert.equal(d.failedReplyStage,'author-proposal');assert.equal(d.changeRejectionCode,'bounded-patch');assert.equal(d.rejectedReplyCheckpoint,'persisted');assert.equal(d.executionAuthorized,false);assert.equal(JSON.stringify(d).includes('PRIVATE_REPLY_MARKER'),false);
  for(const key of ['failedReplyStage','failedReplyRole','replyRejectionReason','changeRejectionCode','rejectedReplyCheckpoint'])assert.equal(JSON.stringify(diagnostic({...value,[key]:'PRIVATE_REPLY_MARKER'})).includes('PRIVATE_REPLY_MARKER'),false);
 });
+test('host-boundary failure metadata cannot expose arbitrary worker or context text',()=>{
+ const v={workerStage:'security-context',contextRejectionCode:'excerpt-limits',hostFailureCheckpoint:'persisted'},d=diagnostic(v);assert.equal(d.workerStage,v.workerStage);assert.equal(d.contextRejectionCode,v.contextRejectionCode);assert.equal(d.hostFailureCheckpoint,v.hostFailureCheckpoint);assert.equal(d.replayAuthorized,false);
+ for(const key of Object.keys(v))assert.equal(JSON.stringify(diagnostic({...v,[key]:'PRIVATE_CONTEXT_MARKER'})).includes('PRIVATE_CONTEXT_MARKER'),false);
+});
