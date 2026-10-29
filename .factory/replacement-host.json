@@ -2,17 +2,36 @@
   "version": 1,
   "kind": "run-stopped-recovery-replacement",
   "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
-  "beforeBudgetHead": "cf561df5381c65522f9691aa0fe0f420624f4906",
+  "beforeBudgetHead": "93eb498e73e6854e3bb4bd80546a9fdb51adc221",
   "currentDecision": {
     "issueNumber": 75,
-    "commentId": 6472912771,
-    "bodySha256": "55eb8e7a35f956030f856884d7e677ba62371a3ecb559a2857ad76e2c187a923"
+    "commentId": 6475553761,
+    "bodySha256": "ed4d24ac18310cc879c500d873019d0066977686414450670949f9382dde37a5"
   },
   "acknowledged": {
+    "beforeHead": "cf561df5381c65522f9691aa0fe0f420624f4906",
+    "afterHead": "d609b51c328b76d71a83c9a5be2280c379a6f983"
+  },
+  "parentAcknowledged": {
+    "decision": {
+      "issueNumber": 75,
+      "commentId": 6472912771,
+      "bodySha256": "55eb8e7a35f956030f856884d7e677ba62371a3ecb559a2857ad76e2c187a923"
+    },
     "beforeHead": "1f37b8b99a69e27fa5d583655db77763e95fb937",
     "afterHead": "fb08d7eb3c919068a93ed0a61495b3e22c6ece62"
   },
-  "parentAcknowledged": {
+  "binding": {
+    "taskId": "calculator-input-repair-202610-29e2a8-t01",
+    "archiveHead": "532fc04591a093a5821f12f1c109fa7ad8b1fc12",
+    "archiveSequence": 8,
+    "budgetStateSha256": "571a9dc24925946bf910db234c48d2409e1a95eb1e37ec9ac62a77675f8a43e8",
+    "originalRequestSha256": "485f5ea4be24424109302fb0b67c616ca38f75a96449236f5af240dc16d7f662",
+    "model": "openai/gpt-oss-120b",
+    "failedRunId": 40733659183,
+    "failedRunSha": "2f212fef054807262115ffae6c06516fab147966"
+  },
+  "ancestorAcknowledged": {
     "decision": {
       "issueNumber": 75,
       "commentId": 6459178751,
@@ -21,24 +40,14 @@
     "beforeHead": "2d489136b4e9758133fce6598157feb94743f732",
     "afterHead": "3e2710a55558dc82b3e65fc62d39791e6a21bd7a"
   },
-  "binding": {
-    "taskId": "calculator-input-repair-202610-29e2a8-t01",
-    "archiveHead": "0b751f98c783bd9ffa75c0b081c882e324156388",
-    "archiveSequence": 6,
-    "budgetStateSha256": "c9149d8b38c35ebcbaf97c43b52fbf995d35d77c8fe7567b6a24fa017d01fb9c",
-    "originalRequestSha256": "485f5ea4be24424109302fb0b67c616ca38f75a96449236f5af240dc16d7f662",
-    "model": "openai/gpt-oss-120b",
-    "failedRunId": 40716841559,
-    "failedRunSha": "94db6e5b14a89285aa15a15d86325b06a94f38c7"
-  },
   "extensionDecision": {
     "issueNumber": 75,
-    "commentId": 6475553761,
-    "bodySha256": "ed4d24ac18310cc879c500d873019d0066977686414450670949f9382dde37a5"
+    "commentId": 6489983869,
+    "bodySha256": "5e161b4abe2a5d5015e6e06a4dbf5eb4a46b5ef0994965c0b88d59b2c6e242e0"
   },
   "replacementDecision": {
     "issueNumber": 75,
-    "commentId": 6475556435,
-    "bodySha256": "dc11b3834ea93baa8201f37ee9c5920d4d1fc396b74e036e2cb5a7e5956f5180"
+    "commentId": 6489986023,
+    "bodySha256": "e63c82acd7d470cceac9469af0210b3356b728446b18534faf7237b111bcd8a5"
   }
 }
