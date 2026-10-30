@@ -1,0 +1,53 @@
+name: Stage8 read-only rejected patch inspection
+on:
+  push:
+    branches: ['fix/stage8-corrective-verification-20261029']
+    paths: ['.github/workflows/stage8-rejected-patch-inspection.yml']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stage8-readonly-rejected-patch-13
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 'fe971f092b68a7894d580c8ae73b2a93b2c7f3c9'
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: inspection-config
+          sparse-checkout: scripts/stage8-inspect-rejected-patch.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Verify source and diagnostic bytes; compile immutable production validators
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {readFileSync,writeFileSync,readdirSync} from 'node:fs';import {createHash} from 'node:crypto';import {stripTypeScriptTypes} from 'node:module';import {join} from 'node:path';
+          assert.equal(execFileSync('/usr/bin/git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),'fe971f092b68a7894d580c8ae73b2a93b2c7f3c9');
+          const bytes=readFileSync('inspection-config/scripts/stage8-inspect-rejected-patch.mjs');assert.equal(createHash('sha256').update(bytes).digest('hex'),'1e640871745d36df85efafa184bbb6ae6f57a39c188a71c89ed71759b2c908f7');
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const d of ['agents','commander','config','github','orchestration'])compile(d);
+          JS
+      - name: Inspect only saved checkpoint and fixed source; no model or state credentials
+        env:
+          FACTORY_INSPECTION_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+        run: |
+          node inspection-config/scripts/stage8-inspect-rejected-patch.mjs > rejected-patch-inspection.json
+          cat rejected-patch-inspection.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage8-readonly-rejected-patch-${{ github.run_id }}
+          path: rejected-patch-inspection.json
+          if-no-files-found: warn
+          retention-days: 7
