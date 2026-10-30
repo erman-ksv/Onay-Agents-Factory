@@ -1,0 +1,139 @@
+name: Stage8 read-only native checks of verified 7057d9e
+
+on:
+  push:
+    branches: ['fix/stage8-corrective-verification-20261029']
+    paths: ['.github/workflows/stage8-native-verification.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: stage8-readonly-native-7057d9e
+  cancel-in-progress: false
+
+env:
+  FACTORY_RUNTIME_SHA: '7057d9e0f42b602b3c4397b2d1955a9bc6158464'
+  FACTORY_SOURCE_CI_RUN: '40989351660'
+
+jobs:
+  source_ci:
+    name: Confirm exact successful source CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Verify fixed SHA and real install/typecheck/test results
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          import {writeFileSync} from 'node:fs';
+          for (const key of ['GROQ_API_KEY','OPENAI_API_KEY','GEMINI_API_KEY','CALCULATOR_GITHUB_TOKEN','FACTORY_STATE_TOKEN','FACTORY_CHECKPOINT_WRITE_TOKEN','FACTORY_RECOVERY_KEY_BASE64']) assert.equal(process.env[key],undefined);
+          const base='https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/runs/40989351660';
+          const read=async url=>{const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(10000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.FACTORY_READ_TOKEN}});assert.equal(r.status,200);assert.equal(r.headers.get('link'),null);return r.json();};
+          const run=await read(base);
+          assert.equal(run.head_sha,'7057d9e0f42b602b3c4397b2d1955a9bc6158464');assert.equal(run.run_attempt,1);assert.equal(run.status,'completed');assert.equal(run.conclusion,'success');assert.equal(run.name,'Agent Factory CI');assert.equal(run.event,'push');assert.equal(run.head_branch,'fix/stage8-corrective-verification-20261029');
+          const list=await read(base+'/attempts/1/jobs?per_page=20');assert.equal(list.total_count,1);assert.equal(list.jobs.length,1);
+          const job=list.jobs[0];assert.equal(job.head_sha,run.head_sha);assert.equal(job.conclusion,'success');assert.equal(job.name,'typecheck');
+          for(const name of ['Install','Typecheck','Test']) {const steps=job.steps.filter(s=>s.name===name);assert.equal(steps.length,1);assert.equal(steps[0].status,'completed');assert.equal(steps[0].conclusion,'success');}
+          const proof={runtimeSha:run.head_sha,sourceCiRunId:run.id,sourceCiJobId:job.id,install:'passed',typecheck:'passed',tests:'passed',realModelCalls:0,runtimeBudgetWrites:0};
+          writeFileSync('stage8-source-ci-proof.json',JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage8-native-source-ci-${{ github.run_id }}
+          path: stage8-source-ci-proof.json
+          if-no-files-found: error
+          retention-days: 7
+
+  native_node:
+    name: Real Docker Node contracts and rejection guards
+    needs: source_ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '7057d9e0f42b602b3c4397b2d1955a9bc6158464'
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Bridge already typechecked TypeScript to Node runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - name: Prepare fixed Node image without changing Docker isolation
+        run: |
+          docker --host=unix:///var/run/docker.sock info >/dev/null
+          docker --host=unix:///var/run/docker.sock pull 'node@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392'
+      - name: Run existing native host audit with no model or real ledger
+        env:
+          FACTORY_READ_TOKEN: ${{ github.token }}
+        run: node scripts/project-node-native-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage8-native-node-${{ github.run_id }}
+          path: project-node-native-proof.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  native_browser_baseline:
+    name: Real Chrome baseline defects, not product acceptance
+    needs: source_ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: '7057d9e0f42b602b3c4397b2d1955a9bc6158464'
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Bridge already typechecked TypeScript to Node runtime
+        run: |
+          node --input-type=module - <<'JS'
+          import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
+          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
+          JS
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: erman-ksv/Onay-Factory-Calculator
+          ref: '558993981c9bbb7c6100c8335860ac5668768314'
+          path: calculator-candidate
+          persist-credentials: false
+      - name: Prepare fixed Chrome image without weakening the sandbox
+        run: |
+          docker --host=unix:///var/run/docker.sock info >/dev/null
+          docker --host=unix:///var/run/docker.sock pull 'mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a'
+      - name: Reproduce known baseline defects without repairing or publishing
+        run: node scripts/calculator-input-browser-baseline.mjs
+      - name: Report baseline failures explicitly and reject unexpected failures
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {join} from 'node:path';
+          const report=JSON.parse(readFileSync(join(process.env.RUNNER_TEMP,'calculator-input-browser-baseline.json'),'utf8'));
+          assert.equal(report.status,'browser-baseline-defects-reproduced-not-repaired');assert.equal(report.proof.status,'failed');
+          assert.equal(report.modelCalls,0);assert.equal(report.applicationWrites,0);assert.equal(report.budgetWrites,0);
+          const expected=['repeat-multiply:buttons','repeat-multiply:keyboard','leading-zero-display:buttons','leading-zero-display:keyboard'];
+          assert.deepEqual([...report.proof.failures].sort(),expected.sort());
+          console.log(JSON.stringify({productAcceptance:'failed-not-repaired',expectedBaselineFailures:report.proof.failures,nativeDiagnostic:'completed',realModelCalls:0}));
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stage8-browser-baseline-not-acceptance-${{ github.run_id }}
+          path: ${{ runner.temp }}/calculator-input-browser-baseline.json
+          if-no-files-found: warn
+          retention-days: 7
