@@ -84,7 +84,7 @@ function worker(options:Options,injections?:Injections){
    const firstBase=(initial||recovery)||resume&&task===plan.tasks[0];
    const snapshot=await loadGitHubProjectTaskSnapshot({plan,taskId:task.id,token:env.GITHUB_TOKEN!,...(firstBase?{}:{anchor:{ref:plan.branch,sha:selected.parentSha}}),...(injections?{transport:injections.github}:{})});
    if(snapshot.baseSha!==selected.parentSha)return refuse();
-   const dependencyBranch=initial&&'baseCiBranch' in dispatch?dispatch.baseCiBranch:firstBase?plan.request.baseRef:plan.branch;
+   const dependencyBranch=initial?('baseCiBranch' in dispatch&&typeof dispatch.baseCiBranch==='string'?dispatch.baseCiBranch:refuse()):firstBase?plan.request.baseRef:plan.branch;
    let correctionGuard:(()=>Promise<void>)|undefined;
    const current=async()=>{if(correctionGuard)await correctionGuard();else await dispatch.assertCurrent();};
    async function dependencies(){if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);await current();const ci=await readCi({repository:plan.repository,branch:dependencyBranch,candidateSha:selected.parentSha});if(ci.status!=='passed'||mode==='native'&&ci.provenance!=='native-github')return refuse();await current();}
