@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "status": "DRAFT — NOT authorization, NOT activation",
+  "baseCodeSha": "e5a7137d3e4ba853123213de95e78ef6bf52134a",
+  "baseTree": "55d6d6ec745f484a487ebb51e56e0c0429cc25cd",
+  "implementationSha": null,
+  "ownerCommentId": null,
+  "ownerBodySha256": "32d1809679fc5f4b88ae5d21314e472e3cd3925cc5f492a02c3b2d1314cd5549",
+  "budgetHead": "868e730263cc1f551511d1537158fb5fe1965fad",
+  "binding": {
+    "version": 1,
+    "kind": "authorize-rejected-initial-proposal",
+    "projectKey": "abb7eb35a69bf638cb5b57278226170e2f6b02fd039344c29044014531ca5a0b",
+    "planFingerprint": "02b1e1662ef8ef4d7483db9e9ea65bed67e73cce15fcab1db42b284f1f2b6110",
+    "targetProfileSha256": "1f3bf6bf615db6463421590195cd1f801657f6551a75cbb1bf4348bbf35b1065",
+    "budgetGrantSha256": "4f8b196f3a36af4b05c3417d8659d8e3209eb43efef127df14c9dea89756b293",
+    "taskId": "calculator-input-repair-202610-29e2a8-t01",
+    "archiveHead": "79e01d083f87d50f208c91bd39ceec944987929a",
+    "archiveSequence": 13,
+    "checkpointSha256": "ca597384eb90d13d8fd1260f08e05d23af7b194da5ad8d697770667e3f1a5bb4",
+    "budgetStateSha256": "e144b08a4ef85a1f74a6475ddc6e5c4f041f78dd250e3837945a20a3cbfdecf9",
+    "priorExecutionId": "project-run-57d3d6770ae7ecef60ac24def70e010d",
+    "priorRequestSha256": "0c8eb62455a23f98fa2c14059de40cc7ac0a6f2dbc63d22786ca4ce6652a4bf8",
+    "priorResponseSha256": "8570b5a8aeceed0ede62e24f1ff63d706c0546a584a8a77a504a33691eba5144",
+    "baseSha": "558993981c9bbb7c6100c8335860ac5668768314",
+    "newExecutionId": "project-run-2d43cb3c8c822b8f45adc66c17874408",
+    "diagnostic": {
+      "reason": "anchor-ambiguous",
+      "beforeBytes": 5,
+      "matches": 7,
+      "path": "src/app.mjs",
+      "sourceSha256": "095b7a6a64196ebc7d4c1dc04a2c727f4f0472905dc91b053906f33215086d90"
+    },
+    "model": "openai/gpt-oss-120b",
+    "maxNewProposals": 1,
+    "maxRequests": 4,
+    "maxRequestBytes": 12000,
+    "maxTotalRequestBytes": 48000,
+    "maxReservedTokens": 24000,
+    "additionalCorrections": 0,
+    "replayAuthorized": false,
+    "legalEnabled": false,
+    "expiresAt": "2026-10-30T23:59:59.000Z"
+  },
+  "sourceOfDraft": "Verified native diagnosis plus pinned public source and saved budget; fresh native evidence/OWNER comparison is mandatory before any claim",
+  "budget": {
+    "ceiling": {
+      "requests": 86,
+      "requestBytes": 842605,
+      "reservedTokens": 374665
+    },
+    "used": {
+      "requests": 71,
+      "requestBytes": 655866,
+      "reservedTokens": 281875
+    },
+    "remaining": {
+      "requests": 15,
+      "requestBytes": 186739,
+      "reservedTokens": 92790
+    },
+    "newProposalAndIndependentChecks": {
+      "requests": 4,
+      "requestBytes": 48000,
+      "reservedTokens": 24000
+    },
+    "successorAfterVerifiedCi": {
+      "requests": 4,
+      "requestBytes": 48000,
+      "reservedTokens": 24000
+    },
+    "wholeBoundedCycle": {
+      "requests": 8,
+      "requestBytes": 96000,
+      "reservedTokens": 48000
+    },
+    "worstCaseRemaining": {
+      "requests": 7,
+      "requestBytes": 90739,
+      "reservedTokens": 44790
+    },
+    "budgetIncreaseRequired": false,
+    "existingChargesPreserved": true,
+    "additionalCorrections": 0
+  },
+  "verification": {
+    "newTests": {
+      "pass": 15,
+      "fail": 0,
+      "skipped": 0
+    },
+    "availableTestFiles": {
+      "pass": 172,
+      "fail": 19,
+      "allFailuresMatchBaseline": true
+    },
+    "sdkBlockedFiles": 14,
+    "executedEnvironmentFailures": 13,
+    "typecheck": "BLOCKED: dependencies unavailable",
+    "pnpmTest": "BLOCKED: dependencies unavailable",
+    "newCi": null,
+    "nativeAiAcceptance": "NOT RUN"
+  },
+  "executionAuthorized": false,
+  "replayAuthorized": false
+}

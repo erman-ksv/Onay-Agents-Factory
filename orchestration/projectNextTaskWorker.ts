@@ -1,3 +1,4 @@
+import {projectRejectedProposalTicketBinding,type ProjectRejectedProposalTicket} from './projectRejectedProposalRecovery.js';
 import {assertProjectCorrectiveAuthorization} from './projectCorrectiveAuthorization.js';
 import {createProjectCorrectiveRuntime,createProjectCorrectiveRuntimeForTests,type ProjectCorrectiveOptions} from './projectCorrectiveRuntime.js';
 import type {ProjectModelBudgetStore} from './projectModelBudget.js';
@@ -64,10 +65,10 @@ function worker(options:Options,injections?:Injections){
  for(const value of options.taskPolicies){if(policies.has(value.taskId))return refuse();assertProjectNodePolicy(value.nodePolicy,plan,value.taskId);if(projectTaskRequiresBrowser(plan,value.taskId)){assertProjectBrowserPolicy(value.browserPolicy,plan,value.taskId);if(injections&&typeof injections.browser!=='function')return refuse();}const copy=(ranges:readonly Range[])=>Object.freeze(ranges.map(r=>Object.freeze({...r})));policies.set(value.taskId,Object.freeze({...value,authorSelections:copy(value.authorSelections),reviewSelections:copy(value.reviewSelections)}));}
  let used=false;
  type Resume=Readonly<{taskId:string;checkpointSha256:string}>;
- async function execute(notice:ProjectCiDispatchNotice|ProjectInitialTaskTicket|ProjectUncertainRecoveryTicket|Resume,initial=false,recovery=false,resume=false):Promise<ProjectPublishedCandidate>{
+ async function execute(notice:ProjectCiDispatchNotice|ProjectInitialTaskTicket|ProjectUncertainRecoveryTicket|ProjectRejectedProposalTicket|Resume,initial=false,recovery=false,resume=false,rejected=false):Promise<ProjectPublishedCandidate>{
   let requestSnapshot:(()=>unknown)|undefined,captureHostFailure:(()=>Promise<void>)|undefined,stopWire:(()=>void)|undefined,lastReply:PreparedProjectReply|undefined,workerStage='admission',hostFailureCheckpoint='not-requested',pendingCorrection=false;
   try{
-   if(used)return refuse();used=true;
+   if(used||rejected&&options.corrective)return refuse();used=true;
    if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);
    const correctionOptions=options.corrective?{plan,controller,...options.corrective,key:options.key,directory:options.directory,stateProtection:options.stateProtection,token:env.FACTORY_STATE_TOKEN||env.GITHUB_TOKEN||''}:undefined;
    if(options.corrective)await assertProjectCorrectiveAuthorization(options.corrective.authorization,plan,controller,mode);
@@ -75,21 +76,21 @@ function worker(options:Options,injections?:Injections){
    const resumeRequest=resume?notice as Resume:undefined;
    if(resumeRequest&&(!corrective||Object.keys(resumeRequest).sort().join(',')!=='checkpointSha256,taskId'||!/^[a-f0-9]{64}$/.test(resumeRequest.checkpointSha256)))return refuse();
    const pending=resumeRequest?await corrective!.inspectPending(resumeRequest.taskId,resumeRequest.checkpointSha256):undefined;
-   const dispatch=resume?{assertCurrent:async()=>{await corrective!.inspectPending(resumeRequest!.taskId,resumeRequest!.checkpointSha256);}}:recovery?await projectUncertainRecoveryTicketBinding(notice as ProjectUncertainRecoveryTicket,controller,plan.tasks[0]!.id,mode):initial?await consumeProjectInitialTaskTicket(notice as ProjectInitialTaskTicket,plan,controller,mode):await consumeProjectCiDispatchNotice(notice as ProjectCiDispatchNotice,plan,controller,mode);
-   const selected=resume?{taskId:resumeRequest!.taskId,parentSha:pending!.baseSha,planFingerprint:plan.fingerprint,requiresCooldown:true,requiresFreshAdmission:true,requiresFreshSource:true}:(initial||recovery)?{taskId:plan.tasks[0]!.id,parentSha:plan.request.baseSha,planFingerprint:plan.fingerprint,requiresCooldown:true,requiresFreshAdmission:true,requiresFreshSource:true}:notice as ProjectCiDispatchNotice;
+   const dispatch=rejected?await projectRejectedProposalTicketBinding(notice as ProjectRejectedProposalTicket,plan,controller,mode):resume?{assertCurrent:async()=>{await corrective!.inspectPending(resumeRequest!.taskId,resumeRequest!.checkpointSha256);}}:recovery?await projectUncertainRecoveryTicketBinding(notice as ProjectUncertainRecoveryTicket,controller,plan.tasks[0]!.id,mode):initial?await consumeProjectInitialTaskTicket(notice as ProjectInitialTaskTicket,plan,controller,mode):await consumeProjectCiDispatchNotice(notice as ProjectCiDispatchNotice,plan,controller,mode);
+   const selected=resume?{taskId:resumeRequest!.taskId,parentSha:pending!.baseSha,planFingerprint:plan.fingerprint,requiresCooldown:true,requiresFreshAdmission:true,requiresFreshSource:true}:(initial||recovery||rejected)?{taskId:plan.tasks[0]!.id,parentSha:plan.request.baseSha,planFingerprint:plan.fingerprint,requiresCooldown:true,requiresFreshAdmission:true,requiresFreshSource:true}:notice as ProjectCiDispatchNotice;
    const task=plan.tasks.find(t=>t.id===selected.taskId),policy=policies.get(selected.taskId);
    if(!task||!policy||selected.planFingerprint!==plan.fingerprint||!selected.requiresCooldown||!selected.requiresFreshAdmission||!selected.requiresFreshSource||recovery&&'model' in dispatch&&dispatch.model!==model)return refuse();
-   const executionId=resume?pending!.firstExecutionId:recovery?('executionId' in dispatch&&typeof dispatch.executionId==='string'?dispatch.executionId:refuse()):'project-run-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,task.id])).digest('hex').slice(0,32);
+   const executionId=resume?pending!.firstExecutionId:(recovery||rejected)?('executionId' in dispatch&&typeof dispatch.executionId==='string'?dispatch.executionId:refuse()):'project-run-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,task.id])).digest('hex').slice(0,32);
    if(!resume&&(await controller.inspectExecution(task.id,executionId)).requests!==0)return refuse();
-   const firstBase=(initial||recovery)||resume&&task===plan.tasks[0];
-   const snapshot=await loadGitHubProjectTaskSnapshot({plan,taskId:task.id,token:env.GITHUB_TOKEN!,...(firstBase?{}:{anchor:{ref:plan.branch,sha:selected.parentSha}}),...(injections?{transport:injections.github}:{})});
+   const firstBase=(initial||recovery||rejected)||resume&&task===plan.tasks[0];
+   const snapshot=rejected?('snapshot' in dispatch?dispatch.snapshot:refuse()):await loadGitHubProjectTaskSnapshot({plan,taskId:task.id,token:env.GITHUB_TOKEN!,...(firstBase?{}:{anchor:{ref:plan.branch,sha:selected.parentSha}}),...(injections?{transport:injections.github}:{})});
    if(snapshot.baseSha!==selected.parentSha)return refuse();
    const dependencyBranch=initial?('baseCiBranch' in dispatch&&typeof dispatch.baseCiBranch==='string'?dispatch.baseCiBranch:refuse()):firstBase?plan.request.baseRef:plan.branch;
    let correctionGuard:(()=>Promise<void>)|undefined;
    const current=async()=>{if(correctionGuard)await correctionGuard();else await dispatch.assertCurrent();};
    async function dependencies(){if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);await current();const ci=await readCi({repository:plan.repository,branch:dependencyBranch,candidateSha:selected.parentSha});if(ci.status!=='passed'||mode==='native'&&ci.provenance!=='native-github')return refuse();await current();}
    const manager=createProjectExecutionAdmission(plan,controller,{assertSource:createProjectSnapshotSourceGuard(snapshot),assertDependencies:dependencies});
-   const persist=async(kind:string,path:string,sha256:string)=>{if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);await controller.assertAuthorized();if(recovery||resume||correctionGuard)await current();if(await options.persist(Object.freeze({kind,path,sha256,taskId:task.id}))!==undefined)return refuse();await controller.assertAuthorized();if(recovery||resume||correctionGuard)await current();};
+   const persist=async(kind:string,path:string,sha256:string)=>{if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,controller,mode);await controller.assertAuthorized();if(recovery||rejected||resume||correctionGuard)await current();if(await options.persist(Object.freeze({kind,path,sha256,taskId:task.id}))!==undefined)return refuse();await controller.assertAuthorized();if(recovery||rejected||resume||correctionGuard)await current();};
    let wire:ReturnType<typeof createContextBoundProjectTransport>,checkpointPrefix='',activeExecutionId=executionId;
    function bindWire(admission:ProjectExecutionAdmission,prefix:string){
     checkpointPrefix=prefix;activeExecutionId=projectExecutionAdmissionExecutionId(admission);
@@ -102,15 +103,15 @@ function worker(options:Options,injections?:Injections){
     const claim=await corrective!.claim(restored.ticket,resumeRequest!.checkpointSha256);correctionGuard=claim.assertCurrent;
     const admission=await manager.prepareCorrection(restored.ticket,claim.permit,mode);bindWire(admission,task.id+'-correction-1');authorPacket=restored.packet;pendingCorrection=false;
    }else{
-    const admission=recovery?await manager.prepareRecovery(task.id,notice as ProjectUncertainRecoveryTicket,mode):await manager.prepare(task.id,{requireCooldown:true});
-    bindWire(admission,task.id+(recovery&&'checkpointSuffix' in dispatch?'-'+dispatch.checkpointSuffix:''));
+    const admission=rejected?await manager.prepareRejectedProposal(notice as ProjectRejectedProposalTicket,mode):recovery?await manager.prepareRecovery(task.id,notice as ProjectUncertainRecoveryTicket,mode):await manager.prepare(task.id,{requireCooldown:true});
+    bindWire(admission,task.id+((recovery||rejected)&&'checkpointSuffix' in dispatch?'-'+dispatch.checkpointSuffix:''));
    }
    captureHostFailure=async()=>{
     if(pendingCorrection||!lastReply||wire.snapshot().rejectedReplyCheckpoint!=='not-requested')return;
     hostFailureCheckpoint='failed';const reply=lastReply,content=projectReplyContent(reply),path=join(options.directory,checkpointPrefix+'-host-stopped-'+reply.role+'.json'),budget=await controller.inspect(),sealed=writeProjectHostEnvelope('onay-runtime-rejected-reply-v1',JSON.stringify({version:1,kind:'last-reply-on-host-stop',stage:workerStage,repository:reply.repository,planFingerprint:reply.planFingerprint,taskId:reply.taskId,baseSha:reply.baseSha,role:reply.role,requestSha256:reply.requestSha256,responseSha256:reply.responseSha256,responseBytes:reply.responseBytes,model:reply.model,content,executionId:activeExecutionId,budget:{projectKey:controller.projectKey,grantSha256:budget.grantSha256,used:budget.used},executionAuthorized:false,replayAuthorized:false}),options.key,path);await persist('reply-rejected',path,sealed.sha256);hostFailureCheckpoint='persisted';
    };
    for(let pass=0;pass<2;pass++){
-    if(!authorPacket){workerStage='author-selection';const selections=resolveProjectContextSelections(snapshot,undefined,policy.authorSelections);workerStage='author-context';authorPacket=await prepareProjectModelContext(plan,task.id,snapshot,{role:'author',model,selections});}
+    if(!authorPacket){workerStage='author-selection';const selections=resolveProjectContextSelections(snapshot,undefined,policy.authorSelections);workerStage='author-context';authorPacket=await prepareProjectModelContext(plan,task.id,snapshot,{role:'author',model,selections,...(rejected?{rejectedProposal:notice as ProjectRejectedProposalTicket}:{})});}
     workerStage='author-request';lastReply=await wire!.request(authorPacket);workerStage='author-proposal';const changes=await prepareProjectReplyChanges(lastReply);authorPacket=undefined;
     let repair=false,failedNode:ProjectNodeTestReceipt|undefined,receipt:ProjectNodeTestReceipt|undefined;
     for(const role of ['security','reviewer','tester'] as const){
@@ -119,7 +120,7 @@ function worker(options:Options,injections?:Injections){
     }
     if(!repair){workerStage='node-tests';receipt=await(injections?injections.node(policy.nodePolicy,snapshot,changes):createProjectNodeSandbox(policy.nodePolicy).run(snapshot,changes));if(receipt.status==='failed'&&receipt.testsExecuted){repair=true;failedNode=receipt;}else if(receipt.status!=='passed'||!receipt.testsExecuted)return refuse();}
     if(repair){
-     if(corrected)return refuse();workerStage='correction-context';const evidence=failedNode?{receipt:failedNode,policy:policy.nodePolicy}:undefined;
+     if(corrected||rejected)return refuse();workerStage='correction-context';const evidence=failedNode?{receipt:failedNode,policy:policy.nodePolicy}:undefined;
      const ticket=evidence&&evidence.receipt.provenance==='simulated'?await wire!.prepareCorrectionForTests(evidence):await wire!.prepareCorrection(evidence);
      authorPacket=await prepareProjectCorrectionContext(ticket,{model,selections:[...resolveProjectContextSelections(snapshot,undefined,policy.authorSelections),...resolveProjectContextSelections(snapshot,changes,policy.reviewSelections)]});
      workerStage='correction-checkpoint';const path=join(options.directory,task.id+'-correction-ready.json'),sealed=await saveProjectCorrectionCheckpoint(ticket,plan,task.id,controller,options.key,path);await persist('correction-ready',path,sealed.sha256);pendingCorrection=true;
@@ -136,7 +137,7 @@ function worker(options:Options,injections?:Injections){
    return refuse();
   }catch(error){stopWire?.();try{await captureHostFailure?.();}catch{/* A lost acknowledgement never retries or replaces the original stop. */}if(requestSnapshot)console.error(JSON.stringify(projectTaskFailureDiagnostic({...requestSnapshot() as object,workerStage,contextRejectionCode:projectContextRejectionReason(error),hostFailureCheckpoint})));return refuse();}
  }
- return Object.freeze({execute:(notice:ProjectCiDispatchNotice)=>execute(notice),start:(ticket:ProjectInitialTaskTicket)=>execute(ticket,true),recover:(ticket:ProjectUncertainRecoveryTicket)=>execute(ticket,false,true),resumeCorrection:(request:Resume)=>execute(request,false,false,true)});
+ return Object.freeze({execute:(notice:ProjectCiDispatchNotice)=>execute(notice),start:(ticket:ProjectInitialTaskTicket)=>execute(ticket,true),recover:(ticket:ProjectUncertainRecoveryTicket)=>execute(ticket,false,true),resumeCorrection:(request:Resume)=>execute(request,false,false,true),recoverRejected:(ticket:ProjectRejectedProposalTicket)=>execute(ticket,false,false,false,true)});
 }
 
 
@@ -168,4 +169,16 @@ function recoveryRuntime(options:InitialOptions,injections?:Injections){
  const {archive,...base}=options,directory=mkdtempSync(join(options.directory,'uncertain-task-')),persist=async(checkpoint:Parameters<Options['persist']>[0])=>{if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,options.controller,injections?'simulated':'native');await archive.persist(checkpoint);};
  const w=injections?createProjectNextTaskWorkerForTests({...base,directory,persist},injections):createProjectNextTaskWorker({...base,directory,persist});
  return Object.freeze({async recover(ticket:ProjectUncertainRecoveryTicket){const candidate=await w.recover(ticket);return Object.freeze({candidate,archivePin:archive.snapshot().pin,wholeProjectCompleted:false as const});}});
+}
+
+/** Separate one-shot entry into the unchanged four-role, native test and Draft
+ * publication path. An invalid proposal or negative gate stops; no inner retry. */
+export function createProjectRejectedProposalRecoveryRuntime(options:InitialOptions){return rejectedRuntime(options);}
+export function createProjectRejectedProposalRecoveryRuntimeForTests(options:InitialOptions,injections:Injections){return rejectedRuntime(options,injections);}
+function rejectedRuntime(options:InitialOptions,injections?:Injections){
+ if(options.corrective)return refuse();assertProjectCheckpointArchive(options.archive,options.controller,injections?'simulated':'native');
+ const root=lstatSync(options.directory);if(!isAbsolute(options.directory)||resolve(options.directory)!==options.directory||realpathSync(options.directory)!==options.directory||!root.isDirectory()||(root.mode&0o777)!==0o700||process.getuid&&root.uid!==process.getuid())return refuse();
+ const {archive,...base}=options,directory=mkdtempSync(join(options.directory,'rejected-proposal-')),persist=async(checkpoint:Parameters<Options['persist']>[0])=>{if(!injections||options.stateProtection)await verifyProjectStateProtection(options.stateProtection,options.controller,injections?'simulated':'native');await archive.persist(checkpoint);};
+ const worker=injections?createProjectNextTaskWorkerForTests({...base,directory,persist},injections):createProjectNextTaskWorker({...base,directory,persist});
+ return Object.freeze({async recover(ticket:ProjectRejectedProposalTicket){const candidate=await worker.recoverRejected(ticket);return Object.freeze({candidate,archivePin:archive.snapshot().pin,wholeProjectCompleted:false as const});}});
 }

@@ -1,5 +1,6 @@
 import {consumeProjectCorrectiveTaskPermit,assertProjectCorrectiveTaskPermit,type ProjectCorrectiveTaskPermit} from './projectCorrectiveAuthorization.js';
 import {consumeProjectUncertainRecoveryTicket,type ProjectUncertainRecoveryTicket} from './projectUncertainRecoveryClaim.js';
+import {consumeProjectRejectedProposalTicket,type ProjectRejectedProposalTicket} from './projectRejectedProposalRecovery.js';
 import {createHash} from 'node:crypto';
 import {projectPlanTarget,projectPlanBudgetIdentity,type PreparedProjectPlan,type ProjectPlanTask} from './projectPlan.js';
 import {projectTargetProfile,assertProjectTargetScope} from './projectTargetRegistry.js';
@@ -45,6 +46,14 @@ export function createProjectExecutionAdmission(plan:PreparedProjectPlan,control
      const assertCurrent=async()=>{await recovery.assertCurrent();await current(task);};await assertCurrent();
      const budget=await controller.inspect();if(budget.remaining.requests<4||budget.remaining.requestBytes<48000||budget.remaining.reservedTokens<24000||(await controller.inspectExecution(taskId,recovery.executionId)).requests!==0)return refuse();
      const scope=await controller.taskScope(taskId,recovery.executionId);await assertCurrent();const cap=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(cap,{plan,taskId,scope,executionId:recovery.executionId,controller,assertCurrent,consumed:false,attempt:2,cooldownBeforeFirstRequest:true,...(recovery.model?{requiredModel:recovery.model}:{})});return cap;
+    }catch{stopped=true;return refuse();}finally{busy=false;}
+   },
+   async prepareRejectedProposal(ticket:ProjectRejectedProposalTicket,mode:'native'|'simulated'):Promise<ProjectExecutionAdmission>{
+    try{active();if(busy||!['native','simulated'].includes(mode))return refuse();busy=true;
+     const recovery=await consumeProjectRejectedProposalTicket(ticket,plan,controller,mode),task=plan.tasks.find(t=>t.id===recovery.taskId);if(!task||task!==plan.tasks[0]||recovery.parentSha!==plan.request.baseSha)return refuse();
+     const assertCurrent=async()=>{await recovery.assertCurrent();await current(task);};await assertCurrent();
+     const budget=await controller.inspect();if(budget.remaining.requests<4||budget.remaining.requestBytes<48000||budget.remaining.reservedTokens<24000||(await controller.inspectExecution(task.id,recovery.executionId)).requests!==0)return refuse();
+     const scope=await controller.taskScope(task.id,recovery.executionId);await assertCurrent();const cap=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(cap,{plan,taskId:task.id,scope,executionId:recovery.executionId,controller,assertCurrent,consumed:false,attempt:2,cooldownBeforeFirstRequest:true,requiredModel:'openai/gpt-oss-120b'});return cap;
     }catch{stopped=true;return refuse();}finally{busy=false;}
    },
    snapshot:()=>Object.freeze({stopped,executionAuthorized:false as const,modelCalls:0 as const,publicationAuthorized:false as const}),
