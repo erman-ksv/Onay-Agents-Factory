@@ -1,4 +1,5 @@
-import {consumeProjectBudgetExtensionPermit,type ProjectBudgetExtensionPermit} from '../orchestration/projectBudgetExtensionAuthorization.js';
+import {type AuthorizedProjectBudgetController} from '../orchestration/projectBudgetAuthorization.js';
+import {consumeProjectBudgetExtensionPermit,projectDevelopmentLineageReservationLimit,type ProjectBudgetExtensionPermit} from '../orchestration/projectBudgetExtensionAuthorization.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {parseProjectModelBudgetState,PROJECT_MODEL_BUDGET_ERROR,type ProjectModelBudgetState,type ProjectModelBudgetStore} from '../orchestration/projectModelBudget.js';
 const REPO='erman-ksv/Onay-Agents-Factory',BASE='https://api.github.com/repos/'+REPO,SHA=/^[a-f0-9]{40}$/,KEY=/^[a-f0-9]{64}$/;
@@ -9,10 +10,14 @@ const revision=(commit:string)=>createHash('sha256').update(commit).digest('hex'
 /** Shared metadata only. Atomic non-force ref advancement is the CAS: sibling
  * commits cannot both win. A random commit nonce prevents identical competing
  * reservations from becoming a successful no-op. No write is retried. */
-function createNativeBudgetStore(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){
+function createNativeBudgetStore(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch;correctiveController?:AuthorizedProjectBudgetController}>){
  if(!KEY.test(options?.projectKey)||typeof options.token!=='string'||!options.token)return refuse();
  const {projectKey,token}=options,transport=options.transport??fetch,branch='state/project-model-budget/'+projectKey,ref='refs/heads/'+branch,path='/git/ref/heads/'+encodeURIComponent(branch),writes=new Set<string>();
  if(typeof transport!=='function')return refuse();
+ const corrective=options.correctiveController;
+ if(corrective&&(projectDevelopmentLineageReservationLimit(corrective)!==16||corrective.projectKey!==projectKey))return refuse();
+ const guardRead=async()=>{if(corrective)await corrective.assertAuthorized();};
+ const suffixLimit=(state:ProjectModelBudgetState)=>corrective&&state.grantSha256===corrective.grantSha256?16:8;
  // Only validated immutable Git objects are memoized, never refs or authority.
  // Every operation still reads the live ref; a different head is validated cold.
  // Keep this cache private to this credential-bound adapter and bounded.
@@ -66,39 +71,45 @@ function createNativeBudgetStore(options:Readonly<{projectKey:string;token:strin
  });
  return Object.freeze({normal,async readTransition(beforeHead:string,afterHead:string){
   try{
+   await guardRead();
    if(!SHA.test(beforeHead)||!SHA.test(afterHead)||beforeHead===afterHead)return refuse();
    const after=await load();if(!after||after.head!==afterHead||after.parents.length!==1||after.parents[0]!==beforeHead)return refuse();
    const before=await loadCommit(beforeHead),again=await load();
    if(!again||again.head!==afterHead||JSON.stringify(again.data)!==JSON.stringify(after.data))return refuse();
+   await guardRead();
    return Object.freeze({before:Object.freeze({revision:before.revision,data:before.data}),after:Object.freeze({revision:after.revision,data:after.data})});
   }catch{return refuse();}
  },async readAcknowledgedTransition(beforeHead:string,afterHead:string){
   try{
+   await guardRead();
    if(!SHA.test(beforeHead)||!SHA.test(afterHead)||beforeHead===afterHead)return refuse();
    const current=await load();if(!current)return refuse();let after=current;
    // A bounded suffix of reservations may follow the acknowledged extension.
    // Every edge must retain the grant and add exactly one immutable charge.
    for(let hops=0;after.head!==afterHead;hops++){
-    if(hops>=8||after.parents.length!==1)return refuse();const parent=await loadCommit(after.parents[0]!);
+    if(hops>=suffixLimit(after.data)||after.parents.length!==1)return refuse();const parent=await loadCommit(after.parents[0]!);
     if(after.data.grantSha256!==parent.data.grantSha256||after.data.reservations.length!==parent.data.reservations.length+1||JSON.stringify(after.data.reservations.slice(0,-1))!==JSON.stringify(parent.data.reservations))return refuse();after=parent;
    }
    if(after.parents.length!==1||after.parents[0]!==beforeHead)return refuse();
    const before=await loadCommit(beforeHead),again=await load();if(!again||again.head!==current.head||JSON.stringify(again.data)!==JSON.stringify(current.data))return refuse();
+   await guardRead();
    return Object.freeze({before:Object.freeze({revision:before.revision,data:before.data}),after:Object.freeze({revision:after.revision,data:after.data}),current:Object.freeze({revision:current.revision,data:current.data})});
   }catch{return refuse();}
  },async readAcknowledgedChain(pairs:readonly Readonly<{beforeHead:string;afterHead:string}>[]){
   try{
+   await guardRead();
    if(!Array.isArray(pairs)||pairs.length<2||pairs.length>8||pairs.some(p=>!SHA.test(p.beforeHead)||!SHA.test(p.afterHead)||p.beforeHead===p.afterHead)||new Set(pairs.flatMap(p=>[p.beforeHead,p.afterHead])).size!==pairs.length*2)return refuse();
    const current=await load();if(!current)return refuse();let cursor=current;const transitions=[];
    for(const p of [...pairs].reverse()){
     for(let hops=0;cursor.head!==p.afterHead;hops++){
-     if(hops>=8||cursor.parents.length!==1)return refuse();const parent=await loadCommit(cursor.parents[0]!);
+     if(hops>=suffixLimit(cursor.data)||cursor.parents.length!==1)return refuse();const parent=await loadCommit(cursor.parents[0]!);
      if(cursor.data.grantSha256!==parent.data.grantSha256||cursor.data.reservations.length!==parent.data.reservations.length+1||JSON.stringify(cursor.data.reservations.slice(0,-1))!==JSON.stringify(parent.data.reservations))return refuse();cursor=parent;
     }
     if(cursor.parents.length!==1||cursor.parents[0]!==p.beforeHead)return refuse();const before=await loadCommit(p.beforeHead);
     transitions.push(Object.freeze({before:Object.freeze({revision:before.revision,data:before.data}),after:Object.freeze({revision:cursor.revision,data:cursor.data})}));cursor=before;
    }
    const again=await load();if(!again||again.head!==current.head||JSON.stringify(again.data)!==JSON.stringify(current.data))return refuse();
+   await guardRead();
    return Object.freeze({transitions:Object.freeze(transitions.reverse()),current:Object.freeze({revision:current.revision,data:current.data})});
   }catch{return refuse();}
  },async extend(permit:ProjectBudgetExtensionPermit){
@@ -115,4 +126,4 @@ export function createProjectModelBudgetGitHubStore(options:Readonly<{projectKey
 export function createProjectModelBudgetGitHubExtensionStore(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){const store=createNativeBudgetStore(options);return Object.freeze({read:store.normal.read,extend:store.extend});}
 /** GET-only reader for an exact direct-parent transition at the current head.
  * Historical JSON or a detached sibling commit cannot establish live lineage. */
-export function createProjectModelBudgetGitHubLineageReader(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch}>){const store=createNativeBudgetStore(options);return Object.freeze({readTransition:store.readTransition,readAcknowledgedTransition:store.readAcknowledgedTransition,readAcknowledgedChain:store.readAcknowledgedChain});}
+export function createProjectModelBudgetGitHubLineageReader(options:Readonly<{projectKey:string;token:string;transport?:typeof fetch;correctiveController?:AuthorizedProjectBudgetController}>){const store=createNativeBudgetStore(options);return Object.freeze({readTransition:store.readTransition,readAcknowledgedTransition:store.readAcknowledgedTransition,readAcknowledgedChain:store.readAcknowledgedChain});}
