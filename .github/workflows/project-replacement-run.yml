@@ -1,8 +1,7 @@
-# REVIEW ONLY. Not in .github/workflows. Actual OWNER comment IDs and resulting host pin are still required.
-name: One bounded eight-event stopped-recovery replacement
+name: Stage8 OWNER-pinned bounded corrective acceptance
 on:
   push:
-    branches: ['feat/calculator-t02-charge-reconcile-20261022']
+    branches: ['fix/stage8-corrective-verification-20261029']
     paths: ['.factory/replacement-host.json']
 permissions:
   contents: read
@@ -20,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: '25e0f0570082c9087e3372ff1fe7a4a8e3574bed'
+          ref: 'fe971f092b68a7894d580c8ae73b2a93b2c7f3c9'
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -29,12 +28,26 @@ jobs:
           sparse-checkout: .factory/replacement-host.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
+      - name: Confirm exact source and full CI before exposing recovery or provider credentials
+        env:
+          FACTORY_CI_READ_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';
+          assert.equal(execFileSync('/usr/bin/git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),'fe971f092b68a7894d580c8ae73b2a93b2c7f3c9');
+          for(const key of ['GROQ_API_KEY','FACTORY_RECOVERY_KEY_BASE64','CALCULATOR_GITHUB_TOKEN','AGENT_FACTORY_PROJECT_LIVE_APPROVED','AGENT_FACTORY_ENABLE_GITHUB_WRITES'])assert.equal(process.env[key],undefined);
+          const read=async url=>{const r=await fetch(url,{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.FACTORY_CI_READ_TOKEN}});assert.equal(r.status,200);assert.equal(r.headers.get('link'),null);return r.json();};
+          const base='https://api.github.com/repos/erman-ksv/Onay-Agents-Factory/actions/runs/41027851783',r=await read(base);
+          assert.equal(r.head_sha,'fe971f092b68a7894d580c8ae73b2a93b2c7f3c9');assert.equal(r.run_attempt,1);assert.equal(r.status,'completed');assert.equal(r.conclusion,'success');assert.equal(r.name,'Agent Factory CI');assert.equal(r.event,'push');assert.equal(r.head_branch,'fix/stage8-corrective-verification-20261029');
+          const jobs=await read(base+'/attempts/1/jobs?per_page=20');assert.equal(jobs.total_count,1);assert.equal(jobs.jobs.length,1);const job=jobs.jobs[0];assert.equal(job.id,123970150339);assert.equal(job.head_sha,r.head_sha);assert.equal(job.conclusion,'success');
+          for(const name of ['Install','Typecheck','Test']){const steps=job.steps.filter(s=>s.name===name);assert.equal(steps.length,1);assert.equal(steps[0].status,'completed');assert.equal(steps[0].conclusion,'success');}
+          JS
       - name: Verify independently reviewed host pin and compile immutable source
         env:
-          EXPECTED_REPLACEMENT_SCOPE_SHA256: '61d6f584f086513b883f9dd476c7e0743f37eb278ac68a1702b57cb3a6ac6846'
+          EXPECTED_REPLACEMENT_SCOPE_SHA256: '8296daaee570fbc1e4a6ba1dc9f299fb42ea6d7d638fdc203aa4b846d99d2619'
         run: |
           node --input-type=module - <<'JS'
           import assert from 'node:assert/strict';import {readdirSync,readFileSync,writeFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {join} from 'node:path';import {stripTypeScriptTypes} from 'node:module';
@@ -52,7 +65,7 @@ jobs:
           JS
       - name: Run exactly one separately approved OSS replacement
         env:
-          EXPECTED_REPLACEMENT_SCOPE_SHA256: '61d6f584f086513b883f9dd476c7e0743f37eb278ac68a1702b57cb3a6ac6846'
+          EXPECTED_REPLACEMENT_SCOPE_SHA256: '8296daaee570fbc1e4a6ba1dc9f299fb42ea6d7d638fdc203aa4b846d99d2619'
           FACTORY_REPLACEMENT_MODE: 'run'
           FACTORY_STATE_TOKEN: ${{ github.token }}
           FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
@@ -70,7 +83,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bounded-oss-replacement-result
+          name: stage8-owner-pinned-result-${{ github.run_id }}
           path: replacement-run-result.json
           if-no-files-found: warn
           retention-days: 7
