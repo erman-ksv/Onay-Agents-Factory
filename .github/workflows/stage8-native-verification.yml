@@ -126,7 +126,15 @@ jobs:
           const report=JSON.parse(readFileSync(join(process.env.RUNNER_TEMP,'calculator-input-browser-baseline.json'),'utf8'));
           assert.equal(report.status,'browser-baseline-defects-reproduced-not-repaired');assert.equal(report.proof.status,'failed');
           assert.equal(report.modelCalls,0);assert.equal(report.applicationWrites,0);assert.equal(report.budgetWrites,0);
-          const expected=['repeat-multiply:buttons','repeat-multiply:keyboard','leading-zero-display:buttons','leading-zero-display:keyboard'];
+          // Diagnostic baseline only; repaired product acceptance still requires zero failures.
+          assert.equal(report.proof.candidateSha,'558993981c9bbb7c6100c8335860ac5668768314');
+          assert.equal(report.proof.sourceSetSha256,'47bfa1b678f1a659e8419a41577ad2baeacd3a19089ccc93e9c90d75718e468e');
+          assert.equal(report.proof.contractSha256,'8c4ddb579b3aa548561013d5a986afd306e0da6fff0b59dd0dd2b2b83659de6c');
+          assert.equal(report.proof.testsExecuted,true);assert.equal(report.proof.provenance,'native-docker');
+          assert.equal(report.proof.sandboxDisabled,false);assert.equal(report.proof.networkIsolated,true);assert.equal(report.proof.credentialsExcluded,true);
+          assert.equal(report.proof.caseIds.length,25);assert.equal(new Set(report.proof.caseIds).size,25);
+          const expected=['repeat-multiply','replace-multiply-plus','repeat-divide','repeat-plus','leading-zero-display','zero-remains-zero'].flatMap(id=>[id+':buttons',id+':keyboard']);
+          assert.ok(expected.every(id=>report.proof.caseIds.includes(id)));
           assert.deepEqual([...report.proof.failures].sort(),expected.sort());
           console.log(JSON.stringify({productAcceptance:'failed-not-repaired',expectedBaselineFailures:report.proof.failures,nativeDiagnostic:'completed',realModelCalls:0}));
           JS
