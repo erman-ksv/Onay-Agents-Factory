@@ -1,0 +1,70 @@
+name: Stage8 rejected proposal READ ONLY preflight
+on:
+  workflow_dispatch:
+  push:
+    branches: ['fix/stage8-corrective-verification-20261029']
+    paths:
+      - '.factory/rejected-proposal-host.json'
+      - '.github/workflows/stage8-rejected-proposal-preflight.yml'
+      - 'orchestration/projectRejectedProposalHost.ts'
+      - 'scripts/project-rejected-proposal-host.ts'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-rejected-proposal-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Wait for full CI on this exact source before loading recovery credentials
+        env:
+          CI_READ_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';
+          const get=async path=>{const r=await fetch('https://api.github.com/repos/erman-ksv/Onay-Agents-Factory'+path,{method:'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.CI_READ_TOKEN}});assert.equal(r.status,200);assert.equal(r.headers.get('link'),null);return r.json();};
+          // CI previously takes about 156s. This bounded metadata-only wait
+          // allows its completion; it is not a model/request retry.
+          let passed=false;
+          for(let poll=0;poll<24;poll++){
+            const all=await get('/actions/runs?head_sha='+process.env.SOURCE_SHA+'&per_page=30');assert.ok(all.total_count<=30);assert.equal(all.workflow_runs.length,all.total_count);
+            const runs=all.workflow_runs.filter(r=>r.name==='Agent Factory CI'&&r.path==='.github/workflows/ci.yml'&&r.head_sha===process.env.SOURCE_SHA&&r.event==='push'&&r.head_branch==='fix/stage8-corrective-verification-20261029'&&r.run_attempt===1);assert.ok(runs.length<=1);
+            if(runs[0]?.status==='completed'){assert.equal(runs[0].conclusion,'success');passed=true;break;}
+            if(poll<23)await new Promise(resolve=>setTimeout(resolve,15000));
+          }
+          assert.ok(passed,'Exact implementation CI is not confirmed; do not expose recovery credentials');
+          JS
+      - name: Read-only authenticated checkpoint and existing-ledger inspection
+        env:
+          # Deliberately no provider key, state-write token or live flags.
+          FACTORY_INSPECTION_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          FACTORY_HOST_SOURCE_SHA: ${{ github.sha }}
+          FACTORY_REJECTED_HOST_SCOPE_SHA256: '4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+        # Push may enter read-only preflight only; no live command is present.
+        run: pnpm exec tsx scripts/project-rejected-proposal-host.ts --preflight > "$RUNNER_TEMP/rejected-proposal-preflight.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rejected-proposal-readonly-${{ github.run_id }}
+          path: ${{ runner.temp }}/rejected-proposal-preflight.json
+          if-no-files-found: warn

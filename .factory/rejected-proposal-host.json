@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "kind": "rejected-proposal-host",
+  "baseCodeSha": "7f9e4de0fa1a8d3518893ef8986c3d961a7ce1ce",
+  "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "budgetHead": "868e730263cc1f551511d1537158fb5fe1965fad",
+  "binding": {
+    "taskId": "calculator-input-repair-202610-29e2a8-t01",
+    "archiveHead": "79e01d083f87d50f208c91bd39ceec944987929a",
+    "archiveSequence": 13,
+    "checkpointSha256": "ca597384eb90d13d8fd1260f08e05d23af7b194da5ad8d697770667e3f1a5bb4",
+    "budgetStateSha256": "e144b08a4ef85a1f74a6475ddc6e5c4f041f78dd250e3837945a20a3cbfdecf9",
+    "priorExecutionId": "project-run-57d3d6770ae7ecef60ac24def70e010d",
+    "priorRequestSha256": "0c8eb62455a23f98fa2c14059de40cc7ac0a6f2dbc63d22786ca4ce6652a4bf8",
+    "priorResponseSha256": "8570b5a8aeceed0ede62e24f1ff63d706c0546a584a8a77a504a33691eba5144",
+    "baseSha": "558993981c9bbb7c6100c8335860ac5668768314"
+  },
+  "grantDecisions": [
+    {
+      "issueNumber": 75,
+      "commentId": 6448721815,
+      "bodySha256": "ec8845caa21760f8f1293e9a272790c14ca56c5814f3044a4fa8eff08b094a37"
+    },
+    {
+      "issueNumber": 75,
+      "commentId": 6459178751,
+      "bodySha256": "b464d742bd6820440fd1669d0595d4979ebf5e858ab08fff04f62c86f5d101c3"
+    },
+    {
+      "issueNumber": 75,
+      "commentId": 6472912771,
+      "bodySha256": "55eb8e7a35f956030f856884d7e677ba62371a3ecb559a2857ad76e2c187a923"
+    },
+    {
+      "issueNumber": 75,
+      "commentId": 6475553761,
+      "bodySha256": "ed4d24ac18310cc879c500d873019d0066977686414450670949f9382dde37a5"
+    },
+    {
+      "issueNumber": 75,
+      "commentId": 6489983869,
+      "bodySha256": "5e161b4abe2a5d5015e6e06a4dbf5eb4a46b5ef0994965c0b88d59b2c6e242e0"
+    },
+    {
+      "issueNumber": 75,
+      "commentId": 6521550803,
+      "bodySha256": "126a45e7e0740562efec51583c57d44896d888d01dc4d0e041d460e3187576bc"
+    }
+  ],
+  "grantTransitions": [
+    {
+      "beforeHead": "2d489136b4e9758133fce6598157feb94743f732",
+      "afterHead": "3e2710a55558dc82b3e65fc62d39791e6a21bd7a"
+    },
+    {
+      "beforeHead": "1f37b8b99a69e27fa5d583655db77763e95fb937",
+      "afterHead": "fb08d7eb3c919068a93ed0a61495b3e22c6ece62"
+    },
+    {
+      "beforeHead": "cf561df5381c65522f9691aa0fe0f420624f4906",
+      "afterHead": "d609b51c328b76d71a83c9a5be2280c379a6f983"
+    },
+    {
+      "beforeHead": "93eb498e73e6854e3bb4bd80546a9fdb51adc221",
+      "afterHead": "5e1429105b5696ad668ad372fecdb274ee7620c0"
+    },
+    {
+      "beforeHead": "b0eab60fe92c0759ae9f8f3e57d05e6fb8e95b0e",
+      "afterHead": "392dc0d34d25f98674e594facfa7e9143898b5f4"
+    }
+  ],
+  "ownerBodySha256": "32d1809679fc5f4b88ae5d21314e472e3cd3925cc5f492a02c3b2d1314cd5549",
+  "expiresAt": "2026-10-30T23:59:59.000Z",
+  "expectedRemaining": {
+    "requests": 15,
+    "requestBytes": 186739,
+    "reservedTokens": 92790
+  },
+  "maxNewRequests": 8
+}
