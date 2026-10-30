@@ -1,0 +1,25 @@
+{
+  "baselineSha": "ffb02d3c55ec57859e5d5d33a84112999727abf4",
+  "sameFailingTests": true,
+  "count": 13,
+  "causes": {
+    "Node_spawn_EPERM": 2,
+    "missing_tsx": 8,
+    "TCP_listen_EPERM": 3
+  },
+  "names": [
+    "CLI exits with 10 when no AI provider key is configured",
+    "CLI blocks a missing explicitly selected provider without falling back",
+    "invalid original stays rejected while an exact append keeps every old byte and every generated suffix byte",
+    "comment-only generated suffix is rejected before any independent model call",
+    "host metadata is explicitly attributed while original strict rejection and exact agent patch are preserved",
+    "comments-only test changes cannot consume independent model reviews or count as implemented coverage",
+    "host binds patch metadata while preserving original file and every preceding generated test byte",
+    "targeted replacement preserves following generated tests without supplying them to the model",
+    "ambiguous original suffix refuses a guessed host anchor",
+    "equivalent quotation and whitespace do not invalidate the bound test name or rewrite model bytes",
+    "dashboard serves UI and rejects empty task goals",
+    "dashboard accepts a task and exposes live events over SSE",
+    "dashboard validates task length and unknown run IDs"
+  ]
+}

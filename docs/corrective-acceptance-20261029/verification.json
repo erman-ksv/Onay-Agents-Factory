@@ -1,0 +1,311 @@
+{
+  "sourceBaseSha": "ffb02d3c55ec57859e5d5d33a84112999727abf4",
+  "correctedCommitSha": null,
+  "correctedCi": null,
+  "finalRun": {
+    "files": 172,
+    "tests": 2638,
+    "pass": 2625,
+    "fail": 13,
+    "cancelled": 0,
+    "skipped": 0,
+    "report": "corrective-final-cycle2-all.tap",
+    "sha256": "378016c8d30bf6a1d679160e8faf023caae431a82387085d00c34502d54e5eb4"
+  },
+  "newLoopTests": {
+    "tests": 13,
+    "pass": 13,
+    "fail": 0,
+    "skipped": 0,
+    "nativeDockerOrAiEvidence": false
+  },
+  "projectSubsetBeforeFinalDiagnosticFix": {
+    "tests": 476,
+    "pass": 476,
+    "fail": 0,
+    "skipped": 0
+  },
+  "environmentFailureComparison": {
+    "baselineSha": "ffb02d3c55ec57859e5d5d33a84112999727abf4",
+    "sameFailingTests": true,
+    "count": 13,
+    "causes": {
+      "Node_spawn_EPERM": 2,
+      "missing_tsx": 8,
+      "TCP_listen_EPERM": 3
+    },
+    "names": [
+      "CLI exits with 10 when no AI provider key is configured",
+      "CLI blocks a missing explicitly selected provider without falling back",
+      "invalid original stays rejected while an exact append keeps every old byte and every generated suffix byte",
+      "comment-only generated suffix is rejected before any independent model call",
+      "host metadata is explicitly attributed while original strict rejection and exact agent patch are preserved",
+      "comments-only test changes cannot consume independent model reviews or count as implemented coverage",
+      "host binds patch metadata while preserving original file and every preceding generated test byte",
+      "targeted replacement preserves following generated tests without supplying them to the model",
+      "ambiguous original suffix refuses a guessed host anchor",
+      "equivalent quotation and whitespace do not invalidate the bound test name or rewrite model bytes",
+      "dashboard serves UI and rejects empty task goals",
+      "dashboard accepts a task and exposes live events over SSE",
+      "dashboard validates task length and unknown run IDs"
+    ]
+  },
+  "notRunFiles": [
+    {
+      "file": "agents/backend/coder.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "agents/backend/patchCoder.regression.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "commander/aiCommander.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "commander/cloudflareCompatibility.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "commander/contextBoundary.regression.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "commander/mistralFree.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "commander/modelProviderRetry.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "commander/onayMobileScope.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "commander/providerContextBudget.regression.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "orchestration/cli.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "orchestration/liveCycle.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "orchestration/onayGoalCli.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "orchestration/pipeline.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "orchestration/providerRotationCommander.integration.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai",
+        "zod"
+      ]
+    },
+    {
+      "file": "orchestration/retryLoop.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "orchestration/specialistQualification.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    },
+    {
+      "file": "orchestration/teamTaskCli.test.js",
+      "unavailable_dependencies": [
+        "@openai/agents",
+        "openai"
+      ]
+    }
+  ],
+  "typecheck": {
+    "status": "BLOCKED",
+    "reason": "tsc: not found"
+  },
+  "pnpmTest": {
+    "status": "BLOCKED",
+    "reason": "tsx: not found"
+  },
+  "syntaxTransform": {
+    "files": 410,
+    "compiler": "Node 24 native transform",
+    "isTypecheck": false
+  },
+  "gitDiffCheck": "PASS",
+  "nativeDocker": "BLOCKED: socket EPERM",
+  "nativeBrowser": "NOT RUN",
+  "realAi": "NOT RUN: prohibited",
+  "externalIndependentReview": "NOT RUN",
+  "point1": "BLOCKED",
+  "point2": "BLOCKED",
+  "latestRecheck": {
+    "checkedAt": "2026-10-29T18:59:10.242372+00:00",
+    "baseSha": "ffb02d3c55ec57859e5d5d33a84112999727abf4",
+    "branch": "feat/calculator-t02-charge-reconcile-20261022",
+    "correctedCommitSha": null,
+    "correctedCi": null,
+    "latestChange": {
+      "function": "prepareProjectCorrectiveTaskPermit",
+      "file": "orchestration/projectCorrectiveAuthorization.ts",
+      "regressionFile": "github/projectSourceSnapshot.test.ts",
+      "before": "FAIL: 2 permits instead of 1",
+      "after": "PASS: 1 fulfilled, 1 rejected, zero added charges or corrective HTTP"
+    },
+    "finalAvailableRun": {
+      "files": 172,
+      "tests": 2639,
+      "pass": 2626,
+      "fail": 13,
+      "cancelled": 0,
+      "skipped": 0,
+      "sha256": "21f9ddad5f7c20bfd8274f64272c75aa200499a3bb7c1b32be4d1f328b7cee99"
+    },
+    "unexplainedFail": 0,
+    "environmentFailures": {
+      "baselineSha": "ffb02d3c55ec57859e5d5d33a84112999727abf4",
+      "sameFailingTests": true,
+      "count": 13,
+      "causes": {
+        "Node_spawn_EPERM": 2,
+        "missing_tsx": 8,
+        "TCP_listen_EPERM": 3
+      },
+      "names": [
+        "CLI exits with 10 when no AI provider key is configured",
+        "CLI blocks a missing explicitly selected provider without falling back",
+        "invalid original stays rejected while an exact append keeps every old byte and every generated suffix byte",
+        "comment-only generated suffix is rejected before any independent model call",
+        "host metadata is explicitly attributed while original strict rejection and exact agent patch are preserved",
+        "comments-only test changes cannot consume independent model reviews or count as implemented coverage",
+        "host binds patch metadata while preserving original file and every preceding generated test byte",
+        "targeted replacement preserves following generated tests without supplying them to the model",
+        "ambiguous original suffix refuses a guessed host anchor",
+        "equivalent quotation and whitespace do not invalidate the bound test name or rewrite model bytes",
+        "dashboard serves UI and rejects empty task goals",
+        "dashboard accepts a task and exposes live events over SSE",
+        "dashboard validates task length and unknown run IDs"
+      ]
+    },
+    "pnpmInstall": "BLOCKED: ERR_PNPM_NO_OFFLINE_META; registry proxy unreachable",
+    "pnpmTypecheck": "BLOCKED: tsc not found",
+    "pnpmTest": "BLOCKED: tsx not found",
+    "nativeDockerBrowser": "NOT RUN",
+    "aiCalls": "NOT RUN",
+    "syntaxTransform": {
+      "files": 410,
+      "isTypecheck": false
+    },
+    "excludedSdkFiles": 17,
+    "gitDiffCheck": "PASS",
+    "ciReady": false,
+    "userEnvironmentAnswer": "Другой среды сейчас нет",
+    "point1": "BLOCKED",
+    "point2": "BLOCKED"
+  },
+  "latestAtomicVerification": {
+    "checkedAt": "2026-10-29T19:06:52.094859+00:00",
+    "scope": "Local single-event-loop permit atomicity, admission consumption, replay and exact ledger charges; simulated model/OWNER/GitHub",
+    "baseSha": "ffb02d3c55ec57859e5d5d33a84112999727abf4",
+    "productionAtomicFix": "Check and mark remain together after all awaits in prepareProjectCorrectiveTaskPermit; no production code changes in this continuation.",
+    "newRegressionFile": "github/projectSourceSnapshot.test.ts",
+    "targeted": {
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "relatedRegressionRun": {
+      "tests": 162,
+      "pass": 162,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "invariants": {
+      "concurrentPermitRequests": 2,
+      "permitsIssued": 1,
+      "concurrentAdmissions": 2,
+      "admissionsIssued": 1,
+      "mockedCorrectiveProviderRequests": 1,
+      "newTestLedgerReservations": 1,
+      "oldReservationPrefixUnchanged": true,
+      "requestBytesChargedExactlyOnce": true,
+      "reservedTokensChargedExactlyOnce": true,
+      "replayAfterFirstCall": "Rejected, budget/ledger unchanged"
+    },
+    "blocked": {
+      "pnpmTypecheck": "tsc unavailable; not executed again in this continuation",
+      "pnpmTest": "tsx/SDK unavailable; not executed again in this continuation",
+      "nativeDockerBrowser": "Environment unavailable, not run",
+      "separateOsProcesses": "Node subprocess EPERM; Promise concurrency tested, not separate OS-process execution",
+      "newCi": "No commit/push authorized"
+    },
+    "realAiRequests": 0,
+    "actualProjectBudgetChanges": 0,
+    "gitDiffCheck": "PASS",
+    "point1": "BLOCKED",
+    "point2": "BLOCKED"
+  }
+}

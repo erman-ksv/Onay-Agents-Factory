@@ -1,3 +1,4 @@
+import {consumeProjectCorrectiveTaskPermit,assertProjectCorrectiveTaskPermit,type ProjectCorrectiveTaskPermit} from './projectCorrectiveAuthorization.js';
 import {consumeProjectUncertainRecoveryTicket,type ProjectUncertainRecoveryTicket} from './projectUncertainRecoveryClaim.js';
 import {createHash} from 'node:crypto';
 import {projectPlanTarget,projectPlanBudgetIdentity,type PreparedProjectPlan,type ProjectPlanTask} from './projectPlan.js';
@@ -10,7 +11,7 @@ const refuse=():never=>{throw Error(PROJECT_EXECUTION_ADMISSION_ERROR);};
 type Guards=Readonly<{assertSource:(plan:PreparedProjectPlan,task:ProjectPlanTask)=>Promise<void>;assertDependencies:(plan:PreparedProjectPlan,task:ProjectPlanTask)=>Promise<void>}>;
 declare const admissionBrand:unique symbol;
 export type ProjectExecutionAdmission=Readonly<{[admissionBrand]:true}>;
-type RecordAdmission={plan:PreparedProjectPlan;taskId:string;scope:AuthorizedProjectTaskScope;controller:AuthorizedProjectBudgetController;assertCurrent:()=>Promise<void>;consumed:boolean;attempt:1|2;cooldownBeforeFirstRequest?:boolean;requiredModel?:string;correction?:PreparedProjectCorrection};
+type RecordAdmission={plan:PreparedProjectPlan;taskId:string;scope:AuthorizedProjectTaskScope;executionId:string;controller:AuthorizedProjectBudgetController;assertCurrent:()=>Promise<void>;consumed:boolean;attempt:1|2;cooldownBeforeFirstRequest?:boolean;requiredModel?:string;correction?:PreparedProjectCorrection};
 const admissions=new WeakMap<ProjectExecutionAdmission,RecordAdmission>();
 /** HOST ONLY. The host must provide real provenance/dependency assertions; no
  * model JSON supplies callbacks. This binds the plan to a native budget scope,
@@ -27,15 +28,15 @@ export function createProjectExecutionAdmission(plan:PreparedProjectPlan,control
     try{active();if(busy)return refuse();busy=true;const task=plan.tasks.find(t=>t.id===taskId);if(!task)return refuse();assertProjectTargetScope(target,{repository:plan.repository,branch:plan.branch,changePaths:task.paths});await current(task);
      const budget=await controller.inspect();active();if(budget.remaining.requests<4||budget.remaining.requestBytes<1||budget.remaining.reservedTokens<1)return refuse();
      const executionId='project-run-'+createHash('sha256').update(JSON.stringify([plan.fingerprint,taskId])).digest('hex').slice(0,32),scope=await controller.taskScope(taskId,executionId);await current(task);active();
-     if(options!==undefined&&(!options||Object.keys(options).length!==1||options.requireCooldown!==true))return refuse();const admission=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(admission,{plan,taskId,scope,controller,assertCurrent:()=>current(task),consumed:false,attempt:1,cooldownBeforeFirstRequest:options?.requireCooldown===true});return admission;
+     if(options!==undefined&&(!options||Object.keys(options).length!==1||options.requireCooldown!==true))return refuse();const admission=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(admission,{plan,taskId,scope,executionId,controller,assertCurrent:()=>current(task),consumed:false,attempt:1,cooldownBeforeFirstRequest:options?.requireCooldown===true});return admission;
     }catch{stopped=true;return refuse();}finally{busy=false;}
    },
-   async prepareCorrection(value:PreparedProjectCorrection):Promise<ProjectExecutionAdmission>{
-    try{active();if(busy)return refuse();busy=true;await controller.assertAuthorized();active();const correction=await inspectProjectCorrection(value,plan);active();const task=plan.tasks.find(t=>t.id===correction.taskId);if(!task)return refuse();assertProjectTargetScope(target,{repository:plan.repository,branch:plan.branch,changePaths:task.paths});await current(task);
+   async prepareCorrection(value:PreparedProjectCorrection,permit?:ProjectCorrectiveTaskPermit,mode:'native'|'simulated'='native'):Promise<ProjectExecutionAdmission>{
+    try{active();if(busy||!permit)return refuse();busy=true;await assertProjectCorrectiveTaskPermit(permit,plan,controller,value,mode);await controller.assertAuthorized();active();const correction=await inspectProjectCorrection(value,plan);active();const task=plan.tasks.find(t=>t.id===correction.taskId);if(!task)return refuse();assertProjectTargetScope(target,{repository:plan.repository,branch:plan.branch,changePaths:task.paths});await current(task);
      const budget=await controller.inspect();active();if(budget.remaining.requests<4||budget.remaining.requestBytes<correction.requestBytes+3*12000||budget.remaining.reservedTokens<24000)return refuse();
      if((await controller.inspectExecution(task.id,correction.executionId)).requests!==0)return refuse();active();
-     const claimed=await claimProjectCorrectionAdmission(value,plan,task.id);await current(task);const scope=await controller.taskScope(task.id,claimed.executionId);const assertCurrent=async()=>{await current(task);await inspectProjectCorrection(value,plan,task.id);await current(task);};await assertCurrent();active();
-     const admission=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(admission,{plan,taskId:task.id,scope,controller,assertCurrent,consumed:false,attempt:2,correction:value});return admission;
+     await consumeProjectCorrectiveTaskPermit(permit,plan,controller,value,mode);const claimed=await claimProjectCorrectionAdmission(value,plan,task.id);await current(task);const scope=await controller.taskScope(task.id,claimed.executionId);const assertCurrent=async()=>{await current(task);await inspectProjectCorrection(value,plan,task.id);await current(task);};await assertCurrent();active();
+     const admission=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(admission,{plan,taskId:task.id,scope,executionId:claimed.executionId,controller,assertCurrent,consumed:false,attempt:2,requiredModel:'openai/gpt-oss-120b',correction:value});return admission;
     }catch{stopped=true;return refuse();}finally{busy=false;}
    },
    async prepareRecovery(taskId:string,ticket:ProjectUncertainRecoveryTicket,mode:'native'|'simulated'):Promise<ProjectExecutionAdmission>{
@@ -43,7 +44,7 @@ export function createProjectExecutionAdmission(plan:PreparedProjectPlan,control
      const recovery=await consumeProjectUncertainRecoveryTicket(ticket,controller,taskId,mode);if(recovery.parentSha!==plan.request.baseSha)return refuse();
      const assertCurrent=async()=>{await recovery.assertCurrent();await current(task);};await assertCurrent();
      const budget=await controller.inspect();if(budget.remaining.requests<4||budget.remaining.requestBytes<48000||budget.remaining.reservedTokens<24000||(await controller.inspectExecution(taskId,recovery.executionId)).requests!==0)return refuse();
-     const scope=await controller.taskScope(taskId,recovery.executionId);await assertCurrent();const cap=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(cap,{plan,taskId,scope,controller,assertCurrent,consumed:false,attempt:2,cooldownBeforeFirstRequest:true,...(recovery.model?{requiredModel:recovery.model}:{})});return cap;
+     const scope=await controller.taskScope(taskId,recovery.executionId);await assertCurrent();const cap=Object.freeze({}) as ProjectExecutionAdmission;admissions.set(cap,{plan,taskId,scope,executionId:recovery.executionId,controller,assertCurrent,consumed:false,attempt:2,cooldownBeforeFirstRequest:true,...(recovery.model?{requiredModel:recovery.model}:{})});return cap;
     }catch{stopped=true;return refuse();}finally{busy=false;}
    },
    snapshot:()=>Object.freeze({stopped,executionAuthorized:false as const,modelCalls:0 as const,publicationAuthorized:false as const}),
@@ -51,7 +52,7 @@ export function createProjectExecutionAdmission(plan:PreparedProjectPlan,control
  }catch{return refuse();}
 }
 /** Read-only host inspection; does not consume or recreate the admission. */
-export function projectExecutionAdmissionBinding(value:unknown,plan:PreparedProjectPlan,taskId:string){const r=admissions.get(value as ProjectExecutionAdmission);if(!r||r.consumed||r.plan!==plan||r.taskId!==taskId)return refuse();return Object.freeze({attempt:r.attempt,controller:r.controller,assertCurrent:r.assertCurrent,...(r.requiredModel?{requiredModel:r.requiredModel}:{}),...(r.correction?{correction:r.correction}:{})});}
+export function projectExecutionAdmissionBinding(value:unknown,plan:PreparedProjectPlan,taskId:string){const r=admissions.get(value as ProjectExecutionAdmission);if(!r||r.consumed||r.plan!==plan||r.taskId!==taskId)return refuse();return Object.freeze({attempt:r.attempt,executionId:r.executionId,controller:r.controller,assertCurrent:r.assertCurrent,...(r.requiredModel?{requiredModel:r.requiredModel}:{}),...(r.correction?{correction:r.correction}:{})});}
 /** Future executors must keep assertCurrent before every request/tool and use
  * the ordinary reserve-before-HTTP budget router plus all independent gates.
  * Consuming this capability itself never performs HTTP or writes. */
@@ -61,3 +62,6 @@ export function consumeProjectExecutionAdmission(value:unknown,plan:PreparedProj
   return Object.freeze({plan,taskId,target,host,assertCurrent:record.assertCurrent,attempt:record.attempt,...(record.requiredModel?{requiredModel:record.requiredModel}:{}),cooldownBeforeFirstRequest:record.cooldownBeforeFirstRequest===true,executionAuthorized:false as const,publicationAuthorized:false as const});
  }catch{return refuse();}
 }
+
+/** Host metadata remains inspectable after transport consumes an admission. */
+export function projectExecutionAdmissionExecutionId(value:ProjectExecutionAdmission){const r=admissions.get(value);if(!r)return refuse();return r.executionId;}

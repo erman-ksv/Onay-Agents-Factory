@@ -36,7 +36,7 @@ export function runProjectCiEvent(options:Options,body:string){return run(option
 /** Injection never produces native publication/CI authority. */
 export function runProjectCiEventForTests(options:Options,body:string,injections:Injections){return run(options,body,injections);}
 async function run(options:Options,body:string,injections?:Injections){try{
- if(Object.keys(options).some(k=>!['plan','controller','env','ciPolicy','taskPolicies','key','directory','stateProtection','archive','lineage'].includes(k)))return refuse();
+ if(Object.keys(options).some(k=>!['plan','controller','env','ciPolicy','taskPolicies','key','directory','stateProtection','archive','lineage','corrective'].includes(k)))return refuse();
  const {plan,controller,archive}=options,identity=projectPlanBudgetIdentity(plan),mode=injections?'simulated':'native',event=parseEvent(body);
  if(!isAuthorizedProjectBudgetController(controller)||controller.operationMode!=='development'||plan.status!=='planned'||controller.identity.projectId!==identity.projectId||controller.identity.repository!==identity.repository||controller.identity.planFingerprint!==identity.planFingerprint||controller.identity.ownerFingerprint!==identity.ownerFingerprint||JSON.stringify(controller.identity.taskIds)!==JSON.stringify(identity.taskIds)||controller.targetProfileSha256!==plan.targetProfileSha256||options.ciPolicy.targetProfileSha256!==plan.targetProfileSha256)return refuse();
  assertProjectCheckpointArchive(archive,controller,mode);

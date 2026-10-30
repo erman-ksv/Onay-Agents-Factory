@@ -1,3 +1,4 @@
+import {correctiveAuthorityForTests} from '../config/fixtures/projectCorrectiveFixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
@@ -245,12 +246,12 @@ test('ordinary context API cannot inject a correction handoff through untyped op
  const f=await rejectedFixture();try{const ticket=await f.wire.prepareCorrection();await assert.rejects(()=>prepareProjectModelContext(f.plan,f.taskId,f.snapshot,{role:'author',model,selections:correctionRanges(f),changes:f.changes,correction:ticket} as any),contextRefusal);await prepareProjectCorrectionContext(ticket,{model,selections:correctionRanges(f)});assert.equal(f.calls(),2);}finally{f.cleanup();}
 });
 async function correctionAttemptFixture(options:{grant?:TestGrantLimits;author?:'same'|'metadata-only'|'bad-sha';negative?:boolean;status?:number}={}){
- const f=await rejectedFixture('actionable',options.grant),ticket=await f.wire.prepareCorrection(),packet=await prepareProjectCorrectionContext(ticket,{model,selections:correctionRanges(f)});let calls=0,clock=0;const waits:number[]=[],checkpoints:any[]=[];
- const session=()=>createProjectExecutionAdmission(f.plan,f.controller,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}});
+ const f=await rejectedFixture('actionable',options.grant),ticket=await f.wire.prepareCorrection(),packet=await prepareProjectCorrectionContext(ticket,{model:'openai/gpt-oss-120b',selections:correctionRanges(f)});let calls=0,clock=0;const waits:number[]=[],checkpoints:any[]=[];
+ const session=()=>{const manager=createProjectExecutionAdmission(f.plan,f.controller,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}});return {...manager,prepareCorrection:async(value:typeof ticket)=>manager.prepareCorrection(value,await (await correctiveAuthorityForTests(f.plan,f.controller)).permit(value),'simulated')};};
  const transport=(async(_url:unknown,init?:RequestInit)=>{calls++;if(options.status)return Response.json({error:'provider refused'},{status:options.status});const input=JSON.parse(JSON.parse(String(init?.body)).messages[1].content);let content:string;if(calls===1){const patch=f.patch();if(options.author==='bad-sha')patch.changes[0]!.sourceSha256='0'.repeat(64);if(options.author!=='same'&&options.author!=='metadata-only')patch.changes[0]!.edits[0]!.after='value = 3';if(options.author==='metadata-only')patch.summary='Different summary, identical rejected code.';content=JSON.stringify(patch);}else content=JSON.stringify({version:1,taskId:f.taskId,proposalDigest:input.proposal.digest,decision:options.negative?'changes-requested':'ready',findings:options.negative?[{severity:'error',path:'src/app.mjs',detail:'Correction still misses the requirement.'}]:[],unverifiedAreas:['Actual runtime tests remain unverified.']});return Response.json({choices:[{finish_reason:'stop',message:{role:'assistant',content}}]});}) as typeof fetch;
- const wireOptions={...f.options,transport,timing:{now:()=>clock,wait:async(ms:number)=>{waits.push(ms);clock+=ms;}},checkpoint:async(v:any)=>{checkpoints.push(v);}};
+ const wireOptions={...f.options,env:{...f.options.env,GROQ_MODEL:'openai/gpt-oss-120b'},transport,timing:{now:()=>clock,wait:async(ms:number)=>{waits.push(ms);clock+=ms;}},checkpoint:async(v:any)=>{checkpoints.push(v);}};
  const start=async()=>createContextBoundProjectTransport({...wireOptions,admission:await session().prepareCorrection(ticket)});
- const reviewPacket=(role:'security'|'reviewer'|'tester',changes:Awaited<ReturnType<typeof prepareProjectReplyChanges>>)=>{const original=f.files.get('src/app.mjs')!,updated=projectChangesFiles(changes)[0]!.content,start=updated.indexOf('value = 3');assert.ok(start>=0);return prepareProjectModelContext(f.plan,f.taskId,f.snapshot,{role,model,changes,selections:[{path:'src/app.mjs',version:'proposed',start,end:start+'value = 3'.length}]});};
+ const reviewPacket=(role:'security'|'reviewer'|'tester',changes:Awaited<ReturnType<typeof prepareProjectReplyChanges>>)=>{const original=f.files.get('src/app.mjs')!,updated=projectChangesFiles(changes)[0]!.content,start=updated.indexOf('value = 3');assert.ok(start>=0);return prepareProjectModelContext(f.plan,f.taskId,f.snapshot,{role,model:'openai/gpt-oss-120b',changes,selections:[{path:'src/app.mjs',version:'proposed',start,end:start+'value = 3'.length}]});};
  return{...f,ticket,packet,ordinaryAuthor:()=>f.packet('author'),session,start,wireOptions,reviewPacket,waits,checkpoints,correctionCalls:()=>calls};
 }
 test('qualified correction performs a new four-role cycle while preserving prior failed charges',async()=>{
@@ -290,15 +291,15 @@ test('reused admission cannot start a second correction transport',async()=>{
  const f=await correctionAttemptFixture();try{const admission=await f.session().prepareCorrection(f.ticket);createContextBoundProjectTransport({...f.wireOptions,admission});assert.throws(()=>createContextBoundProjectTransport({...f.wireOptions,admission}),contextRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
 });
 const checkpointRefusal=(e:unknown)=>e instanceof Error&&e.message===PROJECT_CORRECTION_CHECKPOINT_ERROR;
-async function sealedFixture(){const f=await correctionAttemptFixture(),secret=randomBytes(32),key=createProjectCorrectionRecoveryKey('host-recovery-v1',secret),path=join(f.privateRoot,'correction-checkpoint.json'),reference=await saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,f.controller,key,path);return{...f,secret,key,path,reference,restore:async()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,await f.reauthorize(),key,path,reference.sha256)};}
+async function sealedFixture(){const f=await correctionAttemptFixture(),secret=randomBytes(32),key=createProjectCorrectionRecoveryKey('host-recovery-v1',secret),path=join(f.privateRoot,'correction-checkpoint.json'),reference=await saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,f.controller,key,path);return{...f,secret,key,path,reference,restore:async()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,await f.reauthorize(),key,path,reference.sha256,'simulated')};}
 test('checkpoint seals private source and issues without persisting its recovery key',async()=>{
  const f=await sealedFixture();try{const bytes=readFileSync(f.path),text=bytes.toString('utf8');assert.equal(hash(text),f.reference.sha256);assert.equal(bytes.length,f.reference.bytes);assert.equal(f.reference.modelCallsAuthorized,0);for(const marker of ['PRIVATE_FAILURE_MARKER','value = 2','edits',f.secret.toString('base64')])assert.equal(text.includes(marker),false);assert.equal(JSON.stringify(f.key).includes(f.secret.toString('hex')),false);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
 });
-test('fresh native-branded controller restores exact selected context while reading the old ledger',async()=>{
+test('fresh controller explicitly restores simulated selected context while reading the old ledger',async()=>{
  const f=await sealedFixture();try{const before=readFileSync(f.path),r=await f.restore();assert.notEqual(r.ticket,f.ticket);assert.equal(r.ticket.id,f.ticket.id);assert.equal(r.packet.requestSha256,f.packet.requestSha256);assert.equal(projectContextRequestBody(r.packet),projectContextRequestBody(f.packet));assert.equal(JSON.stringify(r).includes('PRIVATE_FAILURE_MARKER'),false);assert.deepEqual(readFileSync(f.path),before);assert.equal((await f.controller.inspect()).used.requests,2);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
 });
 test('restored correction runs fresh author and all three assessments without replaying the parent',async()=>{
- const f=await sealedFixture();try{const r=await f.restore(),c=await f.reauthorize(),wire=createContextBoundProjectTransport({...f.wireOptions,admission:await createProjectExecutionAdmission(f.plan,c,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}}).prepareCorrection(r.ticket)}),changes=await prepareProjectReplyChanges(await wire.request(r.packet));for(const role of ['security','reviewer','tester'] as const)await prepareProjectReplyAssessment(await wire.request(await f.reviewPacket(role,changes)));assert.equal(f.calls(),2);assert.equal(f.correctionCalls(),4);assert.equal((await c.inspect()).used.requests,6);assert.equal(wire.snapshot().attempt,2);assert.equal(wire.snapshot().publicationAuthorized,false);}finally{f.cleanup();}
+ const f=await sealedFixture();try{const r=await f.restore(),c=await f.reauthorize(),wire=createContextBoundProjectTransport({...f.wireOptions,admission:await createProjectExecutionAdmission(f.plan,c,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}}).prepareCorrection(r.ticket,await (await correctiveAuthorityForTests(f.plan,c)).permit(r.ticket),'simulated')}),changes=await prepareProjectReplyChanges(await wire.request(r.packet));for(const role of ['security','reviewer','tester'] as const)await prepareProjectReplyAssessment(await wire.request(await f.reviewPacket(role,changes)));assert.equal(f.calls(),2);assert.equal(f.correctionCalls(),4);assert.equal((await c.inspect()).used.requests,6);assert.equal(wire.snapshot().attempt,2);assert.equal(wire.snapshot().publicationAuthorized,false);}finally{f.cleanup();}
 });
 test('wrong copied destroyed or caller-mutated key cannot compromise the saved host key',async()=>{
  const f=await sealedFixture();try{const wrong=createProjectCorrectionRecoveryKey('host-recovery-v1',randomBytes(32));for(const key of [wrong,{...f.key}])await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,key,f.path,f.reference.sha256),checkpointRefusal);f.secret.fill(0);await f.restore();destroyProjectCorrectionRecoveryKey(f.key);await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
@@ -338,7 +339,7 @@ test('uncertain checkpoint after durable reservation refuses recovery even thoug
  const f=await sealedFixture();try{const wire=createContextBoundProjectTransport({...f.wireOptions,admission:await f.session().prepareCorrection(f.ticket),checkpoint:async()=>{throw Error('PRIVATE_UNCERTAIN_CHECKPOINT');}});await assert.rejects(()=>wire.request(f.packet),contextRefusal);await assert.rejects(()=>f.restore(),checkpointRefusal);assert.equal(f.correctionCalls(),0);assert.equal((await f.controller.inspect()).used.requests,3);}finally{f.cleanup();}
 });
 test('two recovered workers racing the same correction can send at most one first request',async()=>{
- const f=await sealedFixture();try{const [a,b]=await Promise.all([f.restore(),f.restore()]),ca=await f.reauthorize(),cb=await f.reauthorize(),make=async(c:typeof ca,r:typeof a)=>createContextBoundProjectTransport({...f.wireOptions,admission:await createProjectExecutionAdmission(f.plan,c,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}}).prepareCorrection(r.ticket)}),wa=await make(ca,a),wb=await make(cb,b);const results=await Promise.allSettled([wa.request(a.packet),wb.request(b.packet)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.correctionCalls(),1);assert.equal((await f.controller.inspect()).used.requests,3);}finally{f.cleanup();}
+ const f=await sealedFixture();try{const [a,b]=await Promise.all([f.restore(),f.restore()]),ca=await f.reauthorize(),cb=await f.reauthorize(),make=async(c:typeof ca,r:typeof a)=>createContextBoundProjectTransport({...f.wireOptions,admission:await createProjectExecutionAdmission(f.plan,c,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}}).prepareCorrection(r.ticket,await (await correctiveAuthorityForTests(f.plan,c)).permit(r.ticket),'simulated')}),wa=await make(ca,a),wb=await make(cb,b);const results=await Promise.allSettled([wa.request(a.packet),wb.request(b.packet)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.correctionCalls(),1);assert.equal((await f.controller.inspect()).used.requests,3);}finally{f.cleanup();}
 });
 test('caller-declared controller or malformed recovery key cannot approve checkpoint persistence',async()=>{
  const f=await correctionAttemptFixture();try{const key=createProjectCorrectionRecoveryKey('host-recovery-v1',randomBytes(32)),path=join(f.privateRoot,'forged.json');await assert.rejects(()=>saveProjectCorrectionCheckpoint(f.ticket,f.plan,f.taskId,{...f.controller},key,path),checkpointRefusal);assert.equal(existsSync(path),false);assert.throws(()=>createProjectCorrectionRecoveryKey('host-recovery-v1',Buffer.alloc(31)),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}
@@ -358,4 +359,42 @@ test('model opinions without native host execution cannot authorize publication'
 });
 test('publication cannot skip the required independent review phases',async()=>{
  const f=await specialistFixture();try{await f.proposal();await assert.rejects(()=>f.wire.preparePublication(),contextRefusal);assert.equal((await f.controller.inspect()).used.requests,1);assert.equal(f.calls(),1);}finally{f.cleanup();}
+});
+
+test('native restoration cannot promote simulated correction evidence',async()=>{const f=await sealedFixture();try{await assert.rejects(()=>restoreProjectCorrectionCheckpoint(f.plan,f.taskId,f.snapshot,f.controller,f.key,f.path,f.reference.sha256),checkpointRefusal);assert.equal(f.correctionCalls(),0);}finally{f.cleanup();}});
+
+test('one OWNER corrective capability issues only one permit under concurrent calls',async()=>{
+ const f=await correctionAttemptFixture();try{
+  const authority=await correctiveAuthorityForTests(f.plan,f.controller),before=await f.controller.inspect(),results=await Promise.allSettled([authority.permit(f.ticket),authority.permit(f.ticket)]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+  assert.equal(results.filter(r=>r.status==='rejected').length,1);
+  assert.deepEqual((await f.controller.inspect()).used,before.used);
+  assert.equal(f.correctionCalls(),0);
+  await assert.rejects(()=>authority.permit(f.ticket));
+ }finally{f.cleanup();}
+});
+
+test('concurrent corrective permit requests admit one executor and charge exactly one mocked provider request',async()=>{
+ const f=await correctionAttemptFixture();try{
+  const authority=await correctiveAuthorityForTests(f.plan,f.controller),before=await f.controller.inspect(),ledgerBefore=JSON.parse(readFileSync(join(f.privateRoot,'project-model-budget.json'),'utf8'));
+  const issued=await Promise.allSettled([authority.permit(f.ticket),authority.permit(f.ticket)]),permits=issued.flatMap(r=>r.status==='fulfilled'?[r.value]:[]);
+  assert.equal(permits.length,1);assert.equal(issued.filter(r=>r.status==='rejected').length,1);
+  const makeManager=()=>createProjectExecutionAdmission(f.plan,f.controller,{assertSource:createProjectSnapshotSourceGuard(f.snapshot),assertDependencies:async()=>{}});
+  const admitted=await Promise.allSettled([makeManager().prepareCorrection(f.ticket,permits[0]!,'simulated'),makeManager().prepareCorrection(f.ticket,permits[0]!,'simulated')]),admissions=admitted.flatMap(r=>r.status==='fulfilled'?[r.value]:[]);
+  assert.equal(admissions.length,1);assert.equal(admitted.filter(r=>r.status==='rejected').length,1);
+  assert.deepEqual((await f.controller.inspect()).used,before.used);assert.equal(f.correctionCalls(),0);
+  const wire=createContextBoundProjectTransport({...f.wireOptions,admission:admissions[0]!});
+  assert.throws(()=>createContextBoundProjectTransport({...f.wireOptions,admission:admissions[0]!}),contextRefusal);
+  const changes=await prepareProjectReplyChanges(await wire.request(f.packet));assert.notEqual(changes.digest,f.changes.digest);
+  const after=await f.controller.inspect(),ledgerAfter=JSON.parse(readFileSync(join(f.privateRoot,'project-model-budget.json'),'utf8'));
+  assert.equal(f.correctionCalls(),1);assert.equal(after.used.requests,before.used.requests+1);
+  assert.equal(after.used.requestBytes,before.used.requestBytes+f.packet.requestBytes);
+  assert.equal(after.used.reservedTokens,before.used.reservedTokens+f.packet.estimatedReservedTokens);
+  assert.equal(ledgerAfter.reservations.length,ledgerBefore.reservations.length+1);
+  assert.deepEqual(ledgerAfter.reservations.slice(0,ledgerBefore.reservations.length),ledgerBefore.reservations);
+  await assert.rejects(()=>wire.request(f.packet),contextRefusal);
+  await assert.rejects(()=>authority.permit(f.ticket));
+  assert.equal(f.correctionCalls(),1);assert.deepEqual((await f.controller.inspect()).used,after.used);
+  assert.deepEqual(JSON.parse(readFileSync(join(f.privateRoot,'project-model-budget.json'),'utf8')),ledgerAfter);
+ }finally{f.cleanup();}
 });

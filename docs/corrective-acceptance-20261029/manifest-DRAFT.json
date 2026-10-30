@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "status": "BLOCKED — review DATA only; do not post or activate",
+  "source": {
+    "branch": "feat/calculator-t02-charge-reconcile-20261022",
+    "originalSha": "ffb02d3c55ec57859e5d5d33a84112999727abf4",
+    "correctedSha": null,
+    "correctedCi": null
+  },
+  "runtimeManifest": {
+    "path": ".factory/runtime-project-manifest.json",
+    "sha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284"
+  },
+  "planFingerprint": "02b1e1662ef8ef4d7483db9e9ea65bed67e73cce15fcab1db42b284f1f2b6110",
+  "taskIds": [
+    "calculator-input-repair-202610-29e2a8-t01",
+    "calculator-input-repair-202610-29e2a8-t02"
+  ],
+  "budgetHead": "b0eab60fe92c0759ae9f8f3e57d05e6fb8e95b0e",
+  "archiveHead": "c364324e7a5011e983e08615bbdb7a2218043b3c",
+  "archiveSequence": 10,
+  "beforeStateSha256": "c356c2caa74416b4b716012cb5c1cd30d0bc845a697b7e8b50ddb1aba94fc19d",
+  "afterStateSha256": "e125ebdd25c346d337c982ebc25b9730d4c39f07be9762ed7e112a44a6e9c9ca",
+  "used": {
+    "requests": 70,
+    "requestBytes": 650605,
+    "reservedTokens": 278665
+  },
+  "needed": {
+    "requests": 16,
+    "requestBytes": 192000,
+    "reservedTokens": 96000
+  },
+  "proposedCeilings": {
+    "requests": 86,
+    "requestBytes": 842605,
+    "reservedTokens": 374665
+  },
+  "firstExecutions": [
+    {
+      "taskId": "calculator-input-repair-202610-29e2a8-t01",
+      "executionId": "project-run-57d3d6770ae7ecef60ac24def70e010d"
+    },
+    {
+      "taskId": "calculator-input-repair-202610-29e2a8-t02",
+      "executionId": "project-run-820efa01b54dd4d1b07734c157a72c15"
+    }
+  ],
+  "ownerBodies": {
+    "01-budget-owner-DRAFT.json": {
+      "bodySha256": "d32f05fa860c5bd35fc7035a9a276678a5f1314bf4d26e232e307bc85c8625e5",
+      "commentId": null
+    },
+    "02-recovery-owner-DRAFT.json": {
+      "bodySha256": "5b04c9425d3e38bd7fe28df64bfa083ee81aabb93e620f19480ee6f34535c0f2",
+      "commentId": null
+    },
+    "03-corrective-owner-DRAFT.json": {
+      "bodySha256": "e98a2cc73b704b9c2c88f5f10137fd18c059ec3fc9123f600035a1a9a41e66e6",
+      "commentId": null
+    }
+  },
+  "blockers": [
+    "Corrected SHA/CI/typecheck/full dependency-backed suite not confirmed.",
+    "Native Docker/browser and live agent acceptance not performed.",
+    "Existing development grant transition only accepts +1 request/+12000 bytes/+6000 tokens; proposed +9 request ceiling is deliberately refused. A separately reviewed qualified transition is required; no protection relaxed.",
+    "Three distinct fresh OWNER decisions are absent. No proposal is authorization."
+  ],
+  "executionAuthorized": false,
+  "replayAuthorized": false,
+  "deployAuthorized": false,
+  "mainChangesAuthorized": false
+}

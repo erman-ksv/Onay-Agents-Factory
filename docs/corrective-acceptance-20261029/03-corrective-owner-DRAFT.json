@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "kind": "authorize-project-corrective-loop",
+  "projectKey": "abb7eb35a69bf638cb5b57278226170e2f6b02fd039344c29044014531ca5a0b",
+  "planFingerprint": "02b1e1662ef8ef4d7483db9e9ea65bed67e73cce15fcab1db42b284f1f2b6110",
+  "targetProfileSha256": "1f3bf6bf615db6463421590195cd1f801657f6551a75cbb1bf4348bbf35b1065",
+  "budgetGrantSha256": "7ab5a10454a5305487962ebe8dec99fe23bbb77f9b06fb8cfe53299f1bfecb74",
+  "model": "openai/gpt-oss-120b",
+  "firstExecutions": [
+    {
+      "taskId": "calculator-input-repair-202610-29e2a8-t01",
+      "executionId": "project-run-57d3d6770ae7ecef60ac24def70e010d"
+    },
+    {
+      "taskId": "calculator-input-repair-202610-29e2a8-t02",
+      "executionId": "project-run-820efa01b54dd4d1b07734c157a72c15"
+    }
+  ],
+  "maxAdditionalAttemptsPerTask": 1,
+  "maxRequestsPerCorrection": 4,
+  "maxTotalAdditionalRequests": 8,
+  "evidenceKinds": [
+    "independent-review-failure",
+    "native-node-test-failure"
+  ],
+  "requestPolicy": {
+    "reasoningEffort": "low",
+    "responseFormat": "json_object",
+    "maxOutputTokens": 1200
+  },
+  "legalEnabled": false,
+  "replayAuthorized": false,
+  "expiresAt": "2026-10-30T23:59:59.000Z"
+}
