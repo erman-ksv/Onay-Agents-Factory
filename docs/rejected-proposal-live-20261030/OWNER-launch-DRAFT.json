@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "kind": "authorize-stage8-rejected-proposal-live-launch",
+  "repository": "erman-ksv/Onay-Agents-Factory",
+  "branch": "fix/stage8-corrective-verification-20261029",
+  "sourceSha": null,
+  "hostBaseSha": "90b204bfebcf4d412583a7e2e8e8ddb33eec79e8",
+  "workflowPath": ".github/workflows/stage8-rejected-proposal-live.yml",
+  "hostScopeSha256": "4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44",
+  "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "projectKey": "abb7eb35a69bf638cb5b57278226170e2f6b02fd039344c29044014531ca5a0b",
+  "budgetHead": "868e730263cc1f551511d1537158fb5fe1965fad",
+  "budgetStateSha256": "e144b08a4ef85a1f74a6475ddc6e5c4f041f78dd250e3837945a20a3cbfdecf9",
+  "budgetGrantSha256": "4f8b196f3a36af4b05c3417d8659d8e3209eb43efef127df14c9dea89756b293",
+  "archiveHead": "79e01d083f87d50f208c91bd39ceec944987929a",
+  "archiveSequence": 13,
+  "checkpointSha256": "ca597384eb90d13d8fd1260f08e05d23af7b194da5ad8d697770667e3f1a5bb4",
+  "baseSha": "558993981c9bbb7c6100c8335860ac5668768314",
+  "newExecutionId": "project-run-2d43cb3c8c822b8f45adc66c17874408",
+  "recoveryOwnerDecision": {
+    "issueNumber": 75,
+    "commentId": null,
+    "bodySha256": "32d1809679fc5f4b88ae5d21314e472e3cd3925cc5f492a02c3b2d1314cd5549"
+  },
+  "expectedUsed": {
+    "requests": 71,
+    "requestBytes": 655866,
+    "reservedTokens": 281875
+  },
+  "expectedRemaining": {
+    "requests": 15,
+    "requestBytes": 186739,
+    "reservedTokens": 92790
+  },
+  "maxNewRequests": 8,
+  "maxTotalRequestBytes": 96000,
+  "maxReservedTokens": 48000,
+  "additionalCorrections": 0,
+  "replayAuthorized": false,
+  "budgetIncreaseAuthorized": false,
+  "mergeAuthorized": false,
+  "deploymentAuthorized": false,
+  "legalEnabled": false,
+  "expiresAt": "2026-10-30T23:59:59.000Z"
+}
