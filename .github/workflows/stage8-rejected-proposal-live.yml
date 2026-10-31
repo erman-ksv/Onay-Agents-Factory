@@ -1,0 +1,141 @@
+name: Stage8 OWNER manual rejected proposal acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Exact separately reviewed launcher commit; must equal this run SHA'
+        required: true
+        type: string
+      recovery_owner_comment_id:
+        description: 'New unedited OWNER recovery admission in PR75'
+        required: true
+        type: string
+      launch_owner_comment_id:
+        description: 'New unedited OWNER launch approval bound to source_sha and recovery admission'
+        required: true
+        type: string
+      confirmation:
+        description: 'ONE_REJECTED_PROPOSAL_AND_SUCCESSOR_MAX_8'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-rejected-proposal-live-abb7eb35a69bf638
+  cancel-in-progress: false
+env:
+  LAUNCH_SOURCE_SHA: ${{ inputs.source_sha }}
+  LAUNCH_RECOVERY_OWNER_COMMENT_ID: ${{ inputs.recovery_owner_comment_id }}
+  LAUNCH_OWNER_COMMENT_ID: ${{ inputs.launch_owner_comment_id }}
+  LAUNCH_CONFIRMATION: ${{ inputs.confirmation }}
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Check both OWNER decisions and exact source CI before loading recovery key
+        env:
+          FACTORY_LAUNCH_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: pnpm exec tsx orchestration/projectRejectedProposalLiveLaunch.ts --verify
+      - name: Fresh native read-only preflight on this exact implementation
+        env:
+          FACTORY_INSPECTION_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          FACTORY_HOST_SOURCE_SHA: ${{ github.sha }}
+          FACTORY_REJECTED_HOST_SCOPE_SHA256: '4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+        run: pnpm exec tsx scripts/project-rejected-proposal-host.ts --preflight > "$RUNNER_TEMP/rejected-live-preflight.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rejected-live-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/rejected-live-preflight.json
+          if-no-files-found: warn
+  accept:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Recheck approvals, ledger and checkpoint before native preparation
+        env:
+          FACTORY_LAUNCH_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: pnpm exec tsx orchestration/projectRejectedProposalLiveLaunch.ts --verify
+      - name: Prepare only manifest-pinned native Node and browser images
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';
+          const body=readFileSync('.factory/runtime-project-manifest.json');assert.equal(createHash('sha256').update(body).digest('hex'),'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284');
+          const manifest=JSON.parse(body),images=[...new Set(manifest.taskPolicies.flatMap(p=>[p.node.image,...(p.browser?[p.browser.image]:[])]))];assert.ok(images.length>0&&images.length<=8);
+          for(const image of images){assert.match(image,/^(?:node|mcr\.microsoft\.com\/playwright)@sha256:[a-f0-9]{64}$/);execFileSync('/usr/bin/docker',['pull',image],{stdio:'inherit',timeout:120000,env:{PATH:'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}});}
+          JS
+      - name: Final OWNER and state recheck before exposing provider credentials
+        env:
+          FACTORY_LAUNCH_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+        run: pnpm exec tsx orchestration/projectRejectedProposalLiveLaunch.ts --verify
+      - name: Execute one separately authorized recovery and bounded CI continuation
+        env:
+          FACTORY_HOST_SOURCE_SHA: ${{ github.sha }}
+          FACTORY_REJECTED_HOST_SCOPE_SHA256: '4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44'
+          FACTORY_REJECTED_OWNER_COMMENT_ID: ${{ inputs.recovery_owner_comment_id }}
+          FACTORY_REJECTED_LIVE_CONFIRMATION: 'ONE_REJECTED_PROPOSAL_AND_SUCCESSOR_MAX_8'
+          FACTORY_STATE_TOKEN: ${{ github.token }}
+          FACTORY_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
+          FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
+          FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: 'openai/gpt-oss-120b'
+          AGENT_FACTORY_PROVIDER: 'groq'
+          ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
+          AGENT_FACTORY_LEGAL_ENABLED: 'false'
+          AGENT_FACTORY_ENABLE_GITHUB_WRITES: 'true'
+          AGENT_FACTORY_PROJECT_LIVE_APPROVED: 'ONE_FREE_BOUNDED_RUN'
+        run: pnpm exec tsx scripts/project-rejected-proposal-host.ts --live > "$RUNNER_TEMP/rejected-live-result.json"
+      - name: Require completed two-task CI continuation and bounded recorded charges
+        run: |
+          node --input-type=module - <<'JS'
+          import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {join} from 'node:path';
+          const r=JSON.parse(readFileSync(join(process.env.RUNNER_TEMP,'rejected-live-result.json'),'utf8'));
+          assert.equal(r.status,'plan-ci-recorded','Incomplete/failed CI is not successful acceptance; preserve state and do not rerun AI');
+          assert.match(r.firstCandidateSha,/^[a-f0-9]{40}$/);assert.match(r.candidateSha,/^[a-f0-9]{40}$/);assert.notEqual(r.firstCandidateSha,r.candidateSha);
+          assert.equal(r.maxNewRequests,8);assert.equal(r.used.requests,79);
+          for(const [key,before,max]of [['requestBytes',655866,96000],['reservedTokens',281875,48000]]){assert.ok(Number.isSafeInteger(r.used[key]));assert.ok(r.used[key]>=before&&r.used[key]<=before+max);}
+          assert.match(r.archivePin.head,/^[a-f0-9]{40}$/);assert.ok(Number.isSafeInteger(r.archivePin.sequence)&&r.archivePin.sequence>13);
+          assert.equal(r.executionAuthorized,false);assert.equal(r.replayAuthorized,false);
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rejected-live-result-${{ github.run_id }}
+          path: ${{ runner.temp }}/rejected-live-result.json
+          if-no-files-found: warn
