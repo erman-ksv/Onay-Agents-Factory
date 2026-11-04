@@ -2,7 +2,7 @@
   "version": 1,
   "kind": "rejected-proposal-host",
   "baseCodeSha": "7f9e4de0fa1a8d3518893ef8986c3d961a7ce1ce",
-  "runtimeManifestSha256": "97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284",
+  "runtimeManifestSha256": "fb694376153214a09b4893e698b46729b12309af9fefa9687a0accc5a91f1341",
   "budgetHead": "868e730263cc1f551511d1537158fb5fe1965fad",
   "binding": {
     "taskId": "calculator-input-repair-202610-29e2a8-t01",
@@ -18,33 +18,33 @@
   "grantDecisions": [
     {
       "issueNumber": 75,
-      "commentId": 6448721815,
-      "bodySha256": "ec8845caa21760f8f1293e9a272790c14ca56c5814f3044a4fa8eff08b094a37"
+      "commentId": 6633601661,
+      "bodySha256": "aa1ccf96d1642a7452e730bfdc87f611025df0e1b9cb991dcd7654686f5d5927"
     },
     {
       "issueNumber": 75,
-      "commentId": 6459178751,
-      "bodySha256": "b464d742bd6820440fd1669d0595d4979ebf5e858ab08fff04f62c86f5d101c3"
+      "commentId": 6633614337,
+      "bodySha256": "32250324746102c6864bcda6843f522a813faa958b0a0477fd0c87a1bf8ab5d8"
     },
     {
       "issueNumber": 75,
-      "commentId": 6472912771,
-      "bodySha256": "55eb8e7a35f956030f856884d7e677ba62371a3ecb559a2857ad76e2c187a923"
+      "commentId": 6633616405,
+      "bodySha256": "0d6119fbf9969a61409de4bd7eca2c4c4830f6299506c772c44f2882f5b86703"
     },
     {
       "issueNumber": 75,
-      "commentId": 6475553761,
-      "bodySha256": "ed4d24ac18310cc879c500d873019d0066977686414450670949f9382dde37a5"
+      "commentId": 6633618767,
+      "bodySha256": "089880bde4e39043b59533c0c06349e37870522e3725c4839907b4f6ff5fe1aa"
     },
     {
       "issueNumber": 75,
-      "commentId": 6489983869,
-      "bodySha256": "5e161b4abe2a5d5015e6e06a4dbf5eb4a46b5ef0994965c0b88d59b2c6e242e0"
+      "commentId": 6633621301,
+      "bodySha256": "1d441f6fdb284b6e758d3b2f7d9033ad01134fc0d9ce999ef0ca25ff39f05add"
     },
     {
       "issueNumber": 75,
-      "commentId": 6521550803,
-      "bodySha256": "126a45e7e0740562efec51583c57d44896d888d01dc4d0e041d460e3187576bc"
+      "commentId": 6633624496,
+      "bodySha256": "8d9708c577fe739e8928fc3bec80781c7066c1138f4f53eb1438e7c66c9d0dd0"
     }
   ],
   "grantTransitions": [
@@ -69,8 +69,8 @@
       "afterHead": "392dc0d34d25f98674e594facfa7e9143898b5f4"
     }
   ],
-  "ownerBodySha256": "32d1809679fc5f4b88ae5d21314e472e3cd3925cc5f492a02c3b2d1314cd5549",
-  "expiresAt": "2026-10-30T23:59:59.000Z",
+  "ownerBodySha256": "88dc91540e55762d348173354cb01af3895588379ec8367eaaa31f9a00443557",
+  "expiresAt": "2026-11-10T18:59:59.000Z",
   "expectedRemaining": {
     "requests": 15,
     "requestBytes": 186739,

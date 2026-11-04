@@ -57,7 +57,7 @@ jobs:
           FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
           FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
           FACTORY_HOST_SOURCE_SHA: ${{ github.sha }}
-          FACTORY_REJECTED_HOST_SCOPE_SHA256: '4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44'
+          FACTORY_REJECTED_HOST_SCOPE_SHA256: 'ed823a40e028245cbdb792d7e28fcb43f723128b00fcb5f3e1d896c32ebba52f'
           AGENT_FACTORY_LEGAL_ENABLED: 'false'
           ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
         # Push may enter read-only preflight only; no live command is present.

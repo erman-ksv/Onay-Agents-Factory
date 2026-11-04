@@ -56,7 +56,7 @@ jobs:
           FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
           FACTORY_RECOVERY_KEY_ID: 'onay-runtime-key-v1'
           FACTORY_HOST_SOURCE_SHA: ${{ github.sha }}
-          FACTORY_REJECTED_HOST_SCOPE_SHA256: '4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44'
+          FACTORY_REJECTED_HOST_SCOPE_SHA256: 'ed823a40e028245cbdb792d7e28fcb43f723128b00fcb5f3e1d896c32ebba52f'
           AGENT_FACTORY_LEGAL_ENABLED: 'false'
           ONAY_TEAM_FREE_TIER_CONFIRMED: 'true'
         run: pnpm exec tsx scripts/project-rejected-proposal-host.ts --preflight > "$RUNNER_TEMP/rejected-live-preflight.json"
@@ -94,7 +94,7 @@ jobs:
         run: |
           node --input-type=module - <<'JS'
           import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';
-          const body=readFileSync('.factory/runtime-project-manifest.json');assert.equal(createHash('sha256').update(body).digest('hex'),'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284');
+          const body=readFileSync('.factory/runtime-project-manifest.json');assert.equal(createHash('sha256').update(body).digest('hex'),'fb694376153214a09b4893e698b46729b12309af9fefa9687a0accc5a91f1341');
           const manifest=JSON.parse(body),images=[...new Set(manifest.taskPolicies.flatMap(p=>[p.node.image,...(p.browser?[p.browser.image]:[])]))];assert.ok(images.length>0&&images.length<=8);
           for(const image of images){assert.match(image,/^(?:node|mcr\.microsoft\.com\/playwright)@sha256:[a-f0-9]{64}$/);execFileSync('/usr/bin/docker',['pull',image],{stdio:'inherit',timeout:120000,env:{PATH:'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}});}
           JS
@@ -105,7 +105,7 @@ jobs:
       - name: Execute one separately authorized recovery and bounded CI continuation
         env:
           FACTORY_HOST_SOURCE_SHA: ${{ github.sha }}
-          FACTORY_REJECTED_HOST_SCOPE_SHA256: '4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44'
+          FACTORY_REJECTED_HOST_SCOPE_SHA256: 'ed823a40e028245cbdb792d7e28fcb43f723128b00fcb5f3e1d896c32ebba52f'
           FACTORY_REJECTED_OWNER_COMMENT_ID: ${{ inputs.recovery_owner_comment_id }}
           FACTORY_REJECTED_LIVE_CONFIRMATION: 'ONE_REJECTED_PROPOSAL_AND_SUCCESSOR_MAX_8'
           FACTORY_STATE_TOKEN: ${{ github.token }}

@@ -7,7 +7,7 @@ import {REJECTED_LIVE_PINS as P,REJECTED_LIVE_FILES,proposeRejectedLiveLaunch,as
 const NOW=Date.parse(P.expiresAt)-3600000,SOURCE='a'.repeat(40),RECOVERY=7000000001,LAUNCH=7000000002;
 const env=():NodeJS.ProcessEnv=>({GITHUB_REPOSITORY:P.repository,GITHUB_REF:'refs/heads/'+P.branch,GITHUB_SHA:SOURCE,GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_RUN_ATTEMPT:'1',GITHUB_ACTOR:'erman-ksv',GITHUB_TRIGGERING_ACTOR:'erman-ksv',GITHUB_WORKFLOW_REF:P.repository+'/'+P.workflowPath+'@refs/heads/'+P.branch,LAUNCH_SOURCE_SHA:SOURCE,LAUNCH_RECOVERY_OWNER_COMMENT_ID:String(RECOVERY),LAUNCH_OWNER_COMMENT_ID:String(LAUNCH),LAUNCH_CONFIRMATION:'ONE_REJECTED_PROPOSAL_AND_SUCCESSOR_MAX_8',FACTORY_LAUNCH_READ_TOKEN:'offline'});
 const saved=()=>JSON.parse(readFileSync('config/fixtures/projectRejectedLiveState.json','utf8'));
-const recoveryBody=()=>JSON.parse(readFileSync('docs/rejected-proposal-live-20261030/OWNER-recovery-DRAFT.json','utf8'));
+const recoveryBody=()=>JSON.parse(readFileSync('docs/rejected-proposal-live-20261104/OWNER-recovery-DRAFT.json','utf8'));
 const comment=(id:number,body:unknown,created=NOW-20000)=>({id,body:JSON.stringify(body),user:{login:'erman-ksv',type:'User'},author_association:'OWNER',created_at:new Date(created).toISOString(),updated_at:new Date(created).toISOString(),issue_url:'https://api.github.com/repos/'+P.repository+'/issues/75',html_url:'https://github.com/'+P.repository+'/pull/75#issuecomment-'+id});
 const content=(data:unknown)=>{const b=Buffer.from(JSON.stringify(data));return {type:'file',encoding:'base64',content:b.toString('base64'),sha:createHash('sha1').update(Buffer.concat([Buffer.from('blob '+b.length+'\0'),b])).digest('hex')};};
 function fixture(){
@@ -43,9 +43,11 @@ test('expiry stops before metadata HTTP; no implicit scope renewal',async()=>{
 test('metadata gate refuses credentials that could generate or write before it checks approvals',()=>{
  for(const key of ['GROQ_API_KEY','GEMINI_API_KEY','CLOUDFLARE_API_KEY','FACTORY_STATE_TOKEN','FACTORY_RECOVERY_KEY_BASE64','AGENT_FACTORY_ENABLE_GITHUB_WRITES','AGENT_FACTORY_PROJECT_LIVE_APPROVED'])assert.throws(()=>assertRejectedLiveDispatch({...env(),[key]:'present'},NOW));
 });
-test('launcher diff permits only seven additions, no change to Host, corrective loop, main or budget config',()=>{
- const diff=REJECTED_LIVE_FILES.map(p=>'A\t'+p).join('\n');assert.doesNotThrow(()=>assertRejectedLiveDiff(diff));
- assert.throws(()=>assertRejectedLiveDiff(diff+'\nM\torchestration/projectNextTaskWorker.ts'));assert.throws(()=>assertRejectedLiveDiff(diff.replace('A\t','M\t')));assert.throws(()=>assertRejectedLiveDiff(diff.split('\n').slice(1).join('\n')));
+test('launcher renewal diff permits only six exact modifications and two new draft documents; recovery and budget engines remain immutable',()=>{
+ const diff="M\t.factory/runtime-project-manifest.json\nM\t.factory/rejected-proposal-host.json\nM\t.github/workflows/stage8-rejected-proposal-preflight.yml\nM\t.github/workflows/stage8-rejected-proposal-live.yml\nM\torchestration/projectRejectedProposalLiveLaunch.ts\nM\torchestration/projectRejectedProposalLiveLaunch.test.ts\nA\tdocs/rejected-proposal-live-20261104/OWNER-recovery-DRAFT.json\nA\tdocs/rejected-proposal-live-20261104/OWNER-launch-DRAFT.json";assert.equal(REJECTED_LIVE_FILES.length,8);assert.doesNotThrow(()=>assertRejectedLiveDiff(diff));
+ assert.throws(()=>assertRejectedLiveDiff(diff+'\nM\torchestration/projectNextTaskWorker.ts'));assert.throws(()=>assertRejectedLiveDiff(diff.replace('M\t','A\t')));assert.throws(()=>assertRejectedLiveDiff(diff.split('\n').slice(1).join('\n')));
+ for(const p of ['orchestration/projectRejectedProposalHost.ts','orchestration/projectRejectedProposalRecovery.ts','orchestration/projectNextTaskWorker.ts','orchestration/projectCorrectiveAuthorization.ts','orchestration/projectCiContinuation.ts','github/projectModelBudgetStore.ts','github/projectCheckpointArchive.ts'])assert.throws(()=>assertRejectedLiveDiff(diff+'\nM\t'+p));
+ assert.throws(()=>assertRejectedLiveDiff(diff.replace('20261104','20261030')));
 });
 test('saved encrypted checkpoint and source-free ledger yield simulated GET-only metadata proof; no permit or budget mutation',async()=>{
  const f=fixture(),before=structuredClone(f.state),r=await f.verify();assert.equal(r.provenance,'simulated');assert.equal(r.executionAuthorized,false);assert.equal(r.providerCalls,0);assert.equal(r.budgetWrites,0);assert.equal(r.archiveWrites,0);assert.equal(r.metadataGetRequests,10);assert.equal(r.budget.remaining.requests,15);assert.equal(r.budget.maxNewRequests,8);assert.deepEqual(f.state,before);

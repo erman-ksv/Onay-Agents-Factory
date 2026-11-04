@@ -8,15 +8,16 @@ import {parseProjectModelBudgetState} from './projectModelBudget.js';
 import {prepareProjectRejectedProposalHost} from './projectRejectedProposalHost.js';
 
 const refuse=():never=>{throw Error('Live launch refused. No provider call, claim, budget change, replay or automatic renewal authorized.');};
-export const REJECTED_LIVE_PINS=Object.freeze({repository:'erman-ksv/Onay-Agents-Factory',branch:'fix/stage8-corrective-verification-20261029',hostBaseSha:'90b204bfebcf4d412583a7e2e8e8ddb33eec79e8',workflowPath:'.github/workflows/stage8-rejected-proposal-live.yml',hostScopeSha256:'4729e4ae37cbf1341bf7445625ab940c87a890318ece1ff59349176b94325d44',runtimeManifestSha256:'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284',recoveryBodySha256:'32d1809679fc5f4b88ae5d21314e472e3cd3925cc5f492a02c3b2d1314cd5549',projectKey:'abb7eb35a69bf638cb5b57278226170e2f6b02fd039344c29044014531ca5a0b',grantSha256:'4f8b196f3a36af4b05c3417d8659d8e3209eb43efef127df14c9dea89756b293',expiresAt:'2026-10-30T23:59:59.000Z'});
+export const REJECTED_LIVE_PINS=Object.freeze({repository:'erman-ksv/Onay-Agents-Factory',branch:'fix/stage8-corrective-verification-20261029',hostBaseSha:'1b18e31be08e2d9eb71a16b0f42180a76c0088d7',workflowPath:'.github/workflows/stage8-rejected-proposal-live.yml',hostScopeSha256:'ed823a40e028245cbdb792d7e28fcb43f723128b00fcb5f3e1d896c32ebba52f',runtimeManifestSha256:'fb694376153214a09b4893e698b46729b12309af9fefa9687a0accc5a91f1341',recoveryBodySha256:'88dc91540e55762d348173354cb01af3895588379ec8367eaaa31f9a00443557',projectKey:'abb7eb35a69bf638cb5b57278226170e2f6b02fd039344c29044014531ca5a0b',grantSha256:'4f8b196f3a36af4b05c3417d8659d8e3209eb43efef127df14c9dea89756b293',expiresAt:'2026-11-10T18:59:59.000Z'});
 export const REJECTED_LIVE_FILES=Object.freeze([
+ '.factory/runtime-project-manifest.json',
+ '.factory/rejected-proposal-host.json',
+ '.github/workflows/stage8-rejected-proposal-preflight.yml',
  '.github/workflows/stage8-rejected-proposal-live.yml',
  'orchestration/projectRejectedProposalLiveLaunch.ts',
  'orchestration/projectRejectedProposalLiveLaunch.test.ts',
- 'config/fixtures/projectRejectedLiveState.json',
- 'docs/rejected-proposal-live-20261030/OWNER-recovery-DRAFT.json',
- 'docs/rejected-proposal-live-20261030/OWNER-launch-DRAFT.json',
- 'docs/rejected-proposal-live-20261030/README_RU.md',
+ 'docs/rejected-proposal-live-20261104/OWNER-recovery-DRAFT.json',
+ 'docs/rejected-proposal-live-20261104/OWNER-launch-DRAFT.json',
 ]);
 const sha=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{40}$/.test(v);
 const positive=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)&&v>0;
@@ -47,7 +48,8 @@ export function assertRejectedLiveDispatch(env:NodeJS.ProcessEnv,now=Date.now())
 
 export function assertRejectedLiveDiff(lines:string){
  const changes=lines.trim().split('\n').filter(Boolean);
- if(changes.length!==REJECTED_LIVE_FILES.length||new Set(changes).size!==changes.length||changes.some(line=>!REJECTED_LIVE_FILES.some(p=>line==='A\t'+p)))return refuse();
+ const expected=REJECTED_LIVE_FILES.map(p=>(p.startsWith('docs/rejected-proposal-live-20261104/')?'A':'M')+'\t'+p);
+ if(changes.length!==expected.length||new Set(changes).size!==changes.length||changes.some(line=>!expected.includes(line)))return refuse();
 }
 function checkout(env:NodeJS.ProcessEnv){
  const git=(args:string[])=>execFileSync('/usr/bin/git',args,{encoding:'utf8',timeout:10000}).trim();
