@@ -10,12 +10,14 @@ import {prepareProjectRejectedProposalHost} from './projectRejectedProposalHost.
 const refuse=():never=>{throw Error('Live launch refused. No provider call, claim, budget change, replay or automatic renewal authorized.');};
 export const REJECTED_LIVE_PINS=Object.freeze({repository:'erman-ksv/Onay-Agents-Factory',branch:'fix/stage8-corrective-verification-20261029',hostBaseSha:'1b18e31be08e2d9eb71a16b0f42180a76c0088d7',workflowPath:'.github/workflows/stage8-rejected-proposal-live.yml',hostScopeSha256:'ed823a40e028245cbdb792d7e28fcb43f723128b00fcb5f3e1d896c32ebba52f',runtimeManifestSha256:'fb694376153214a09b4893e698b46729b12309af9fefa9687a0accc5a91f1341',recoveryBodySha256:'88dc91540e55762d348173354cb01af3895588379ec8367eaaa31f9a00443557',projectKey:'abb7eb35a69bf638cb5b57278226170e2f6b02fd039344c29044014531ca5a0b',grantSha256:'4f8b196f3a36af4b05c3417d8659d8e3209eb43efef127df14c9dea89756b293',expiresAt:'2026-11-10T18:59:59.000Z'});
 export const REJECTED_LIVE_FILES=Object.freeze([
- '.factory/runtime-project-manifest.json',
+ '.factory/rejected-proposal-runtime-manifest.json',
  '.factory/rejected-proposal-host.json',
  '.github/workflows/stage8-rejected-proposal-preflight.yml',
  '.github/workflows/stage8-rejected-proposal-live.yml',
  'orchestration/projectRejectedProposalLiveLaunch.ts',
  'orchestration/projectRejectedProposalLiveLaunch.test.ts',
+ 'orchestration/projectRejectedProposalHost.test.ts',
+ 'scripts/project-rejected-proposal-host.ts',
  'docs/rejected-proposal-live-20261104/OWNER-recovery-DRAFT.json',
  'docs/rejected-proposal-live-20261104/OWNER-launch-DRAFT.json',
 ]);
@@ -24,7 +26,7 @@ const positive=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeIntege
 const hash=(v:string|Buffer)=>createHash('sha256').update(v).digest('hex');
 
 function policies(){
- const hostBody=readFileSync('.factory/rejected-proposal-host.json','utf8'),runtime=readFileSync('.factory/runtime-project-manifest.json','utf8');
+ const hostBody=readFileSync('.factory/rejected-proposal-host.json','utf8'),runtime=readFileSync('.factory/rejected-proposal-runtime-manifest.json','utf8');
  // Recreate only policy DATA/capability; never run Host or authorize a task.
  prepareProjectRejectedProposalHost(hostBody,REJECTED_LIVE_PINS.hostScopeSha256,runtime);
  if(hash(runtime)!==REJECTED_LIVE_PINS.runtimeManifestSha256)return refuse();
@@ -48,7 +50,7 @@ export function assertRejectedLiveDispatch(env:NodeJS.ProcessEnv,now=Date.now())
 
 export function assertRejectedLiveDiff(lines:string){
  const changes=lines.trim().split('\n').filter(Boolean);
- const expected=REJECTED_LIVE_FILES.map(p=>(p.startsWith('docs/rejected-proposal-live-20261104/')?'A':'M')+'\t'+p);
+ const expected=REJECTED_LIVE_FILES.map(p=>(p==='.factory/rejected-proposal-runtime-manifest.json'||p.startsWith('docs/rejected-proposal-live-20261104/')?'A':'M')+'\t'+p);
  if(changes.length!==expected.length||new Set(changes).size!==changes.length||changes.some(line=>!expected.includes(line)))return refuse();
 }
 function checkout(env:NodeJS.ProcessEnv){

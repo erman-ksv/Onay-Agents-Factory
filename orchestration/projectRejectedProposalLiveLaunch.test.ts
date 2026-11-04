@@ -43,11 +43,22 @@ test('expiry stops before metadata HTTP; no implicit scope renewal',async()=>{
 test('metadata gate refuses credentials that could generate or write before it checks approvals',()=>{
  for(const key of ['GROQ_API_KEY','GEMINI_API_KEY','CLOUDFLARE_API_KEY','FACTORY_STATE_TOKEN','FACTORY_RECOVERY_KEY_BASE64','AGENT_FACTORY_ENABLE_GITHUB_WRITES','AGENT_FACTORY_PROJECT_LIVE_APPROVED'])assert.throws(()=>assertRejectedLiveDispatch({...env(),[key]:'present'},NOW));
 });
-test('launcher renewal diff permits only six exact modifications and two new draft documents; recovery and budget engines remain immutable',()=>{
- const diff="M\t.factory/runtime-project-manifest.json\nM\t.factory/rejected-proposal-host.json\nM\t.github/workflows/stage8-rejected-proposal-preflight.yml\nM\t.github/workflows/stage8-rejected-proposal-live.yml\nM\torchestration/projectRejectedProposalLiveLaunch.ts\nM\torchestration/projectRejectedProposalLiveLaunch.test.ts\nA\tdocs/rejected-proposal-live-20261104/OWNER-recovery-DRAFT.json\nA\tdocs/rejected-proposal-live-20261104/OWNER-launch-DRAFT.json";assert.equal(REJECTED_LIVE_FILES.length,8);assert.doesNotThrow(()=>assertRejectedLiveDiff(diff));
- assert.throws(()=>assertRejectedLiveDiff(diff+'\nM\torchestration/projectNextTaskWorker.ts'));assert.throws(()=>assertRejectedLiveDiff(diff.replace('M\t','A\t')));assert.throws(()=>assertRejectedLiveDiff(diff.split('\n').slice(1).join('\n')));
- for(const p of ['orchestration/projectRejectedProposalHost.ts','orchestration/projectRejectedProposalRecovery.ts','orchestration/projectNextTaskWorker.ts','orchestration/projectCorrectiveAuthorization.ts','orchestration/projectCiContinuation.ts','github/projectModelBudgetStore.ts','github/projectCheckpointArchive.ts'])assert.throws(()=>assertRejectedLiveDiff(diff+'\nM\t'+p));
- assert.throws(()=>assertRejectedLiveDiff(diff.replace('20261104','20261030')));
+test('launcher renewal diff allows only seven exact modifications and three additions while historical scopes remain immutable',()=>{
+ const diff=[
+  'A\t.factory/rejected-proposal-runtime-manifest.json',
+  'M\t.factory/rejected-proposal-host.json',
+  'M\t.github/workflows/stage8-rejected-proposal-preflight.yml',
+  'M\t.github/workflows/stage8-rejected-proposal-live.yml',
+  'M\torchestration/projectRejectedProposalLiveLaunch.ts',
+  'M\torchestration/projectRejectedProposalLiveLaunch.test.ts',
+  'M\torchestration/projectRejectedProposalHost.test.ts',
+  'M\tscripts/project-rejected-proposal-host.ts',
+  'A\tdocs/rejected-proposal-live-20261104/OWNER-recovery-DRAFT.json',
+  'A\tdocs/rejected-proposal-live-20261104/OWNER-launch-DRAFT.json',
+ ].join('\n');
+ assert.equal(REJECTED_LIVE_FILES.length,10);assert.doesNotThrow(()=>assertRejectedLiveDiff(diff));
+ for(const invalid of [diff+'\n'+diff.split('\n')[0],diff.replace('A\t','M\t'),diff.replace('M\t','A\t'),diff.split('\n').slice(1).join('\n'),diff.replace('20261104','20261030')])assert.throws(()=>assertRejectedLiveDiff(invalid));
+ for(const path of ['orchestration/projectRejectedProposalHost.ts','orchestration/projectRejectedProposalRecovery.ts','orchestration/projectNextTaskWorker.ts','orchestration/projectCorrectiveAuthorization.ts','orchestration/projectCiContinuation.ts','github/projectModelBudgetStore.ts','github/projectCheckpointArchive.ts','.factory/runtime-project-manifest.json','.factory/recovery-host.json','.factory/recovery-preflight.json','.factory/replacement-host.json','.factory/replacement-preflight.json','.factory/replacement-preflight-v2.json','.factory/replacement-preflight-v3.json','.factory/replacement-preflight-v4.json'])assert.throws(()=>assertRejectedLiveDiff(diff+'\nM\t'+path));
 });
 test('saved encrypted checkpoint and source-free ledger yield simulated GET-only metadata proof; no permit or budget mutation',async()=>{
  const f=fixture(),before=structuredClone(f.state),r=await f.verify();assert.equal(r.provenance,'simulated');assert.equal(r.executionAuthorized,false);assert.equal(r.providerCalls,0);assert.equal(r.budgetWrites,0);assert.equal(r.archiveWrites,0);assert.equal(r.metadataGetRequests,10);assert.equal(r.budget.remaining.requests,15);assert.equal(r.budget.maxNewRequests,8);assert.deepEqual(f.state,before);

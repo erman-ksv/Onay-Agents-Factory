@@ -19,7 +19,7 @@ export async function rejectedProposalHostMain(args:string[],env:NodeJS.ProcessE
  execFileSync('/usr/bin/git',['merge-base','--is-ancestor','7f9e4de0fa1a8d3518893ef8986c3d961a7ce1ce',env.FACTORY_HOST_SOURCE_SHA!],{timeout:10000});
  const scope=readFileSync('.factory/rejected-proposal-host.json','utf8'),expected=env.FACTORY_REJECTED_HOST_SCOPE_SHA256;
  if(typeof expected!=='string'||!/^[a-f0-9]{64}$/.test(expected)||createHash('sha256').update(scope).digest('hex')!==expected)throw Error('Separately pinned host config required');
- const cap=host.prepareProjectRejectedProposalHost(scope,expected,readFileSync('.factory/runtime-project-manifest.json','utf8'));
+ const cap=host.prepareProjectRejectedProposalHost(scope,expected,readFileSync('.factory/rejected-proposal-runtime-manifest.json','utf8'));
  const directory=mkdtempSync(join(tmpdir(),'onay-rejected-host-'));
  // Preserve private runtime files after failure for audit/recovery. Never
  // auto-clean, restart, replay a request or recreate a consumed admission.

@@ -6,14 +6,26 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {prepareProjectRejectedProposalHost,assertProjectRejectedHostEnvironment,preflightProjectRejectedProposalHost,runProjectRejectedProposalHost} from './projectRejectedProposalHost.js';
 import {rejectedProposalHostMain} from '../scripts/project-rejected-proposal-host.js';
+import {prepareProjectRecoveryPreflight} from './projectRecoveryPreflight.js';
 
 const body=()=>readFileSync('.factory/rejected-proposal-host.json','utf8');
-const runtime=()=>readFileSync('.factory/runtime-project-manifest.json','utf8');
+const runtime=()=>readFileSync('.factory/rejected-proposal-runtime-manifest.json','utf8');
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const prepare=(s=body())=>prepareProjectRejectedProposalHost(s,hash(s),runtime());
 const env=():NodeJS.ProcessEnv=>({GITHUB_REPOSITORY:'erman-ksv/Onay-Agents-Factory',GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_RUN_ATTEMPT:'1',GITHUB_REF:'refs/heads/fix/stage8-corrective-verification-20261029',FACTORY_HOST_SOURCE_SHA:'a'.repeat(40),GITHUB_SHA:'a'.repeat(40),AGENT_FACTORY_LEGAL_ENABLED:'false',ONAY_TEAM_FREE_TIER_CONFIRMED:'true',FACTORY_INSPECTION_READ_TOKEN:'offline'});
 
 test('pinned existing manifest composes host DATA, not an execution permit',()=>{assert.ok(prepare());assert.doesNotThrow(()=>assertProjectRejectedHostEnvironment(env(),'preflight'));});
+test('renewed Host and historical recovery preserve distinct byte-pinned manifests and refuse crossed inputs',()=>{
+ const historical=readFileSync('.factory/runtime-project-manifest.json','utf8'),renewed=runtime(),preflight=readFileSync('.factory/recovery-preflight.json','utf8');
+ assert.equal(hash(historical),'97a2b05c8aebcb11227230b0526375bea9aa45688d2b6b01ece2fe2dd6b77284');
+ assert.equal(hash(renewed),'fb694376153214a09b4893e698b46729b12309af9fefa9687a0accc5a91f1341');
+ const {decision:oldDecision,...oldPolicy}=JSON.parse(historical),{decision:newDecision,...newPolicy}=JSON.parse(renewed);
+ assert.deepEqual(newPolicy,oldPolicy);assert.notDeepEqual(newDecision,oldDecision);
+ assert.ok(prepareProjectRecoveryPreflight(preflight,hash(preflight),historical));assert.ok(prepare());
+ assert.throws(()=>prepareProjectRecoveryPreflight(preflight,hash(preflight),renewed));
+ assert.throws(()=>prepareProjectRejectedProposalHost(body(),hash(body()),historical));
+ for(const path of ['recovery-host.json','recovery-preflight.json','replacement-host.json','replacement-preflight.json','replacement-preflight-v2.json','replacement-preflight-v3.json','replacement-preflight-v4.json'])assert.equal(JSON.parse(readFileSync('.factory/'+path,'utf8')).runtimeManifestSha256,hash(historical));
+});
 test('scope digest, old base, old checkpoint, old source, widened budget and unknown fields are refused',()=>{
  assert.throws(()=>prepareProjectRejectedProposalHost(body(),'0'.repeat(64),runtime()));
  for(const mutate of [
