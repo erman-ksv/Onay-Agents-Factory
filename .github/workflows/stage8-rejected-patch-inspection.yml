@@ -1,42 +1,71 @@
 name: Stage8 read-only rejected patch inspection
 on:
   push:
-    branches: ['fix/stage8-corrective-verification-20261029']
-    paths: ['.github/workflows/stage8-rejected-patch-inspection.yml']
+    branches: ['diag/stage8-reply16-readonly-20261105']
+    paths:
+      - 'scripts/stage8-inspect-rejected-patch.mjs'
+      - '.github/workflows/stage8-rejected-patch-inspection.yml'
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: stage8-readonly-rejected-patch-13
+  group: stage8-readonly-rejected-reply-16
   cancel-in-progress: false
 jobs:
   inspect:
+    if: github.repository == 'erman-ksv/Onay-Agents-Factory' && github.actor == 'erman-ksv'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 'fe971f092b68a7894d580c8ae73b2a93b2c7f3c9'
+          ref: '07ce17e5f91b4539eb54289c9e881311e6b817e3'
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.sha }}
           path: inspection-config
-          sparse-checkout: scripts/stage8-inspect-rejected-patch.mjs
-          sparse-checkout-cone-mode: false
+          fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - name: Verify source and diagnostic bytes; compile immutable production validators
+      - name: Verify immutable source, one-commit diagnostic scope and script digest
         run: |
           node --input-type=module - <<'JS'
-          import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import {readFileSync,writeFileSync,readdirSync} from 'node:fs';import {createHash} from 'node:crypto';import {stripTypeScriptTypes} from 'node:module';import {join} from 'node:path';
-          assert.equal(execFileSync('/usr/bin/git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),'fe971f092b68a7894d580c8ae73b2a93b2c7f3c9');
-          const bytes=readFileSync('inspection-config/scripts/stage8-inspect-rejected-patch.mjs');assert.equal(createHash('sha256').update(bytes).digest('hex'),'1e640871745d36df85efafa184bbb6ae6f57a39c188a71c89ed71759b2c908f7');
-          function compile(dir){for(const e of readdirSync(dir,{withFileTypes:true})){const p=join(dir,e.name);if(e.isDirectory())compile(p);else if(p.endsWith('.ts')&&!p.endsWith('.test.ts'))writeFileSync(p.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(p,'utf8'),{mode:'transform'}));}}for(const d of ['agents','commander','config','github','orchestration'])compile(d);
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          import {readFileSync,writeFileSync,readdirSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          import {stripTypeScriptTypes} from 'node:module';
+          import {join} from 'node:path';
+          const base='07ce17e5f91b4539eb54289c9e881311e6b817e3';
+          const git=(args,cwd='.')=>execFileSync('/usr/bin/git',args,{cwd,encoding:'utf8'}).trim();
+          assert.equal(process.env.GITHUB_REPOSITORY,'erman-ksv/Onay-Agents-Factory');
+          assert.equal(process.env.GITHUB_EVENT_NAME,'push');
+          assert.equal(process.env.GITHUB_REF,'refs/heads/diag/stage8-reply16-readonly-20261105');
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');
+          assert.equal(process.env.GITHUB_ACTOR,'erman-ksv');
+          assert.equal(process.env.GITHUB_TRIGGERING_ACTOR,'erman-ksv');
+          assert.equal(git(['rev-parse','HEAD']),base);
+          assert.equal(git(['rev-parse','HEAD^{tree}']),'3f9acf0135d0948d4b70658a6966d3d6012b26cf');
+          assert.equal(git(['rev-parse','HEAD'],'inspection-config'),process.env.GITHUB_SHA);
+          assert.equal(git(['rev-list','--parents','-n','1','HEAD'],'inspection-config'),process.env.GITHUB_SHA+' '+base);
+          assert.deepEqual(git(['diff','--name-status',base,'HEAD'],'inspection-config').split('\n'),[
+            'M\t.github/workflows/stage8-rejected-patch-inspection.yml',
+            'M\tscripts/stage8-inspect-rejected-patch.mjs']);
+          const bytes=readFileSync('inspection-config/scripts/stage8-inspect-rejected-patch.mjs');
+          assert.equal(createHash('sha256').update(bytes).digest('hex'),'d0308c06d449a92b78d1a7a3ee1c05ee3a25b52c2b849cdc8354ba233fdf7767');
+          function compile(dir){for(const entry of readdirSync(dir,{withFileTypes:true})){
+            const path=join(dir,entry.name);
+            if(entry.isDirectory())compile(path);
+            else if(path.endsWith('.ts')&&!path.endsWith('.test.ts'))writeFileSync(path.replace(/\.ts$/,'.js'),stripTypeScriptTypes(readFileSync(path,'utf8'),{mode:'transform'}));
+          }}
+          for(const dir of ['agents','commander','config','github','orchestration'])compile(dir);
           JS
-      - name: Inspect only saved checkpoint and fixed source; no model or state credentials
+      - name: Independent production-validator regression checks before loading secrets
+        run: node inspection-config/scripts/stage8-inspect-rejected-patch.mjs --self-test
+      - name: Inspect saved reply metadata only; no model or state-write credentials
         env:
           FACTORY_INSPECTION_READ_TOKEN: ${{ secrets.CALCULATOR_GITHUB_TOKEN }}
           FACTORY_RECOVERY_KEY_BASE64: ${{ secrets.FACTORY_RECOVERY_KEY_BASE64 }}
@@ -44,10 +73,10 @@ jobs:
         run: |
           node inspection-config/scripts/stage8-inspect-rejected-patch.mjs > rejected-patch-inspection.json
           cat rejected-patch-inspection.json
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success()
         with:
-          name: stage8-readonly-rejected-patch-${{ github.run_id }}
+          name: stage8-readonly-rejected-reply16-${{ github.run_id }}
           path: rejected-patch-inspection.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
